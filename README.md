@@ -178,8 +178,8 @@ Claude Code 세션은 계약 문서를 스스로 고치지 않습니다.
 | --- | --- |
 | **A** 총괄 · 기획 · 백엔드 일부 | 일정 · 계약 문서 · Issue/PR 운영 · 통합 검증, 백엔드 도움 요청(`help`) |
 | **B** 백엔드 전담 | 공통 기반 · 인증 · 인가 · Workspace · GitHub 연동 · 동기화 · 그 밖의 서버 도메인 |
-| **C** 프론트 3D | 3D 장면 · SceneModel · ThemeLayout · 드래그 · 상호작용 |
-| **D** 프론트 HUD · 데이터 | DataSource · 타입 · api/mock · store · HUD · 패널 · 인증 화면 |
+| **C** 프론트 3D (`@FG-Kaki`) | 3D 장면(`src/scene/**` · `src/office/` · `src/app/`) · SceneModel · ThemeLayout · 드래그 · 상호작용, 회의 대화상자 · 일정판 · 학습 타임라인 · 회고 리포트 화면 |
+| **D** 프론트 HUD · 데이터 (`@JHee0209`) | DataSource · 타입 · api/mock · store · HUD · 패널 · 인증 화면 |
 
 계약 본문의 옛 역할 문자를 읽는 법은 [`docs/README.md`](docs/README.md) 「역할」. Issue별 담당은 Issue 본문이 기준입니다.
 

@@ -25,7 +25,7 @@
 | 전환 조건 | 상태 |
 | --- | --- |
 | 1. GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`가 `main`에 반영 | 완료 — GRAVIT `main` `932f074` (PR #2) |
-| 2. 기획 저장소 두 파일 맨 위에 「기준 위치 안내문」 반영 | 완료 — 기획 저장소 브랜치 `docs/plan-v3-stack-decisions-1101` 커밋 `e312463f6708bc48fd18996cf3ffad36af7e60f3` (2026-11-03 원격 확인, 안내문 밖 본문은 `796fc25`와 같음) |
+| 2. 기획 저장소 두 파일 맨 위에 「기준 위치 안내문」 반영 | 완료 — 기획 저장소 커밋 `e312463f6708bc48fd18996cf3ffad36af7e60f3` (지금 기획 저장소 `main`. 작업 브랜치는 머지 뒤 삭제됨) (2026-11-03 원격 확인, 안내문 밖 본문은 `796fc25`와 같음) |
 
 두 조건이 모두 반영됐다. 이 파일이 `main`에 반영되면 두 저장소의 안내가 같은 기준 위치를 가리킨다.
 
@@ -33,10 +33,10 @@
 
 ```bash
 # 1) 기획 저장소 두 파일에 안내문이 있다
-gh api "repos/SamdoRyu/docs-for-PJ-review/contents/docs/CONTRACTS.md?ref=docs/plan-v3-stack-decisions-1101" -H "Accept: application/vnd.github.raw" | head -n 8
-gh api "repos/SamdoRyu/docs-for-PJ-review/contents/docs/CONTRACTS_API.md?ref=docs/plan-v3-stack-decisions-1101" -H "Accept: application/vnd.github.raw" | head -n 8
+gh api "repos/SamdoRyu/docs-for-PJ-review/contents/docs/CONTRACTS.md?ref=main" -H "Accept: application/vnd.github.raw" | head -n 8
+gh api "repos/SamdoRyu/docs-for-PJ-review/contents/docs/CONTRACTS_API.md?ref=main" -H "Accept: application/vnd.github.raw" | head -n 8
 # 2) 기획 저장소 안내문 밖의 계약 본문은 796fc25와 같다 (기획 저장소 clone에서)
-git diff 796fc25 docs/plan-v3-stack-decisions-1101 -- docs/CONTRACTS.md docs/CONTRACTS_API.md
+git diff 796fc25 origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 # 3) GRAVIT 계약 문서를 마지막으로 바꾼 커밋 = 기준 계약 커밋
 git log -1 --format=%H origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 ```
@@ -66,8 +66,8 @@ git log -1 --format=%H origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 | --- | --- |
 | **A** 총괄 · 기획 · 백엔드 일부 — `@wol20670` | 일정 · 계약 문서(문서 담당자) · Issue/PR 운영 · 통합 검증, 백엔드는 도움 요청(`help` 패키지) |
 | **B** 백엔드 전담 — `@yang7493` | 공통 기반(`common` · Security · 인가) · 인증 · Workspace · GitHub 연동 · 동기화 · 그 밖의 서버 도메인 |
-| **C** 프론트 3D — `@FG-Kaki` | `frontend/src/scene/**` · SceneModel · ThemeLayout · 드래그 · 3D 상호작용 |
-| **D** 프론트 HUD · 데이터 — `@JHee0209` | `DataSource` · 화면 타입 · api/mock · `store` · HUD · 패널 · 인증 화면 |
+| **C** 프론트 3D — `@FG-Kaki` | `frontend/src/scene/**` · `src/office/` · `src/app/` · SceneModel(`src/scene/model/`) · ThemeLayout(`src/theme/`) · 드래그 · 3D 상호작용, 회의 대화상자(`src/ui/MeetingDialogs.tsx`) · 일정판(`src/ui/WeekView.tsx`) · 학습 타임라인 · 회고 리포트 · 결정 카드 화면 |
+| **D** 프론트 HUD · 데이터 — `@JHee0209` | `frontend/src/data/**`(DataSource · 화면 타입 · api/mock) · `src/store.ts` · `src/ui/uiState.ts` · `src/App.tsx` · `src/ui/`의 HUD · 패널 · 인증 화면(C 파일 제외) |
 
 - 프론트 두 사람은 프론트 작업이 끝나는 대로 백엔드에 합류한다. 그때 담당 Issue와 [`.github/CODEOWNERS`](../.github/CODEOWNERS)를 같이 고친다.
 - 프론트 경로 CODEOWNERS는 두 사람 공동이다 — 한 사람 PR에 다른 사람이 자동으로 리뷰어로 붙게 하려는 것이다. 파일 소유(누가 고치는지)는 위 표와 Issue Assignee가 기준이다.
@@ -89,7 +89,7 @@ git log -1 --format=%H origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 | 07 | [07-screens.md][07] — 화면 |
 | PRD | [PRD.md][prd] |
 | ARCHITECTURE.md | [ARCHITECTURE.md][arch] |
-| BACKEND_ASSIGNMENTS · SCREEN_ASSIGNMENTS | [BACKEND_ASSIGNMENTS.md][ba] · [SCREEN_ASSIGNMENTS.md][sa] — 고정 링크는 이전 역할 기준. 2026-11-03 재배분 반영본은 기획 브랜치 최신: [BACKEND][ba-new] · [SCREEN][sa-new] |
+| BACKEND_ASSIGNMENTS · SCREEN_ASSIGNMENTS | [BACKEND_ASSIGNMENTS.md][ba] · [SCREEN_ASSIGNMENTS.md][sa] — 고정 링크는 이전 역할 기준. 2026-11-03 재배분 반영본은 기획 저장소 `main`: [BACKEND][ba-new] · [SCREEN][sa-new] |
 | PROJECT_COMMANDS.md | [PROJECT_COMMANDS.md][pc] (GRAVIT 실제 명령은 루트 [README.md](../README.md)) |
 | 결정 기록 | [reviews/decision-meeting-2026-10-28.md][dm] |
 | 코드 컨벤션 (BE) | [plan/코드 컨벤션 (BE).md][be] |
@@ -107,8 +107,8 @@ git log -1 --format=%H origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 [arch]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/ARCHITECTURE.md
 [ba]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/BACKEND_ASSIGNMENTS.md
 [sa]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/SCREEN_ASSIGNMENTS.md
-[ba-new]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/docs/plan-v3-stack-decisions-1101/docs/BACKEND_ASSIGNMENTS.md
-[sa-new]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/docs/plan-v3-stack-decisions-1101/docs/SCREEN_ASSIGNMENTS.md
+[ba-new]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/main/docs/BACKEND_ASSIGNMENTS.md
+[sa-new]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/main/docs/SCREEN_ASSIGNMENTS.md
 [pc]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/PROJECT_COMMANDS.md
 [dm]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/reviews/decision-meeting-2026-10-28.md
 [be]: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/plan/%EC%BD%94%EB%93%9C%20%EC%BB%A8%EB%B2%A4%EC%85%98%20%28BE%29.md
