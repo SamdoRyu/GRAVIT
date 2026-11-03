@@ -10,5 +10,30 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:gravit}
     username: ${MYSQL_USER:gravit}
     password: ${MYSQL_PASSWORD:}
-# Schema changes go through Flyway: src/main/resources/db/migration/V{n}__{desc}.sql.
-# Hibernate ddl-auto stays at Spring's default for MySQL (none).
+  # Schema changes go through Flyway: src/main/resources/db/migration/V{n}__{desc}.sql.
+  # Hibernate ddl-auto stays at Spring's default for MySQL (none).
+  jpa:
+    properties:
+      # Store Instants as UTC regardless of the server's time zone.
+      hibernate.jdbc.time_zone: UTC
+  jackson:
+    deserialization:
+      # CONTRACTS.md 「5」: unknown request fields are rejected as `invalid`, not silently dropped.
+      fail-on-unknown-properties: true
+
+server:
+  servlet:
+    session:
+      # CONTRACTS.md 「10」: session expires 60 min after the last request, cookie SameSite=Lax.
+      timeout: 60m
+      cookie:
+        http-only: true
+        same-site: lax
+        # HTTPS deploy: SERVER_SERVLET_SESSION_COOKIE_SECURE=true
+        secure: false
+
+app:
+  # Allowed origin for write requests (NFR-05). The Vite dev server forwards the browser's Origin as-is.
+  origin: ${APP_ORIGIN:http://localhost:5173}
+  # Approved instructor accounts: comma-separated GitHub user IDs (not login names). Empty = no instructors.
+  instructor-github-user-ids: ${INSTRUCTOR_GITHUB_USER_IDS:}
