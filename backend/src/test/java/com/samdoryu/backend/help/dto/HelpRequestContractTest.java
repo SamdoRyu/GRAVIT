@@ -46,6 +46,20 @@ class HelpRequestContractTest {
     }
 
     @Test
+    void commentCreateRequestExampleRoundTrips() throws IOException {
+        assertRoundTrip("help-comment-create-request.json", HelpCommentCreateRequest.class);
+    }
+
+    @Test
+    void commentContentMustBe1To2000Chars() {
+        assertThat(VALIDATOR.validate(new HelpCommentCreateRequest(null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpCommentCreateRequest(""))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpCommentCreateRequest("a".repeat(2001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpCommentCreateRequest("a"))).isEmpty();
+        assertThat(VALIDATOR.validate(new HelpCommentCreateRequest("a".repeat(2000)))).isEmpty();
+    }
+
+    @Test
     void statusUsesContractJsonValues() {
         assertThat(MAPPER.writeValueAsString(HelpRequestStatus.values()))
                 .isEqualTo("[\"open\",\"discussing\",\"resolved\",\"on_agenda\",\"ended\"]");
