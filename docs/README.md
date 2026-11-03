@@ -66,11 +66,11 @@ git log -1 --format=%H origin/main -- docs/CONTRACTS.md docs/CONTRACTS_API.md
 | --- | --- |
 | **A** 총괄 · 기획 · 백엔드 일부 — `@wol20670` | 일정 · 계약 문서(문서 담당자) · Issue/PR 운영 · 통합 검증, 백엔드는 도움 요청(`help` 패키지) |
 | **B** 백엔드 전담 — `@yang7493` | 공통 기반(`common` · Security · 인가) · 인증 · Workspace · GitHub 연동 · 동기화 · 그 밖의 서버 도메인 |
-| **C** 프론트 3D — `@FG-Kaki` · `@JHee0209` 중 (분담 미정) | `frontend/src/scene/**` · SceneModel · ThemeLayout · 드래그 · 3D 상호작용 |
-| **D** 프론트 HUD · 데이터 — `@FG-Kaki` · `@JHee0209` 중 (분담 미정) | `DataSource` · 화면 타입 · api/mock · `store` · HUD · 패널 · 인증 화면 |
+| **C** 프론트 3D — `@FG-Kaki` | `frontend/src/scene/**` · SceneModel · ThemeLayout · 드래그 · 3D 상호작용 |
+| **D** 프론트 HUD · 데이터 — `@JHee0209` | `DataSource` · 화면 타입 · api/mock · `store` · HUD · 패널 · 인증 화면 |
 
 - 프론트 두 사람은 프론트 작업이 끝나는 대로 백엔드에 합류한다. 그때 담당 Issue와 [`.github/CODEOWNERS`](../.github/CODEOWNERS)를 같이 고친다.
-- C · D 분담이 정해지기 전까지 프론트 Issue의 Assignee는 비워 두고, 프론트 경로 CODEOWNERS는 두 사람 공동이다.
+- 프론트 경로 CODEOWNERS는 두 사람 공동이다 — 한 사람 PR에 다른 사람이 자동으로 리뷰어로 붙게 하려는 것이다. 파일 소유(누가 고치는지)는 위 표와 Issue Assignee가 기준이다.
 
 - 계약 본문(CONTRACTS.md 「9」 등)의 역할 문자는 **이전 배정**(B 연동 백엔드 · C 도메인 백엔드 · D 3D · 프론트) 기준이다. 본문은 계약 버전을 지키려고 고치지 않는다. 읽을 때는 이전 "B · C"(백엔드) → 지금 **B**(도움 요청은 **A**), 이전 "D"(프론트) → 지금 **C · D**로 바꿔 읽는다.
 - Issue별 담당은 GitHub Issue 본문이 기준이다. 실제 GitHub 계정 지정은 사람 팀원 4명 중에서만 한다(AI 계정 금지 — 루트 `CLAUDE.md` 「Git」).
