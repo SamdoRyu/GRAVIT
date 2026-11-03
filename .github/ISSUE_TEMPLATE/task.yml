@@ -1,0 +1,31 @@
+name: Task / Chore
+description: 리팩터링, 설정, 문서, 테스트, 유지보수 작업
+title: "[Task] "
+labels: ["chore"]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: 요구사항 ID
+      description: 관련된 요구사항 정의서 ID가 있으면 적습니다. 여러 개면 쉼표로 구분합니다.
+      placeholder: "예: FR-GH-03, NFR-10"
+    validations:
+      required: false
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: 목표
+      description: 무엇을 하면 끝나는지 한두 줄로 적습니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: todo
+    attributes:
+      label: 작업 항목
+      description: 단계가 여러 개일 때만 적습니다.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: false
