@@ -1,6 +1,6 @@
 // Small shared presentational pieces. OWNER: ui-builder.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { Id, Member, Presence, Priority } from '../data/types'
+import type { Id, Member, Presence, DemoPriority } from '../data/types'
 import { PRESENCE_META, PRIORITY_META } from '../data/meta'
 import { SIGNAL_META, type SignalLevel } from '../data/insights'
 import { useOffice } from '../store'
@@ -41,7 +41,7 @@ export function AssigneeChip({ memberId, showName = true }: { memberId: Id | nul
   )
 }
 
-export function PriorityDot({ priority, withLabel = false }: { priority: Priority; withLabel?: boolean }) {
+export function PriorityDot({ priority, withLabel = false }: { priority: DemoPriority; withLabel?: boolean }) {
   const m = PRIORITY_META[priority]
   return (
     <span className="prio" title={`우선순위 ${m.label}`}>

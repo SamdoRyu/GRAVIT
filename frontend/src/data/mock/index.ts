@@ -1,7 +1,7 @@
-// OWNER: data-engineer. A DataSource backed by seed data + localStorage + demo mode.
+// OWNER: data-engineer. A DemoDataSource backed by seed data + localStorage + demo mode.
 // engine.ts = validated mutations, seed.ts = initial data, storage.ts = persistence,
 // demo.ts = simulated teammates, text.ts = Korean message helpers.
-import type { DataSource } from '../DataSource'
+import type { DemoDataSource } from '../DataSource'
 import { createDemo } from './demo'
 import { createEngine } from './engine'
 import { createLeader, defaultLocks, type LockManagerLike } from './leader'
@@ -26,9 +26,9 @@ export interface MockOptions {
   locks?: LockManagerLike | null
 }
 
-/** The data source plus test-only hooks. Not part of the DataSource interface. */
+/** The data source plus test-only hooks. Not part of the DemoDataSource interface. */
 export interface MockHandle {
-  source: DataSource
+  source: DemoDataSource
   /** Runs one demo action immediately; returns its name (or null when none was feasible). */
   demoTick(): string | null
   /** Writes pending changes to storage immediately. */
@@ -67,7 +67,7 @@ export function createMockDataSourceForTest(opts: MockOptions = {}): MockHandle 
     await new Promise<void>((resolve) => setTimeout(resolve, ms))
   }
 
-  const source: DataSource = {
+  const source: DemoDataSource = {
     label: '로컬 데모 데이터',
     async load() {
       await wait()
@@ -122,6 +122,6 @@ export function createMockDataSourceForTest(opts: MockOptions = {}): MockHandle 
   return { source, demoTick: () => demo.tick(), flush: () => engine.flush(), returnTick: () => demo.returnTick(), leaderTick: () => leader.tick(), isLeader: () => leader.isLeader() }
 }
 
-export function createMockDataSource(opts?: MockOptions): DataSource {
+export function createMockDataSource(opts?: MockOptions): DemoDataSource {
   return createMockDataSourceForTest(opts).source
 }

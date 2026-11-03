@@ -1,9 +1,9 @@
 // App state + actions. Owned by the architect.
-// Entities mirror the DataSource; every mutation goes through an action here
-// (optimistic update → DataSource call → reconcile / roll back with a toast).
+// Entities mirror the DemoDataSource; every mutation goes through an action here
+// (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
-import { DataError, type DataSource } from './data/DataSource'
-import type { Activity, Change, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, Task, TaskInput, TaskPatch, TaskStatus, Workspace } from './data/types'
+import { DataError, type DemoDataSource } from './data/DataSource'
+import type { Activity, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, Task, TaskInput, TaskPatch, TaskStatus, Workspace } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -39,7 +39,7 @@ export interface Toast {
 }
 
 interface OfficeState {
-  // ---- data (mirrors the DataSource) ----
+  // ---- data (mirrors the DemoDataSource) ----
   status: 'idle' | 'loading' | 'ready' | 'error'
   sourceLabel: string
   canDemo: boolean
@@ -98,7 +98,7 @@ interface OfficeState {
 
   // ---- actions ----
   // Mutations resolve to true on success, false on failure (a toast was already shown).
-  init: (source: DataSource) => Promise<void>
+  init: (source: DemoDataSource) => Promise<void>
   createTask: (input: TaskInput) => Promise<Task | null>
   updateTask: (id: Id, patch: TaskPatch) => Promise<boolean>
   deleteTask: (id: Id) => Promise<boolean>
@@ -122,7 +122,7 @@ export function ongoingMeeting(meetings: Record<Id, Meeting>): Meeting | null {
   return null
 }
 
-let source: DataSource | null = null
+let source: DemoDataSource | null = null
 let unsubscribe: (() => void) | null = null
 let toastSeq = 1
 
@@ -162,7 +162,7 @@ const without = <T>(rec: Record<Id, T>, id: Id) => {
 export const useOffice = create<OfficeState>((set, get) => {
   const fail = (e: unknown) => get().toast('bad', errText(e))
 
-  const apply = (c: Change) => {
+  const apply = (c: DemoChange) => {
     const s = get()
     switch (c.type) {
       case 'task_upsert':

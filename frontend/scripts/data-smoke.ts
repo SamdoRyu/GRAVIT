@@ -2,7 +2,7 @@
 import { DataError } from '../src/data/DataSource'
 import { AVATAR_VARIANTS } from '../src/data/meta'
 import { backlogTasks, computeKpis, isOverdue, workload } from '../src/data/selectors'
-import type { Change, Task, Workspace } from '../src/data/types'
+import type { DemoChange, Task, Workspace } from '../src/data/types'
 import { MAX_MEMBERS, OFFICE } from '../src/office/layout'
 import { createMockDataSourceForTest } from '../src/data/mock'
 import { CORRUPT_KEY, createMemoryStorage, createSharedMemoryStorage, META_KEY, STORAGE_KEY } from '../src/data/mock/storage'
@@ -77,7 +77,7 @@ function open(
   const storage = opts.storage ?? createMemoryStorage()
   // autoRun off: no real timers; the test drives demoTick() / returnTick() / leaderTick() on a fake clock.
   const handle = createMockDataSourceForTest({ storage, latencyMs: [0, 0], random: mulberry32(opts.seed ?? 1), now: opts.now, autoRun: false, locks: opts.locks ?? null })
-  const changes: Change[] = []
+  const changes: DemoChange[] = []
   handle.source.subscribe((c) => changes.push(c))
   // The demo wish (what the store sets); only the leader tab acts on it.
   if (opts.demo !== false) handle.source.setDemoMode!(true)
@@ -393,7 +393,7 @@ async function main() {
     const t0 = Date.now()
     await h.source.load()
     assert(Date.now() - t0 >= 25, 'latency applied')
-    const seen: Change[] = []
+    const seen: DemoChange[] = []
     const off = h.source.subscribe((c) => seen.push(c))
     const w = await h.source.load()
     await h.source.createTask({ title: 'a', projectId: w.projects[0].id })

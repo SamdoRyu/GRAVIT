@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { describe, it } from 'node:test'
 import { createApiDataSource } from '../../src/data/api'
-import type { Change } from '../../src/data/types'
+import type { DemoChange } from '../../src/data/types'
 import { collect, rejectsWith } from './scenarios'
 
 interface Fake {
@@ -89,7 +89,7 @@ async function startFake(): Promise<Fake> {
 }
 
 const task = { id: 't1', number: 1, title: 'x', description: '', status: 'todo', priority: 'medium', estimate: 3, projectId: 'p', assigneeId: null, dueDate: null, order: 1, createdAt: '', updatedAt: '', completedAt: null }
-const sse = (id: number, change: Change) => `id: ${id}\nevent: change\ndata: ${JSON.stringify(change)}\n\n`
+const sse = (id: number, change: DemoChange) => `id: ${id}\nevent: change\ndata: ${JSON.stringify(change)}\n\n`
 
 describe('ApiDataSource client mechanics', () => {
   it('maps error bodies to DataError(message, code) and network failures to unavailable', async () => {
@@ -122,7 +122,7 @@ describe('ApiDataSource client mechanics', () => {
     }
     try {
       const source = createApiDataSource({ baseUrl: fake.url })
-      const got: Change[] = []
+      const got: DemoChange[] = []
       source.subscribe((c) => got.push(c)) // subscribe BEFORE load is fine
       await source.load()
       const t0 = Date.now()
@@ -333,7 +333,7 @@ describe('ApiDataSource client mechanics', () => {
     fake.demoPutStatus = 503
     try {
       const source = createApiDataSource({ baseUrl: fake.url })
-      const got: Change[] = []
+      const got: DemoChange[] = []
       source.subscribe((x) => got.push(x))
       await source.load()
       assert.equal(await source.getDemoMode!(), true)
@@ -445,7 +445,7 @@ describe('ApiDataSource client mechanics', () => {
     try {
       const source = createApiDataSource({ baseUrl: fake.url })
       const tasks = new Map<string, unknown>()
-      const apply = (ch: Change) => {
+      const apply = (ch: DemoChange) => {
         if (ch.type === 'task_upsert') tasks.set(ch.task.id, ch.task)
         else if (ch.type === 'task_delete') tasks.delete(ch.id)
         else if (ch.type === 'snapshot') {

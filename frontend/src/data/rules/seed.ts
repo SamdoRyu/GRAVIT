@@ -1,7 +1,7 @@
 // Seed data: a realistic Korean product team, all dates relative to "now".
 import { MEMBER_COLORS } from '../meta'
 import { taskKey, todayIso } from '../selectors'
-import type { Activity, ActivityKind, Estimate, Member, Presence, Priority, Project, Task, TaskStatus, Workspace } from '../types'
+import type { Activity, ActivityKind, Estimate, Member, Presence, DemoPriority, Project, Task, TaskStatus, Workspace } from '../types'
 import { OFFICE } from '../../office/layout'
 import { refObject, STATUS_TO, taskObject } from './messages'
 
@@ -42,7 +42,7 @@ interface SeedTask {
   title: string
   desc: string
   status: TaskStatus
-  pri: Priority
+  pri: DemoPriority
   est: Estimate
   /** 1-based member index, 0 = unassigned. */
   who: number
