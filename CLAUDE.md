@@ -16,8 +16,8 @@ frontend/ backend/ contract/examples/ docs/ compose.yaml .env.example .github/ .
 
 ## 공통 계약 — 먼저 읽는다
 
-- **기준 계약 커밋: `796fc25b459cd4a25af89e085c093f4e2c25f5b0`** (기획 저장소 `SamdoRyu/docs-for-PJ-review`). 사용자가 새 SHA를 주면 그것을 따른다.
-- `docs/CONTRACTS.md`(공통 규칙 · Entity · ID · 에러 · 보안) · `docs/CONTRACTS_API.md`(엔드포인트 · DTO) — 위 커밋을 그대로 옮긴 것. 기준 위치 전환 상태와 고정 링크 표는 `docs/README.md`.
+- **기준 계약 커밋: `e14fb85a6fe0ff8aea8be6a2a6c66a9b626fef03`** (GRAVIT — `docs/CONTRACTS*.md`를 마지막으로 바꾼 커밋). 사용자가 새 SHA를 주면 그것을 따른다.
+- **계약의 기준은 GRAVIT `docs/CONTRACTS.md`(공통 규칙 · Entity · ID · 에러 · 보안) · `docs/CONTRACTS_API.md`(엔드포인트 · DTO)다**(2026-11-03 전환). 기획 저장소의 같은 파일은 `796fc25`까지의 이력일 뿐이다. 전환 상태 · 고정 링크 표 · 역할 대응은 `docs/README.md`.
 - `contract/examples/` — 계약 예시 JSON. Java DTO · TS 타입 · 예시 JSON은 한 PR에서 함께 바꾼다.
 - **계약을 바꾸지 않는다.** 필드 이름 · 타입 · enum · API 경로 · 상태 코드 · Entity가 계약과 달라야 하면 작업을 멈추고 사용자(문서 담당자)에게 변경을 요청한다. 계약 문서에 없는 계약을 코드에서 먼저 만들지 않는다.
 
@@ -55,13 +55,24 @@ CI(`.github/workflows/ci.yml`)는 위 프론트 4개와 `./gradlew test bootJar`
 ## Git
 
 - `main` 직접 push 금지. 브랜치 `<type>/<이슈번호>-<설명>` → PR(`Closes #N`, 기준 계약 커밋) → 승인 1명 → squash. 앱의 PR 추천 · 비추천은 머지 승인과 별개다.
-- **사용자가 요청하기 전에는 commit · push · PR 생성 · merge를 하지 않는다.** 커밋 · PR에 Claude 작성자 표기를 넣지 않는다.
+- **사용자가 요청하기 전에는 commit · push · PR 생성 · merge를 하지 않는다.**
 - 계약 · 기획 문서의 수정과 반영은 문서 담당자가 한다. 코드 PR 흐름과 섞지 않는다.
+
+## AI 협업자 · 기여자 등록 금지 (필수 협업 정책)
+
+Claude Code는 개발 보조 도구이고 팀원이 아니다. Plan 모드 · Auto 모드 모두, Issue · PR · 코드 · 문서 작업 전부에 적용한다.
+
+- Claude Code · AI 계정을 Collaborator · Organization/Team Member · Issue Assignee · CODEOWNERS · PR Reviewer로 지정하지 않는다. 담당자는 사람 팀원 4명뿐이다.
+- 커밋 Author · Committer에 AI 계정을 쓰지 않고, `Co-authored-by: Claude …` · `… <noreply@anthropic.com>` 같은 공동 작성자 트레일러나 "Generated with Claude Code" 문구를 커밋 메시지 · PR 본문에 넣지 않는다. 기본 첨부 안내가 있어도 이 정책이 우선한다.
+- `git config user.name` · `user.email`을 바꾸지 않는다.
+- 리뷰 · 승인 · 최종 반영은 사람이 한다. AI가 사람 팀원을 사칭하거나 리뷰 · 승인을 대신하지 않는다. AI가 쓴 코드도 담당자가 검토하고 책임진다.
+- 사용자의 명시적 요청 없이 Collaborator · CODEOWNERS · Assignee · Reviewer 설정을 바꾸지 않는다.
 
 ## 병렬 세션 작업 경계
 
 - 한 세션은 한 이슈 · 한 브랜치만 다룬다. 이슈 범위 밖 파일은 고치지 않고 후속 이슈 후보로 보고한다.
-- 다른 세션 · 팀원의 영역(계약 묶음별 담당 — CONTRACTS.md 「9」 표: B 연동 백엔드, C 도메인 백엔드, D 3D · 프론트)을 건드려야 하면 먼저 사용자에게 묻는다.
+- 역할(2026-11-03): **A** 총괄 · 기획 · 백엔드 일부(`help`) · **B** 백엔드 전담(나머지 서버 패키지 · `common` · Security) · **C** 프론트 3D(`src/scene/**` · SceneModel · ThemeLayout) · **D** 프론트 HUD · 데이터(`src/data/**` · `store.ts` · `src/ui/` HUD). CONTRACTS.md 「9」 표의 옛 역할 문자(C = 도메인 백엔드)는 쓰지 않는다 — 대응은 `docs/README.md` 「역할」. Issue별 담당은 Issue 본문이 기준이다.
+- 다른 세션 · 팀원의 영역을 건드려야 하면 먼저 사용자에게 묻는다. 테이블 · Entity · Service · migration은 만든 사람만 고친다.
 - 공유 파일(`docs/`, `contract/examples/`, `backend/.../common/`, `frontend/src/data/DataSource.ts` · `types.ts`, `.github/`, 빌드 설정)은 이슈가 그 변경을 요구할 때만 고친다.
 
 ## 디자인 테마

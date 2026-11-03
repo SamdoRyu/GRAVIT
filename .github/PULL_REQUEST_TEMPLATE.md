@@ -16,10 +16,10 @@ FR-
 
 ## 기준 공통 계약 커밋
 
-<!-- 이 PR이 따른 계약 버전. 계약 문서 기준 위치 전환 전에는 기획 저장소 커밋,
-     전환 뒤에는 계약 문서를 마지막으로 바꾼 GRAVIT 커밋 SHA를 적는다 (docs/README.md) -->
+<!-- 이 PR이 따른 계약 버전. 계약 문서(docs/CONTRACTS*.md)를 마지막으로 바꾼 GRAVIT 커밋 SHA를 적는다
+     (2026-11-03 기준 위치 전환 — docs/README.md) -->
 
-`796fc25b459cd4a25af89e085c093f4e2c25f5b0`
+`e14fb85a6fe0ff8aea8be6a2a6c66a9b626fef03`
 
 ## 고민한 점
 
