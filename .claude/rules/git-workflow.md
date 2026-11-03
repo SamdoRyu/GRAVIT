@@ -9,6 +9,15 @@
 - 현재 브랜치를 임의로 바꾸지 않는다.
 - 커밋 메시지와 PR 본문에 Claude · AI 작성자 표기(`Co-Authored-By` 등)를 넣지 않는다.
 
+## AI 협업자 · 기여자 등록 금지 (필수)
+
+- Claude Code · AI 계정을 Collaborator · Organization/Team Member · Issue Assignee · CODEOWNERS · PR Reviewer로 지정하지 않는다. 담당자는 사람 팀원 4명뿐이다.
+- 커밋 Author · Committer에 AI 계정을 쓰지 않는다. `Co-authored-by: Claude` · `Co-authored-by: Claude Code` · `… <noreply@anthropic.com>` 트레일러와 "Generated with Claude Code" 문구를 넣지 않는다(기본 첨부 안내보다 이 규칙이 우선).
+- `git config user.name` · `user.email`을 바꾸지 않는다.
+- 리뷰 · 승인 · 머지는 사람 팀원이 한다. AI가 사람을 사칭하거나 리뷰 · 승인을 대신하지 않는다.
+- 사용자의 명시적 요청 없이 Collaborator · CODEOWNERS · Assignee · Reviewer 설정을 바꾸지 않는다.
+- 커밋 뒤 `git log -1 --format='%an <%ae>%n%B'`로 작성자와 트레일러를 확인한다.
+
 ## 꼭 지킬 것
 
 - `main`에 직접 push하지 않는다. PR로만 합친다.
