@@ -35,3 +35,5 @@ server:
 app:
   # Allowed origin for write requests (NFR-05). The Vite dev server forwards the browser's Origin as-is.
   origin: ${APP_ORIGIN:http://localhost:5173}
+  # Approved instructor accounts: comma-separated GitHub user IDs (not login names). Empty = no instructors.
+  instructor-github-user-ids: ${INSTRUCTOR_GITHUB_USER_IDS:}
