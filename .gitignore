@@ -1,11 +1,35 @@
-HELP.md
-.gradle
-build/
-!gradle/wrapper/gradle-wrapper.jar
+### Secrets — never commit ###
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+
+### OS / Editors ###
+.DS_Store
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.sw?
+
+### Logs ###
+logs/
+*.log
+
+### Backend (Gradle / Spring Boot) ###
+.gradle/
+**/build/
 !**/src/main/**/build/
 !**/src/test/**/build/
-
-### STS ###
+out/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+backend/HELP.md
 .apt_generated
 .classpath
 .factorypath
@@ -13,25 +37,14 @@ build/
 .settings
 .springBeans
 .sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
 
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+### Frontend (Node / Vite / Playwright) ###
+**/node_modules/
+**/dist/
+dist-ssr/
+*.local
+test-results/
+playwright-report/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-### VS Code ###
-.vscode/
+### Local DB data (compose uses a named volume; this is for bind-mount setups) ###
+mysql-data/

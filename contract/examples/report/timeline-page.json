@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "kind": "evaluation_received", "occurredAt": "2026-11-05T02:40:00Z", "title": "#15 feat(auth): GitHub 로그인", "detail": "실패 응답 모양이 계약과 달라요", "verdict": "not_recommend", "ref": { "type": "submission", "id": "9" } }
+  ],
+  "page": 0, "size": 20, "totalItems": 1, "totalPages": 1
+}

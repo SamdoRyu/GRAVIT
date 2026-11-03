@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: backend
+  config:
+    # Local dev: read the repo-root .env (the same file compose.yaml uses). bootRun/test run from backend/.
+    # Optional, so CI / deploy work without it; real environment variables always win over this file.
+    import: optional:file:../.env[.properties]
+  datasource:
+    # Deploy can override these with SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD.
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:gravit}
+    username: ${MYSQL_USER:gravit}
+    password: ${MYSQL_PASSWORD:}
+# Schema changes go through Flyway: src/main/resources/db/migration/V{n}__{desc}.sql.
+# Hibernate ddl-auto stays at Spring's default for MySQL (none).
