@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 요구사항 정의서 (요구사항 ID 찾기)
+    url: https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/03-requirements.md
+    about: 이슈의 「요구사항 ID」 칸에 적을 FR · NFR ID는 여기서 찾습니다 (확정 계약 커밋 796fc25 기준).

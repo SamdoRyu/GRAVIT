@@ -1,0 +1,109 @@
+# GRAVIT CI — PR과 main push마다 프론트엔드 · 백엔드를 실제로 검증한다.
+#
+# - secret을 쓰지 않는다. 백엔드 테스트 DB는 이 job 안에서만 사는 MySQL 서비스 컨테이너이고,
+#   아래 접속 정보는 CI 전용 일회용 값이다(개발 .env · 운영 DB와 무관).
+# - main push도 보는 이유: 각자 통과한 PR 둘이 합쳐진 결과만 깨지는 경우를 잡는다.
+# - Playwright E2E는 돌리지 않는다(Chrome 설치 · 실행 비용). 로컬 명령은 README 「빌드 · 테스트 명령」.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 같은 ref에 연속 push하면 이전 실행을 취소한다 — 마지막 커밋 결과만 의미가 있다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# GITHUB_TOKEN은 checkout에 필요한 읽기 권한만.
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: frontend (lint · contract · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: contract test
+        run: npm run test:contract
+
+      # tsc -b 타입 검사 + vite build + postbuild check-bundle(첫 화면에 3D 청크가 섞이면 실패)
+      - name: build
+        run: npm run build
+
+  backend:
+    name: backend (test · bootJar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      mysql:
+        image: mysql:8.4.13   # compose.yaml과 같은 버전
+        env:
+          MYSQL_DATABASE: gravit_test
+          MYSQL_USER: gravit_ci
+          MYSQL_PASSWORD: ci-only-password
+          MYSQL_ROOT_PASSWORD: ci-only-root-password
+          TZ: UTC
+        ports:
+          - 3306:3306
+        # 초기화 중인 임시 서버는 TCP를 열지 않으므로, TCP ping이 성공하면 진짜 서버가 뜬 것이다.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    # application.yaml의 ${MYSQL_*} 자리에 들어간다(.env 파일은 CI에 없다).
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: gravit_test
+      MYSQL_USER: gravit_ci
+      MYSQL_PASSWORD: ci-only-password
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            backend/*.gradle*
+            backend/gradle/wrapper/gradle-wrapper.properties
+
+      - name: gradle test bootJar
+        run: ./gradlew test bootJar --no-daemon --console=plain
+
+      - name: upload test report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test/
+          retention-days: 7

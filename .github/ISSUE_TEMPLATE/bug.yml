@@ -1,0 +1,43 @@
+name: Bug
+description: 재현 가능한 잘못된 동작
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: 요구사항 ID
+      description: 관련된 요구사항 정의서 ID가 있으면 적습니다.
+      placeholder: "예: FR-GH-03, NFR-10"
+    validations:
+      required: false
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 현상
+      description: 실제로 어떤 문제가 발생하는지, 원래는 어떻게 되어야 하는지 적습니다.
+      placeholder: |
+        실제: ...
+        기대: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 절차
+      description: 재현이 안 되면 언제 · 어디서 봤는지라도 적습니다.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 환경 · 로그 · 스크린샷
+      description: 브라우저, 로컬 / 시범 서버 등. secret 또는 개인정보는 제거해주세요.
+    validations:
+      required: false

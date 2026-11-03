@@ -1,0 +1,50 @@
+# 레포 라벨 정의 (개발 컨벤션 > Git 전략 > 라벨).
+# 종류 라벨은 템플릿이 붙인다. 영역 라벨은 선택이고, 붙이면 회고 리포트의 "담당 기능 영역"(FR-REP-01)에 모인다.
+# GitHub 기본 라벨은 bug 만 남기고 지운다.
+# 커밋 scope 를 쓸 때는 area: 뒤의 값과 같게 쓴다. 예: feat(sync): …
+#
+# 이 파일은 GitHub에 자동 반영되지 않는다. 등록 방법은 루트 README 「GitHub 라벨 등록」(gh label create 명령 또는 라벨 화면에서 직접).
+# 라벨을 바꾸면 이 파일과 GitHub 라벨을 함께 고친다.
+
+# 종류 라벨
+- name: feature
+  color: "1d76db"
+  description: "Feature 템플릿. 브랜치·커밋 type: feat"
+- name: bug
+  color: "d73a4a"
+  description: "Bug 템플릿. 브랜치·커밋 type: fix"
+- name: chore
+  color: "cfd3d7"
+  description: "Task 템플릿. 브랜치·커밋 type: chore, refactor, test, docs 중 맞는 것"
+
+# 영역 라벨 (정의서 기능 그룹)
+- name: "area:auth"
+  color: "c5def5"
+  description: "계정·권한 (FR-AUTH)"
+- name: "area:sync"
+  color: "c5def5"
+  description: "GitHub 연동 (FR-GH)"
+- name: "area:req"
+  color: "c5def5"
+  description: "요구사항 추적 (FR-REQ)"
+- name: "area:office"
+  color: "c5def5"
+  description: "3D 사무실 (FR-OFF)"
+- name: "area:flow"
+  color: "c5def5"
+  description: "진행·막힘 (FR-FLOW)"
+- name: "area:vote"
+  color: "c5def5"
+  description: "PR 평가와 회의실 학습 (FR-LRN)"
+- name: "area:instructor"
+  color: "c5def5"
+  description: "강사 대응·컨벤션 라이브러리 (FR-LRN-21~23, FR-REP-11, FR-LIB)"
+- name: "area:meeting"
+  color: "c5def5"
+  description: "회의·스탠드업 (FR-MTG)"
+- name: "area:plan"
+  color: "c5def5"
+  description: "일정판 (FR-PLAN)"
+- name: "area:report"
+  color: "c5def5"
+  description: "회고 리포트 (FR-REP)"

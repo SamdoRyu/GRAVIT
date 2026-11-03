@@ -48,3 +48,6 @@ playwright-report/
 
 ### Local DB data (compose uses a named volume; this is for bind-mount setups) ###
 mysql-data/
+
+### Claude Code (personal settings) ###
+.claude/settings.local.json

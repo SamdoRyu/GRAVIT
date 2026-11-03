@@ -1,0 +1,20 @@
+# GRAVIT CODEOWNERS — 지금은 전부 주석이다(비활성).
+#
+# 팀원 GitHub 아이디와 역할 배분이 확정되지 않았다. 소유자 자리에 실제 계정이 아닌 값(@<B> 같은 자리표시)이
+# 있으면 GitHub이 CODEOWNERS 오류로 표시하므로, 확정 전까지 주석으로 둔다.
+#
+# 적용 방법
+#   1. 아래 줄의 '# ' 를 지우고 <...> 를 실제 GitHub 아이디(@아이디)로 바꾼다. 팀은 @SamdoRyu/<팀이름> 도 된다.
+#   2. 지정한 계정이 모두 이 저장소에 쓰기 권한(collaborator)이 있는지 확인한다 — 없으면 무효 처리된다.
+#   3. push 뒤 GitHub 저장소 > CODEOWNERS 파일 화면에 오류 표시가 없는지 확인한다.
+#   4. 원하면 main 보호 규칙에서 "Require review from Code Owners"를 켠다(Git 전략의 필수 승인 1명과 별개 선택).
+#
+# 아래 규칙은 마지막에 맞는 줄이 이긴다. PR 작성자 본인은 GitHub이 리뷰어에서 자동으로 뺀다.
+# 역할 (기획안 > 역할 분담): A 기획 · 문서, B 연동 백엔드, C 도메인 백엔드, D 3D · 프론트
+
+# *               @<A> @<B> @<C> @<D>
+# /backend/       @<B> @<C>
+# /frontend/      @<D>
+# /contract/      @<B> @<C> @<D>
+# /docs/          @<A>
+# /.github/       @<A>

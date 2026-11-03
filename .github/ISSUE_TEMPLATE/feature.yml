@@ -1,0 +1,51 @@
+name: Feature
+description: 새로운 기능 또는 사용자 가치 추가
+title: "[Feature] "
+labels: ["feature"]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: 요구사항 ID
+      description: "[요구사항 정의서(03-requirements.md)](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/03-requirements.md)의 ID. 여러 개면 쉼표로 구분합니다."
+      placeholder: "예: FR-GH-03, NFR-10"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 문제 / 목적
+      description: 무엇을 해결하려는지 한두 줄이면 충분합니다.
+      placeholder: 사용자가 ... 할 수 없어 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건
+      description: "끝났는지 판단할 기준. [04-features.md](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/04-features.md) 「인수 조건」을 그대로 옮겨도 됩니다."
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 범위 메모
+      description: 포함할 것 · 하지 않을 것이 헷갈릴 때만 적습니다.
+      placeholder: |
+        - 포함: ...
+        - 제외: ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 참고
+      description: 화면, API, 디자인, 문서 링크 등
+    validations:
+      required: false
