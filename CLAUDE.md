@@ -71,7 +71,7 @@ Claude Code는 개발 보조 도구이고 팀원이 아니다. Plan 모드 · Au
 ## 병렬 세션 작업 경계
 
 - 한 세션은 한 이슈 · 한 브랜치만 다룬다. 이슈 범위 밖 파일은 고치지 않고 후속 이슈 후보로 보고한다.
-- 역할(2026-11-03): **A** 총괄 · 기획 · 백엔드 일부(`help`) · **B** 백엔드 전담(나머지 서버 패키지 · `common` · Security) · **C** 프론트 3D(`src/scene/**` · `src/theme/` · SceneModel · ThemeLayout) · **D** 프론트 HUD · 데이터(`src/data/**` · `store.ts` · `src/ui/` HUD). CONTRACTS.md 「9」 표의 옛 역할 문자(C = 도메인 백엔드)는 쓰지 않는다 — 대응은 `docs/README.md` 「역할」. Issue별 담당은 Issue 본문이 기준이다.
+- 역할(2026-11-03, 백엔드 재배분 2026-11-05): **A** 총괄 · 기획 · 백엔드 일부(`help` · `meeting` · `report`의 회고 리포트 · Snapshot 조립) · **B** 백엔드 전담(나머지 서버 패키지 · `common` · Security) · **C** 프론트 3D(`src/scene/**` · `src/theme/` · SceneModel · ThemeLayout) · **D** 프론트 HUD · 데이터(`src/data/**` · `store.ts` · `src/ui/` HUD). CONTRACTS.md 「9」 표의 옛 역할 문자(C = 도메인 백엔드)는 쓰지 않는다 — 대응은 `docs/README.md` 「역할」. Issue별 담당은 Issue 본문이 기준이다.
 - 다른 세션 · 팀원의 영역을 건드려야 하면 먼저 사용자에게 묻는다. 테이블 · Entity · Service · migration은 만든 사람만 고친다.
 - 공유 파일(`docs/`, `contract/examples/`, `backend/.../common/`, `frontend/src/data/DataSource.ts` · `types.ts`, `.github/`, 빌드 설정)은 이슈가 그 변경을 요구할 때만 고친다.
 
