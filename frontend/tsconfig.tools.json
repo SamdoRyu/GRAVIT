@@ -19,5 +19,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["tests", "scripts", "src/data", "src/office", "src/scene/model"]
+  "include": ["tests", "scripts", "src/data", "src/office", "src/scene/model", "src/theme/station"]
 }

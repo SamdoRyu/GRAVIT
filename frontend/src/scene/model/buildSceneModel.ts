@@ -8,6 +8,13 @@ const deskRole = (memberId: string): PlaceRole => `desk:${memberId}`
 /** 3D에 자리가 있는 팀원 — 지금 팀원이고 책상 자리가 있다. 빠진 팀원 · 자리가 없는 팀원은 3D에 없다(CONTRACTS.md 「10」). */
 export const isSeated = (m: MemberDto): boolean => m.removedAt === null && m.deskIndex !== null
 
+/** memberId → deskIndex, 3D에 자리가 있는 팀원만. ThemeLayout이 desk:<memberId>를 자리로 바꿀 때 쓴다. */
+export function deskSeats(members: readonly MemberDto[]): Map<string, number> {
+  const seats = new Map<string, number>()
+  for (const m of members) if (isSeated(m) && m.deskIndex !== null) seats.set(m.id, m.deskIndex)
+  return seats
+}
+
 function avatarEntity(m: MemberDto): SceneEntity {
   return { key: `member:${m.id}`, kind: 'avatar', refId: m.id, placeRole: deskRole(m.id), badges: [] }
 }
