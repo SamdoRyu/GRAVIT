@@ -47,5 +47,6 @@
 - 화면은 `src/data/DataSource.ts` 인터페이스로만 데이터를 받는다. 화면 코드에서 `fetch('/api/…')`를 직접 부르지 않는다. API 요청은 상대 경로 `/api/**`.
 - 전역 상태는 `src/store.ts`(Zustand) 하나다. 새 상태 관리 라이브러리를 들이지 않는다.
 - 3D 코드는 첫 화면 번들에 넣지 않는다 — `npm run build`의 `check-bundle`이 막는다(NFR-02).
-- 방향은 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링`이다. 디자인 테마는 미확정이므로 테마를 확정하는 변경(새 테마 · 에셋 교체 · 전체 재디자인)을 하지 않는다.
+- 방향은 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링`이다. SceneModel은 Snapshot을 공간 의미(`placeRole` · 배지)로 바꾸는 순수 함수이고 테마를 모른다. ThemeLayout(`src/theme/`)은 정거장의 좌표 · 드롭 구역 · 이동 경로를, R3F는 그리기만 맡는다.
+- 디자인 테마는 우주정거장이다(확정 시안 `frontend/public/station/`). 시안 코드를 복제하지 말고 기존 React 구조에 다시 구현한다. 시안 원본 파일은 고치지 않는다. 디자인은 시안을, 데이터 · 상태값 · 권한은 공통 계약을 따른다.
 - 컴포넌트 `PascalCase.tsx`, 그 밖의 모듈 `camelCase.ts`(데모 관례). 린터는 oxlint(`.oxlintrc.json`), 포매터는 없다.

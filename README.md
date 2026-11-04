@@ -266,7 +266,12 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 
 ## 디자인 테마
 
-**아직 정하지 않았습니다.** 지금 3D 사무실은 데모에서 가져온 임시 기본 테마입니다. 테마는 팀원들과 따로 정하고, 정해지기 전에는 테마 교체 · 새 에셋 · 전체 재디자인을 하지 않습니다. 구조는 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링`이라 테마가 바뀌어도 도메인 로직은 그대로입니다.
+**우주정거장으로 확정했습니다**(2026-11-04, #76 · #77). v1 테마는 이것 하나입니다.
+
+- 확정 시안은 `frontend/public/station/`의 정적 데모(three r150 · GLB 아바타)입니다. `npm run dev` 뒤 `http://localhost:5173/station/index.html`에서 4개 화면(`#/` · `#/blocked` · `#/meeting` · `#/pr/21`)을 볼 수 있습니다. 시안은 디자인 참조용이라 원본 파일은 고치지 않습니다.
+- 실제 서비스 화면은 이 시안을 기준으로 기존 React · R3F 구조에 다시 구현합니다(C: SceneModel · ThemeLayout · R3F, D: HUD · DataSource). 구조는 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링` 그대로입니다. **지금 3D 화면은 아직 옛 사무실**입니다.
+- 보이는 모양은 시안을, 데이터 · 상태값 · API · 권한은 공통 계약을 따릅니다. 시안의 `data.js` 목업과 클린/스멜 표시, 앱이 찾은 이슈 안건 후보는 계약이 아닙니다.
+- 작업 포드는 최대 8개입니다 — 기본 4개는 늘 보이고, 확장 4개는 그 자리를 쓰는 팀원이 있을 때만 보입니다(`docs/CONTRACTS.md` 「10」).
 
 ## 현재 상태
 
@@ -278,13 +283,15 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 - Spring Boot ↔ MySQL(compose) 연결, Flyway 기본 동작
 - 계약 예시 JSON 6개(에러 · `/api/me` · Snapshot · 평가 요청 · 안건 생성 요청 · 타임라인)
 - 공통 계약 문서 이전(`docs/`) · 기준 위치 전환(2026-11-03 — 확인: `docs/README.md`), 이슈 · PR 템플릿, CI(프론트 · 백엔드), Claude Code 규칙 · `CLAUDE.md`
+- 백엔드 공통 기반(#74): Spring Security 기본 거부 · 서버 세션 · CSRF(`XSRF-TOKEN` → `X-XSRF-TOKEN`) · 401 JSON · 쓰기 Origin 검사, 공통 에러 응답 · 전역 예외 처리, 내부 ID 문자열 ↔ `Long` 변환, 인가 서비스(로그인 → 사무실 접근 → 역할), `GET /api/health`
+- 공통 스키마(#80): Flyway `V1`(기본 테이블) · `V2`(기능 테이블), 패키지별 Entity · Repository, 백엔드 계약 테스트 ① · ②의 틀
+- 라벨(`.github/labels.yml`) · CODEOWNERS · `main` 보호 규칙(승인 1명 · CI 2개 필수)
+- 확정 디자인 시안(#77): `frontend/public/station/`
 
 ### 아직 없는 것
 
-- 보안 설정(세션 · CSRF `XSRF-TOKEN` · 401 JSON · Origin 검사), GitHub 로그인(OAuth2), `GET /api/health` · `/api/me` 등 v1 API 전체
-- Entity · Flyway 마이그레이션 · 공통 에러 응답 · ID 문자열 변환
-- 계약 테스트 코드(JUnit + Jackson, 프론트 `satisfies` 사본 · 값 비교)
-- 프론트 `DataSource(api)`의 Spring v1 API 연결, SceneModel · ThemeLayout 분리
-- 디자인 테마 확정(지금 사무실은 임시 기본 테마)
+- GitHub 로그인(OAuth2) · 심사용 로그인, `/api/me` 등 v1 도메인 API 전부(지금 Controller는 `/api/health`뿐)
+- 도움 요청 테이블(`help_*` — #47에서 추가), 동기화 · GitHub 어댑터
+- 프론트 v1 화면 타입 · mock · 계약 테스트 ③ · ④(#75 진행 중), `DataSource(api)`의 Spring v1 API 연결
+- 확정 시안(우주정거장)의 R3F 반영 · SceneModel · ThemeLayout 분리 — 지금 3D 화면은 아직 옛 사무실
 - 배포 설정, CI의 E2E
-- GitHub 쪽 설정: 라벨 등록, CODEOWNERS 실제 계정, `main` 보호 규칙

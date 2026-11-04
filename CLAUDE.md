@@ -71,10 +71,17 @@ Claude Code는 개발 보조 도구이고 팀원이 아니다. Plan 모드 · Au
 ## 병렬 세션 작업 경계
 
 - 한 세션은 한 이슈 · 한 브랜치만 다룬다. 이슈 범위 밖 파일은 고치지 않고 후속 이슈 후보로 보고한다.
-- 역할(2026-11-03): **A** 총괄 · 기획 · 백엔드 일부(`help`) · **B** 백엔드 전담(나머지 서버 패키지 · `common` · Security) · **C** 프론트 3D(`src/scene/**` · SceneModel · ThemeLayout) · **D** 프론트 HUD · 데이터(`src/data/**` · `store.ts` · `src/ui/` HUD). CONTRACTS.md 「9」 표의 옛 역할 문자(C = 도메인 백엔드)는 쓰지 않는다 — 대응은 `docs/README.md` 「역할」. Issue별 담당은 Issue 본문이 기준이다.
+- 역할(2026-11-03): **A** 총괄 · 기획 · 백엔드 일부(`help`) · **B** 백엔드 전담(나머지 서버 패키지 · `common` · Security) · **C** 프론트 3D(`src/scene/**` · `src/theme/` · SceneModel · ThemeLayout) · **D** 프론트 HUD · 데이터(`src/data/**` · `store.ts` · `src/ui/` HUD). CONTRACTS.md 「9」 표의 옛 역할 문자(C = 도메인 백엔드)는 쓰지 않는다 — 대응은 `docs/README.md` 「역할」. Issue별 담당은 Issue 본문이 기준이다.
 - 다른 세션 · 팀원의 영역을 건드려야 하면 먼저 사용자에게 묻는다. 테이블 · Entity · Service · migration은 만든 사람만 고친다.
 - 공유 파일(`docs/`, `contract/examples/`, `backend/.../common/`, `frontend/src/data/DataSource.ts` · `types.ts`, `.github/`, 빌드 설정)은 이슈가 그 변경을 요구할 때만 고친다.
 
 ## 디자인 테마
 
-미확정이다. 지금 사무실은 임시 기본 테마다. 테마 확정 · 에셋 교체 · 전체 재디자인을 하지 않는다. 테마가 바뀌어도 SceneModel · 도메인 로직은 그대로 두고 ThemeLayout · 테마 컴포넌트만 바꾸는 구조를 지킨다.
+**우주정거장으로 확정했다**(2026-11-04, #76 · #77). v1 테마는 이것 하나이고 다중 테마 엔진은 만들지 않는다.
+
+- 확정 시안: `frontend/public/station/`(정적 데모, three r150). 디자인 참조용이라 원본 11개 파일은 고치지 않는다. 시안의 JS · `data.js` 목업은 계약이 아니다.
+- **보이는 모양은 시안, 데이터 · 동작 · API · 권한 · 상태값은 공통 계약**을 따른다. 시안과 계약이 다르면 계약대로 한다 — 클린/스멜이 아니라 `recommend`/`not_recommend`(두 쪽 다 이유 필수 · 작성자 평가 불가 · 평가자 표시 금지), 안건 후보는 48시간 도움 요청뿐(앱이 찾은 이슈 후보 없음).
+- 최종 화면은 기존 React · R3F 구조에 다시 구현한다. C는 SceneModel · ThemeLayout(`src/theme/`) · R3F, D는 HUD · DataSource · store. SceneModel · 도메인 로직은 테마를 모른다.
+- 작업 포드는 최대 8개(`deskIndex` 0~7): 0~3(시안 K · L · P · C)은 항상, 4~7은 활성 팀원이 그 자리를 쓸 때만 렌더링한다. 자리가 없는 팀원은 3D에 없다(CONTRACTS.md 「10」).
+- 머지 준비 선반 F는 장식이다(PR 위치는 CONTRACTS.md 「3」). 요구사항 구역(`requirement:*`)은 시안에 없지만 Must라 C가 정거장 안에 만든다.
+- 아바타는 스페이 GLB, 라코(강사)는 보관만. 시안에 없는 새 3D 에셋 · 전체 재디자인을 하지 않는다.
