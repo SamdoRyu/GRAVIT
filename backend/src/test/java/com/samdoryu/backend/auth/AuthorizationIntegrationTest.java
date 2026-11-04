@@ -7,7 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
-import com.samdoryu.backend.auth.service.InstructorAssignmentLookup;
+import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,7 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * T3-b 인가 서비스 — 로그인 → 사무실 접근 → 역할(CONTRACTS.md 「6」 검사 순서)을 실제 Security · 세션으로 확인한다.
- * 세션은 {@link TestLogin}(OAuth 없이)이고, 사무실 항목 저장소와 강사 지정은 가짜다(테이블은 #7 T4-a).
+ * 세션은 {@link TestLogin}(OAuth 없이)이고, 사무실 항목 저장소와 강사 지정은 가짜다.
+ * 실제 {@code instructor_assignment} 행으로 하는 확인은 {@code InstructorAssignmentAuthorizationTest}.
  */
 @SpringBootTest(properties = "app.instructor-github-user-ids=" + AuthorizationIntegrationTest.INSTRUCTOR_GITHUB_ID)
 @AutoConfigureMockMvc
@@ -36,7 +37,7 @@ class AuthorizationIntegrationTest {
     MockMvc mvc;
 
     @MockitoBean
-    InstructorAssignmentLookup instructorAssignmentLookup;
+    InstructorAssignmentService instructorAssignmentService;
 
     /** 사무실 1의 참여자(팀원 10). 사무실 2에는 접근 없음. */
     private static MockHttpSession participantOfWs1() {
@@ -137,7 +138,7 @@ class AuthorizationIntegrationTest {
 
         @Test
         void assignedInstructorGetsInstructorRoleWithoutMemberId() throws Exception {
-            given(instructorAssignmentLookup.isAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
+            given(instructorAssignmentService.isCurrentlyAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
 
             mvc.perform(get("/api/workspaces/1/test-items/1").session(instructor()))
                     .andExpect(status().isOk())
@@ -162,7 +163,7 @@ class AuthorizationIntegrationTest {
             mvc.perform(get("/api/workspaces/1/test-items/1").session(collaboratorInstructor))
                     .andExpect(status().isNotFound());
 
-            given(instructorAssignmentLookup.isAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
+            given(instructorAssignmentService.isCurrentlyAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
             mvc.perform(get("/api/workspaces/1/test-admin-only").session(collaboratorInstructor))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.error.code").value("forbidden_role"));
@@ -170,7 +171,7 @@ class AuthorizationIntegrationTest {
 
         @Test
         void instructorCannotDoTeamMemberAction() throws Exception {
-            given(instructorAssignmentLookup.isAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
+            given(instructorAssignmentService.isCurrentlyAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
 
             mvc.perform(get("/api/workspaces/1/test-team-only").session(instructor()))
                     .andExpect(status().isForbidden())
@@ -179,7 +180,7 @@ class AuthorizationIntegrationTest {
 
         @Test
         void assignedInstructorReadsStudentPersonalData() throws Exception {
-            given(instructorAssignmentLookup.isAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
+            given(instructorAssignmentService.isCurrentlyAssigned(WS1, INSTRUCTOR_GITHUB_ID)).willReturn(true);
 
             mvc.perform(get("/api/workspaces/1/members/10/test-personal").session(instructor()))
                     .andExpect(status().isOk());
