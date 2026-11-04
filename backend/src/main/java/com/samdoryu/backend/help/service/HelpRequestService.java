@@ -1,9 +1,15 @@
 package com.samdoryu.backend.help.service;
 
+import com.samdoryu.backend.auth.domain.AppUser;
+import com.samdoryu.backend.auth.domain.WorkspaceRole;
+import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.help.domain.HelpComment;
 import com.samdoryu.backend.help.domain.HelpRequest;
+import com.samdoryu.backend.help.dto.HelpCommentCreateRequest;
+import com.samdoryu.backend.help.dto.HelpCommentDto;
 import com.samdoryu.backend.help.dto.HelpRequestCreateRequest;
 import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
@@ -48,6 +54,30 @@ public class HelpRequestService {
                 entityManager.getReference(Member.class, requesterMemberId),
                 request.content(), fromStandup, now));
         return HelpRequestSummary.of(helpRequest, now);
+    }
+
+    /**
+     * 코멘트 달기(FR-LRN-16 · 21). 검사 순서는 대상(404) → 역할(403 — 강사는 "강사에게 요청"이 켜진 글만) → 상태(409).
+     * 요청자가 아닌 팀원의 첫 코멘트면 {@code open → discussing}. 요청자 코멘트 · 강사 답변은 상태를 바꾸지 않는다.
+     */
+    @Transactional
+    public HelpCommentDto addComment(WorkspaceAccess access, Long helpRequestId, HelpCommentCreateRequest request) {
+        HelpRequest helpRequest = helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, access.workspaceId())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        boolean instructorAnswer = access.role() == WorkspaceRole.INSTRUCTOR;
+        if (instructorAnswer && !helpRequest.isInstructorRequested()) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        Long authorMemberId = instructorAnswer ? null : access.requireTeamMember();
+        if (!helpRequest.getStatus().acceptsComments()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        HelpComment comment = helpCommentRepository.save(new HelpComment(helpRequest,
+                entityManager.getReference(AppUser.class, access.userId()),
+                authorMemberId == null ? null : entityManager.getReference(Member.class, authorMemberId),
+                request.content(), Instant.now()));
+        helpRequest.onComment(access.isSelf(helpRequest.getRequester().getId()), instructorAnswer);
+        return HelpCommentDto.of(comment);
     }
 
     @Transactional(readOnly = true)
