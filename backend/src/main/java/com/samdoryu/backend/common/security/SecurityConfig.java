@@ -5,6 +5,7 @@ import com.samdoryu.backend.auth.security.GithubLoginSuccessHandler;
 import com.samdoryu.backend.auth.service.AccountService;
 import com.samdoryu.backend.auth.service.GithubLoginService;
 import com.samdoryu.backend.common.error.ErrorResponseWriter;
+import com.samdoryu.backend.github.GithubUserClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +43,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, AppProperties appProperties,
             ErrorResponseWriter errorResponseWriter, SecurityContextRepository securityContextRepository,
-            GithubLoginService githubLoginService,
+            GithubLoginService githubLoginService, GithubUserClient githubUserClient,
             OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> githubAccessTokenResponseClient,
             OAuth2UserService<OAuth2UserRequest, OAuth2User> githubUserService,
             OAuth2AuthorizedClientRepository githubAuthorizedClientRepository) throws Exception {
@@ -67,8 +68,8 @@ public class SecurityConfig {
                         .tokenEndpoint(token -> token.accessTokenResponseClient(githubAccessTokenResponseClient))
                         .userInfoEndpoint(userInfo -> userInfo.userService(githubUserService))
                         .authorizedClientRepository(githubAuthorizedClientRepository)
-                        .successHandler(new GithubLoginSuccessHandler(githubLoginService, securityContextRepository,
-                                appHome))
+                        .successHandler(new GithubLoginSuccessHandler(githubLoginService, githubUserClient,
+                                githubAuthorizedClientRepository, securityContextRepository, appHome))
                         .failureHandler(new GithubLoginFailureHandler(appHome)))
                 // POST /api/logout만 받는다(CSRF가 켜져 있으면 Spring은 POST만 로그아웃으로 본다). 세션이 없어도 204.
                 .logout(logout -> logout

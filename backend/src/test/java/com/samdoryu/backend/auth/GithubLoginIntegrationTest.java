@@ -73,6 +73,8 @@ class GithubLoginIntegrationTest {
 
     @MockitoBean OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenClient;
     @MockitoBean OAuth2UserService<OAuth2UserRequest, OAuth2User> userService;
+    /** 레포 권한 읽기 — 이 테스트에서는 권한 있는 레포가 없다(역할은 LoginRepoRolesIntegrationTest). */
+    @MockitoBean com.samdoryu.backend.github.GithubUserClient githubUserClient;
 
     private void githubReturns(long id, String login, String name) {
         given(tokenClient.getTokenResponse(any())).willReturn(OAuth2AccessTokenResponse.withToken("gho_fake")
