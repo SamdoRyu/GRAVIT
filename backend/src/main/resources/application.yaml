@@ -16,6 +16,16 @@ spring:
     properties:
       # Store Instants as UTC regardless of the server's time zone.
       hibernate.jdbc.time_zone: UTC
+  security:
+    oauth2:
+      client:
+        registration:
+          # GitHub login (FR-AUTH-01) with the GitHub App's OAuth client. Provider URLs are Spring's built-in "github".
+          # Callback: {origin}/login/oauth2/code/github — register it in the GitHub App settings.
+          # Unset → "not-configured": the server still starts, but GitHub rejects the login.
+          github:
+            client-id: ${GITHUB_APP_CLIENT_ID:not-configured}
+            client-secret: ${GITHUB_APP_CLIENT_SECRET:not-configured}
   jackson:
     deserialization:
       # CONTRACTS.md 「5」: unknown request fields are rejected as `invalid`, not silently dropped.
@@ -37,3 +47,5 @@ app:
   origin: ${APP_ORIGIN:http://localhost:5173}
   # Approved instructor accounts: comma-separated GitHub user IDs (not login names). Empty = no instructors.
   instructor-github-user-ids: ${INSTRUCTOR_GITHUB_USER_IDS:}
+  # Security-review ID/PW login (P15). Off by default; when off the route does not exist (404). Route: #63.
+  review-login-enabled: ${REVIEW_LOGIN_ENABLED:false}

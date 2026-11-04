@@ -60,7 +60,6 @@ public class AuthorizationService {
     }
 
     private boolean isAllowlistedInstructor(AppPrincipal principal) {
-        return principal.githubUserId() != null
-                && appProperties.instructorGithubUserIds().contains(principal.githubUserId());
+        return appProperties.isAllowlistedInstructor(principal.githubUserId());
     }
 }

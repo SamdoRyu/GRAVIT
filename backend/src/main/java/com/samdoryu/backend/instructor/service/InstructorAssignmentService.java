@@ -23,4 +23,11 @@ public class InstructorAssignmentService {
         return instructorAssignmentRepository.existsByWorkspaceIdAndInstructorGithubUserIdAndUnassignedAtIsNull(
                 workspaceId, instructorGithubUserId);
     }
+
+    /** 지금 지정된 사무실이 하나 이상인가 — {@code MeResponse.isInstructor}의 재료. */
+    @Transactional(readOnly = true)
+    public boolean hasAnyCurrentAssignment(Long instructorGithubUserId) {
+        return instructorAssignmentRepository.existsByInstructorGithubUserIdAndUnassignedAtIsNull(
+                instructorGithubUserId);
+    }
 }

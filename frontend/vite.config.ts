@@ -46,6 +46,10 @@ export default defineConfig({
           })
         },
       },
+      // GitHub login (Spring Security): start /oauth2/authorization/github, GitHub callback /login/oauth2/code/github.
+      // Same Host rule as /api so the session cookie and the post-login redirect stay on the Vite origin.
+      '/oauth2': { target: `http://127.0.0.1:${process.env.API_PORT ?? 8080}`, changeOrigin: false },
+      '/login/oauth2': { target: `http://127.0.0.1:${process.env.API_PORT ?? 8080}`, changeOrigin: false },
     },
   },
 })
