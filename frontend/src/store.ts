@@ -2,8 +2,8 @@
 // Entities mirror the DemoDataSource; every mutation goes through an action here
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
-import { DataError, type DemoDataSource } from './data/DataSource'
-import type { Activity, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, Task, TaskInput, TaskPatch, TaskStatus, Workspace } from './data/types'
+import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
+import type { Activity, Change, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, Workspace, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -38,6 +38,20 @@ export interface Toast {
   text: string
 }
 
+/** v1 사무실 — 지금 연 사무실의 WorkspaceSnapshot과 읽기 상태 (CONTRACTS.md 「8」). */
+export interface OfficeView {
+  workspaceId: Id
+  /** loading = 첫 Snapshot을 읽는 중, ready = snapshot 있음, error = 첫 읽기부터 실패 */
+  status: 'loading' | 'ready' | 'error'
+  /** 다시 읽기에 실패해도 마지막 값을 그대로 둔다 (NFR-09) */
+  snapshot: WorkspaceSnapshot | null
+  /** 마지막 읽기 실패. 다음에 읽기에 성공하면 null */
+  error: { code: DataErrorCode; message: string } | null
+}
+
+/** 'changed' 알림을 이만큼 모아서 Snapshot을 한 번 다시 읽는다 (CONTRACTS_API.md 「6」 "짧게 모아서") */
+export const OFFICE_RELOAD_DELAY_MS = 300
+
 interface OfficeState {
   // ---- data (mirrors the DemoDataSource) ----
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -53,6 +67,17 @@ interface OfficeState {
   meetings: Record<Id, Meeting>
   /** Newest last, capped at 100. */
   activity: Activity[]
+
+  // ---- v1 사무실 (WorkspaceSnapshot) — 위 데모 칸과 따로 둔다. 화면이 v1으로 옮겨 가면 데모 칸을 지운다 ----
+  /** 지금 연 사무실. null = 열지 않음 */
+  office: OfficeView | null
+  /**
+   * 사무실을 열어 Snapshot을 읽고 변경 알림을 구독한다. 이미 연 사무실이 있으면 닫고 연다.
+   * 어느 사무실을 열지는 진입 흐름(로그인 · 사무실 고르기 — #64 · #68)이 정해 부른다.
+   */
+  openOffice: (source: DataSource, workspaceId: Id) => Promise<void>
+  /** 구독을 끊고 office를 비운다 */
+  closeOffice: () => void
 
   // ---- view state ----
   selection: Selection | null
@@ -125,6 +150,18 @@ export function ongoingMeeting(meetings: Record<Id, Meeting>): Meeting | null {
 let source: DemoDataSource | null = null
 let unsubscribe: (() => void) | null = null
 let toastSeq = 1
+
+// v1 사무실 연결. officeGen은 사무실을 열고 닫을 때마다 늘어서, 그 전 사무실의 늦은 응답 · 알림을 버린다.
+let officeSource: DataSource | null = null
+let officeUnsubscribe: (() => void) | null = null
+let officeReloadTimer: ReturnType<typeof setTimeout> | null = null
+let officeGen = 0
+/** Snapshot 읽기마다 늘어난다. 마지막에 보낸 읽기의 응답만 반영한다(겹친 읽기의 늦은 옛 응답을 버린다) */
+let officeLoadSeq = 0
+/** 마지막 읽기가 끝나지 않았는가 */
+let officeLoadPending = false
+/** 마지막 읽기 중에 온 sync 알림 — 응답 위에 다시 얹는다(알림이 그 응답보다 새 값이라고 본다) */
+let syncDuringLoad: SyncStatus | null = null
 
 const DEMO_PREF_KEY = 'office-dashboard:demo'
 const readPref = (k: string) => {
@@ -203,6 +240,64 @@ export const useOffice = create<OfficeState>((set, get) => {
     }
   }
 
+  // ---- v1 사무실 ----
+
+  const toOfficeError = (e: unknown): OfficeView['error'] =>
+    e instanceof DataError ? { code: e.code, message: e.message } : { code: 'unavailable', message: errText(e) }
+
+  /** Snapshot을 (다시) 읽는다. 실패해도 마지막 snapshot은 지우지 않는다. */
+  const loadOffice = async (gen: number) => {
+    const src = officeSource
+    const office = get().office
+    if (!src || !office || gen !== officeGen) return
+    const seq = ++officeLoadSeq
+    officeLoadPending = true
+    syncDuringLoad = null
+    const isLatest = () => gen === officeGen && seq === officeLoadSeq
+    try {
+      let snapshot = await src.load(office.workspaceId)
+      if (!isLatest()) return
+      if (syncDuringLoad) snapshot = { ...snapshot, sync: syncDuringLoad }
+      officeLoadPending = false
+      syncDuringLoad = null
+      const current = get().office
+      if (current) set({ office: { ...current, status: 'ready', snapshot, error: null } })
+    } catch (e) {
+      if (!isLatest()) return
+      officeLoadPending = false
+      syncDuringLoad = null
+      const current = get().office
+      if (current) set({ office: { ...current, status: current.snapshot ? 'ready' : 'error', error: toOfficeError(e) } })
+    }
+  }
+
+  const scheduleOfficeReload = (gen: number) => {
+    if (officeReloadTimer) clearTimeout(officeReloadTimer)
+    officeReloadTimer = setTimeout(() => {
+      officeReloadTimer = null
+      void loadOffice(gen)
+    }, OFFICE_RELOAD_DELAY_MS)
+  }
+
+  const applyOfficeChange = (gen: number, c: Change) => {
+    const office = get().office
+    if (gen !== officeGen || !office) return
+    switch (c.type) {
+      case 'sync':
+        // 동기화 상태만 바꾸고 나머지는 마지막 데이터 그대로 (실패해도 화면 유지 — NFR-09)
+        if (office.snapshot) set({ office: { ...office, snapshot: { ...office.snapshot, sync: c.status } } })
+        if (officeLoadPending) syncDuringLoad = c.status
+        break
+      case 'changed':
+        scheduleOfficeReload(gen)
+        break
+      case 'connection':
+        // 다시 연결되면 놓친 알림을 재생하지 않으므로 Snapshot을 다시 읽는다 (CONTRACTS_API.md 「6」)
+        if (c.status === 'online') scheduleOfficeReload(gen)
+        break
+    }
+  }
+
   /** Swap in a whole workspace, dropping view state that points at things that no longer exist. */
   const replaceWorkspace = (ws: Workspace) => {
     const members = byId(ws.members)
@@ -232,6 +327,28 @@ export const useOffice = create<OfficeState>((set, get) => {
     tasks: {},
     meetings: {},
     activity: [],
+
+    office: null,
+    openOffice: async (src, workspaceId) => {
+      get().closeOffice()
+      const gen = officeGen
+      officeSource = src
+      set({ office: { workspaceId, status: 'loading', snapshot: null, error: null } })
+      // 읽기 전에 구독한다 — 읽는 사이에 온 알림을 놓치지 않게
+      officeUnsubscribe = src.subscribe(workspaceId, (c) => applyOfficeChange(gen, c))
+      await loadOffice(gen)
+    },
+    closeOffice: () => {
+      officeGen++
+      officeUnsubscribe?.()
+      officeUnsubscribe = null
+      if (officeReloadTimer) clearTimeout(officeReloadTimer)
+      officeReloadTimer = null
+      officeSource = null
+      officeLoadPending = false
+      syncDuringLoad = null
+      if (get().office) set({ office: null })
+    },
 
     selection: null,
     select: (selection) => set({ selection }),
