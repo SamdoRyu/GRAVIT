@@ -36,3 +36,14 @@ export interface SceneEntity {
   /** 요구사항 묶음 — 요구사항 종류(원본 ID 접두사), 없으면 "미분류" */
   groupKey?: string
 }
+
+export type Vec3 = [x: number, y: number, z: number]
+
+/** 공간 역할 → 좌표 · 드롭 구역. 구현은 테마(src/theme/)가 하나만 갖는다. */
+export interface ThemeLayout {
+  /** 그 역할의 index번째 물건이 놓일 자리(바닥 기준 좌표) */
+  anchor(role: PlaceRole, index: number): Vec3
+  dropZoneAt(point: Vec3): PlaceRole | null
+  /** 아바타 이동 */
+  route?(from: PlaceRole, to: PlaceRole): Vec3[]
+}
