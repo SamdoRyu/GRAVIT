@@ -7,6 +7,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import type { Change, SyncStatus, WorkspaceSnapshot } from '../../src/data/types'
 import { OFFICE_RELOAD_DELAY_MS, useOffice } from '../../src/store'
+import { finiteOrNull, formatHours } from '../../src/ui/format'
 import { describeSync, failureReason } from '../../src/ui/syncText'
 import { workspaceSnapshotExample } from './examples'
 
@@ -304,5 +305,32 @@ describe('상단 바 동기화 문구', () => {
     const t = describeSync(failingSync({ lastSucceededAt: null }))
     assert.equal(t.tone, 'failing')
     assert.match(t.detail, /아직 성공한 동기화가 없어요/)
+  })
+})
+
+describe('상단 바 팀 지표 (#24 — FR-FLOW-05)', () => {
+  it('평균 리뷰 대기는 서버가 준 소수 첫째 자리 시간 그대로', () => {
+    assert.equal(formatHours(6.5), '6.5시간')
+    assert.equal(formatHours(2), '2.0시간')
+    assert.equal(formatHours(0), '0.0시간')
+  })
+
+  it('보일 수 없는 값은 null — "NaN시간" 같은 표시를 막는다', () => {
+    assert.equal(finiteOrNull(6.5), 6.5)
+    assert.equal(finiteOrNull(0), 0)
+    for (const bad of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, '6.5' as unknown as number]) {
+      assert.equal(finiteOrNull(bad), null, String(bad))
+    }
+  })
+
+  it('store에 연 사무실의 flow가 팀 지표의 값이다 — 팀 단위 값만 있다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const flow = office()!.snapshot!.flow
+    const subs = office()!.snapshot!.submissions
+    assert.equal(flow.openSubmissionCount, subs.filter((s) => s.state === 'open' || s.state === 'draft').length)
+    assert.equal(flow.averageReviewWaitHours, 6.5, 'mock 예시 값')
+    // 사람별 합계 · 순위 칸이 없다 (FR-FLOW-06) — 계약 예시와 같은 키만
+    assert.deepEqual(Object.keys(flow), Object.keys(workspaceSnapshotExample.flow))
   })
 })
