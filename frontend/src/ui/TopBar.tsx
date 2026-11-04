@@ -12,6 +12,7 @@ import { Icon } from './icons'
 import { useUi } from './uiState'
 import { ConnectionBanner } from './Toasts'
 import { Suggestions } from './Suggestions'
+import { SyncStatus } from './SyncStatus'
 
 const OVERLAYS: { id: Overlay; label: string; key: string }[] = [
   { id: 'none', label: '기본', key: '1' },
@@ -365,6 +366,7 @@ export function TopBar() {
           {connection !== null && <span className="badge-server">서버</span>}
         </div>
         <KpiRow />
+        <SyncStatus />
         {canDemo && (
           <label className="demo" title="데모 모드 · 팀원 자동 활동">
             <input type="checkbox" role="switch" checked={demoMode} onChange={(e) => useOffice.getState().setDemoMode(e.target.checked)} />

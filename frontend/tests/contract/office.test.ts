@@ -1,0 +1,308 @@
+// store의 v1 사무실(openOffice · closeOffice)과 상단 바 동기화 문구(#45 — FR-GH-05).
+// mock v1과, 실패 · 알림 순서를 만들기 위한 얇은 stub으로 검사한다. 실제 서버 연결은 아니다.
+import assert from 'node:assert/strict'
+import { afterEach, describe, it, mock } from 'node:test'
+import { DataError, type DataSource } from '../../src/data/DataSource'
+import { createMemoryStorage } from '../../src/data/mock'
+import { createV1MockDataSource } from '../../src/data/mock/v1'
+import type { Change, SyncStatus, WorkspaceSnapshot } from '../../src/data/types'
+import { OFFICE_RELOAD_DELAY_MS, useOffice } from '../../src/store'
+import { describeSync, failureReason } from '../../src/ui/syncText'
+import { workspaceSnapshotExample } from './examples'
+
+const TEAM_WS = 'ws_1'
+const SYNC_MS = 800
+const office = () => useOffice.getState().office
+
+/** v1 mock + 테스트가 직접 알림을 보내고 load 횟수 · 결과를 바꿀 수 있는 껍데기 */
+function harness() {
+  const base = createV1MockDataSource({ storage: createMemoryStorage(), session: 'github', latencyMs: [0, 0], syncDurationMs: SYNC_MS, now: () => new Date('2026-11-05T03:00:00Z') })
+  const listeners = new Set<(c: Change) => void>()
+  let loads = 0
+  let failNext: DataError | null = null
+  const source: DataSource = {
+    ...base,
+    async load(workspaceId) {
+      loads++
+      if (failNext) {
+        const e = failNext
+        failNext = null
+        throw e
+      }
+      return base.load(workspaceId)
+    },
+    subscribe(workspaceId, onChange) {
+      const off = base.subscribe(workspaceId, onChange)
+      listeners.add(onChange)
+      return () => {
+        off()
+        listeners.delete(onChange)
+      }
+    },
+  }
+  return {
+    source,
+    push: (c: Change) => listeners.forEach((l) => l(c)),
+    listenerCount: () => listeners.size,
+    loads: () => loads,
+    failNextLoad: (e: DataError) => {
+      failNext = e
+    },
+  }
+}
+
+const failingSync = (over: Partial<SyncStatus> = {}): SyncStatus => ({
+  state: 'idle',
+  lastSucceededAt: '2026-11-05T02:00:00Z',
+  lastFailedAt: '2026-11-05T02:55:00Z',
+  lastFailureCode: 'github_rate_limited',
+  lastFailureMessage: null,
+  isFailing: true,
+  specWarnings: [],
+  ...over,
+})
+
+afterEach(() => {
+  useOffice.getState().closeOffice()
+  mock.timers.reset()
+})
+
+describe('store — v1 사무실 열기', () => {
+  it('openOffice: loading → ready, Snapshot 모양이 계약 예시와 같다', async () => {
+    const h = harness()
+    const opening = useOffice.getState().openOffice(h.source, TEAM_WS)
+    assert.equal(office()?.status, 'loading')
+    await opening
+    const o = office()
+    assert.equal(o?.status, 'ready')
+    assert.equal(o?.workspaceId, TEAM_WS)
+    assert.equal(o?.error, null)
+    assert.deepEqual(Object.keys(o?.snapshot ?? {}), Object.keys(workspaceSnapshotExample))
+  })
+
+  it('첫 읽기 실패 — status error, snapshot 없음, 에러 코드 · 문구를 남긴다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, 'ws_nope')
+    assert.equal(office()?.status, 'error')
+    assert.equal(office()?.snapshot, null)
+    assert.equal(office()?.error?.code, 'not_found')
+    assert.ok((office()?.error?.message ?? '').length > 0)
+  })
+
+  it('closeOffice — 구독을 끊고 비운다. 늦게 온 알림은 버린다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    assert.equal(h.listenerCount(), 1)
+    useOffice.getState().closeOffice()
+    assert.equal(office(), null)
+    assert.equal(h.listenerCount(), 0)
+    h.push({ type: 'sync', status: failingSync() })
+    assert.equal(office(), null)
+  })
+
+  it('다른 사무실을 열면 앞 사무실의 늦은 응답이 덮어쓰지 않는다', async () => {
+    const h = harness()
+    const first = useOffice.getState().openOffice(h.source, TEAM_WS)
+    const second = useOffice.getState().openOffice(h.source, 'ws_2')
+    await Promise.all([first, second])
+    assert.equal(office()?.workspaceId, 'ws_2')
+    assert.equal(office()?.snapshot?.workspace.id, 'ws_2')
+    assert.equal(h.listenerCount(), 1, '앞 사무실 구독은 끊겼다')
+  })
+})
+
+describe('store — 알림 반영', () => {
+  it('sync 알림은 동기화 상태만 바꾸고 나머지 데이터는 그대로 둔다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = office()!.snapshot!
+    await h.source.requestSync(TEAM_WS) // mock이 sync(running)을 보낸다
+    const during = office()!.snapshot!
+    assert.equal(during.sync.state, 'running')
+    assert.equal(during.tasks, before.tasks, '이슈 목록은 같은 값')
+    assert.equal(during.members, before.members)
+  })
+
+  it('동기화가 실패해도 마지막 데이터를 유지하고 실패 상태만 보인다 (NFR-09)', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = office()!.snapshot!
+    h.push({ type: 'sync', status: failingSync() })
+    const after = office()!.snapshot!
+    assert.equal(after.sync.isFailing, true)
+    assert.equal(after.sync.lastFailureCode, 'github_rate_limited')
+    assert.equal(after.tasks, before.tasks)
+    assert.equal(after.submissions, before.submissions)
+    assert.equal(office()?.status, 'ready')
+  })
+
+  it('changed 알림은 짧게 모아 Snapshot을 한 번만 다시 읽는다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    assert.equal(h.loads(), 1)
+    h.push({ type: 'changed', resources: ['tasks'] })
+    h.push({ type: 'changed', resources: ['submissions'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS - 1)
+    h.push({ type: 'changed', resources: ['members'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS - 1)
+    assert.equal(h.loads(), 1, '아직 모으는 중')
+    mock.timers.tick(1)
+    assert.equal(h.loads(), 2, '한 번만 다시 읽음')
+  })
+
+  it('다시 읽기가 실패해도 마지막 snapshot을 지우지 않고 에러만 남긴다. 다음 성공에서 에러가 지워진다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = office()!.snapshot!
+    h.failNextLoad(new DataError('서버에 연결할 수 없어요', 'unavailable'))
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    await new Promise<void>((r) => setImmediate(r))
+    assert.equal(office()?.status, 'ready')
+    assert.equal(office()?.snapshot, before)
+    assert.deepEqual(office()?.error, { code: 'unavailable', message: '서버에 연결할 수 없어요' })
+
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    await new Promise<void>((r) => setImmediate(r))
+    assert.equal(office()?.error, null)
+  })
+
+  it('다시 연결(connection online)되면 Snapshot을 다시 읽는다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    h.push({ type: 'connection', status: 'offline' })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    assert.equal(h.loads(), 1, 'offline은 다시 읽지 않는다')
+    h.push({ type: 'connection', status: 'online' })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    assert.equal(h.loads(), 2)
+  })
+
+  /** load를 하나씩 붙잡아 두었다가 원하는 순서로 풀 수 있는 source */
+  function gatedLoads(h: ReturnType<typeof harness>) {
+    const gates: { release: () => void; promise: Promise<WorkspaceSnapshot> }[] = []
+    const source: DataSource = {
+      ...h.source,
+      load: (id) => {
+        let release = () => {}
+        const promise = h.source.load(id).then((s) => new Promise<WorkspaceSnapshot>((r) => (release = () => r(s))))
+        const gate = { release: () => release(), promise }
+        gates.push(gate)
+        return promise
+      },
+    }
+    return { source, gates }
+  }
+  const flush = () => new Promise<void>((r) => setImmediate(r))
+
+  it('다시 읽는 중에 온 sync 알림을 늦게 온 읽기 응답이 되돌리지 않는다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    const g = gatedLoads(h)
+    const opening = useOffice.getState().openOffice(g.source, TEAM_WS)
+    await flush()
+    g.gates[0].release()
+    await opening
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS) // 다시 읽기 시작 (응답은 붙잡아 둠 — 실패 알림 전의 상태)
+    await flush()
+    h.push({ type: 'sync', status: failingSync() }) // 그 사이 동기화 실패 알림
+    assert.equal(office()?.snapshot?.sync.isFailing, true)
+    g.gates[1].release()
+    await flush()
+    assert.equal(office()?.snapshot?.sync.isFailing, true, '옛 응답이 실패 상태를 지우지 않는다')
+  })
+
+  it('겹친 다시 읽기는 마지막에 보낸 요청의 응답만 반영한다', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    const g = gatedLoads(h)
+    const opening = useOffice.getState().openOffice(g.source, TEAM_WS)
+    await flush()
+    g.gates[0].release()
+    await opening
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS) // 읽기 2 (느림)
+    await flush()
+    await h.source.requestSync(TEAM_WS) // 서버 쪽 상태가 running으로 바뀜
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS) // 읽기 3 — running을 담은 새 응답
+    await flush()
+    g.gates[2].release()
+    await flush()
+    assert.equal(office()?.snapshot?.sync.state, 'running')
+    g.gates[1].release() // 먼저 보냈던 읽기 2가 늦게 도착
+    await flush()
+    assert.equal(office()?.snapshot?.sync.state, 'running', '늦게 온 옛 응답은 버린다')
+  })
+
+  it('첫 읽기 중에 온 sync 알림은 읽기가 끝난 뒤 반영된다', async () => {
+    const h = harness()
+    let release: () => void = () => {}
+    const base = h.source.load
+    let first = true
+    const source: DataSource = {
+      ...h.source,
+      load: (id) => {
+        if (!first) return base(id)
+        first = false
+        return base(id).then((s) => new Promise<WorkspaceSnapshot>((r) => (release = () => r(s))))
+      },
+    }
+    const opening = useOffice.getState().openOffice(source, TEAM_WS)
+    await new Promise<void>((r) => setImmediate(r))
+    h.push({ type: 'sync', status: failingSync() })
+    release()
+    await opening
+    assert.equal(office()?.snapshot?.sync.isFailing, true)
+  })
+})
+
+describe('상단 바 동기화 문구', () => {
+  const ok: SyncStatus = { state: 'idle', lastSucceededAt: '2026-11-05T03:00:00Z', lastFailedAt: null, lastFailureCode: null, lastFailureMessage: null, isFailing: false, specWarnings: [] }
+  const at = (iso: string) => Date.parse(iso)
+
+  it('성공 — 마지막 성공을 상대 시간으로', () => {
+    const t = describeSync(ok, at('2026-11-05T03:03:00Z'))
+    assert.equal(t.tone, 'ok')
+    assert.equal(t.label, '3분 전 동기화')
+    assert.equal(t.reason, null)
+    assert.match(t.detail, /^마지막 성공 /)
+  })
+
+  it('진행 중 — 직전 실패가 있으면 설명에 함께', () => {
+    assert.equal(describeSync({ ...ok, state: 'running' }).tone, 'running')
+    assert.equal(describeSync({ ...ok, state: 'running' }).label, '동기화 중')
+    const t = describeSync(failingSync({ state: 'running' }))
+    assert.equal(t.tone, 'running')
+    assert.match(t.detail, /직전 동기화는 실패했어요\(GitHub 요청 한도를 넘었어요\)/)
+  })
+
+  it('실패 — 사유를 늘 보이고, 마지막 데이터 유지를 알린다', () => {
+    const t = describeSync(failingSync())
+    assert.equal(t.tone, 'failing')
+    assert.equal(t.label, '동기화 실패')
+    assert.equal(t.reason, 'GitHub 요청 한도를 넘었어요')
+    assert.match(t.detail, /마지막 성공 .+ · 화면은 마지막으로 받은 데이터예요/)
+  })
+
+  it('실패 사유 — 서버 문구가 있으면 그대로, 없으면 코드별 기본 문구', () => {
+    assert.equal(failureReason(failingSync({ lastFailureMessage: '  설치 토큰이 만료됐어요 ' })), '설치 토큰이 만료됐어요')
+    assert.equal(failureReason(failingSync({ lastFailureCode: 'github_unauthorized' })), 'GitHub 권한이 없거나 만료됐어요')
+    assert.equal(failureReason(failingSync({ lastFailureCode: 'unavailable' })), 'GitHub에 연결하지 못했어요')
+    assert.equal(failureReason(failingSync({ lastFailureCode: null })), '알 수 없는 이유로 실패했어요')
+  })
+
+  it('한 번도 성공하지 않음 — 실패면 실패, 아니면 동기화 전', () => {
+    assert.equal(describeSync({ ...ok, lastSucceededAt: null }).tone, 'never')
+    assert.equal(describeSync({ ...ok, lastSucceededAt: null }).label, '동기화 전')
+    const t = describeSync(failingSync({ lastSucceededAt: null }))
+    assert.equal(t.tone, 'failing')
+    assert.match(t.detail, /아직 성공한 동기화가 없어요/)
+  })
+})

@@ -160,6 +160,20 @@ textarea.select { height: auto; padding: 7px 8px; resize: vertical; line-height:
 .kpi-label { font-size: var(--fs-s); color: var(--text-dim); white-space: nowrap; }
 .kpi.is-active .kpi-value, .kpi.is-active .kpi-label { color: var(--accent); }
 .kpi-bad .kpi-value { color: var(--bad); }
+
+/* 동기화 상태 (FR-GH-05) — 실패면 사유까지 늘 보인다 */
+.sync-status { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0; max-width: 280px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); color: var(--text-dim); font-size: var(--fs-s); white-space: nowrap; cursor: pointer; }
+.sync-status svg { flex: none; }
+.sync-label { flex: none; font-weight: 600; }
+/* 좁으면 사유를 줄여 보이고(…) 전체는 툴팁 · 탭 설명으로 — 옆 버튼을 밀어내지 않는다 */
+.sync-reason { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sync-ok { color: var(--ink-good); background: var(--good-soft); border-color: transparent; }
+.sync-running svg { animation: sync-spin 1.2s linear infinite; }
+.sync-failing { color: var(--ink-bad); background: var(--bad-soft); border-color: transparent; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+/* 화면에는 안 보이고 화면 낭독기만 읽는다 */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) { .sync-running svg { animation: none; } }
 .balance { border-top: 0; border-right: 0; border-bottom: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; padding: 0 0 0 16px; border-left: 1px solid var(--line); font-size: var(--fs-s); color: var(--text-dim); white-space: nowrap; align-self: stretch; }
 .balance .dot { width: 6px; height: 6px; }
 .balance-good .dot { background: var(--good); }
