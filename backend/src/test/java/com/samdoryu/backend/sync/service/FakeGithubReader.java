@@ -26,6 +26,10 @@ class FakeGithubReader implements GithubReader {
     List<GithubIssue> issues = new ArrayList<>();
     List<GithubPullRequest> pullRequests = new ArrayList<>();
     Map<Integer, List<GithubIssueLink>> links = new HashMap<>();
+    /** 넣으면 콜라보레이터를 읽을 때(동기화 첫 단계) 이 예외를 던진다 — GitHub 오류 흉내. */
+    RuntimeException failWith;
+    /** 이슈 변경분을 읽을 때 받은 기준 시각(null = 전부). */
+    final List<Instant> sinceSeen = new ArrayList<>();
 
     private void check(GithubRepoRef repo) {
         if (expectedRepo != null) {
@@ -41,6 +45,7 @@ class FakeGithubReader implements GithubReader {
     @Override
     public List<GithubIssue> issuesUpdatedSince(GithubRepoRef repo, Instant since) {
         check(repo);
+        sinceSeen.add(since);
         return issues;
     }
 
@@ -63,6 +68,9 @@ class FakeGithubReader implements GithubReader {
     @Override
     public List<GithubCollaborator> collaborators(GithubRepoRef repo) {
         check(repo);
+        if (failWith != null) {
+            throw failWith;
+        }
         return collaborators;
     }
 
