@@ -27,7 +27,7 @@ import lombok.NoArgsConstructor;
  * 종류와 원본은 짝이 맞아야 한다(이슈 → Task, PR → Submission, 도움 요청 → 도움 요청 ID, 배운 점 · 기타 → 없음) —
  * 생성 메서드와 DB CHECK 제약이 함께 막는다. 같은 사무실 것인지는 Service가 확인한다(다르면 {@code not_found}).
  * <p>
- * 아직 Entity가 없는 대상은 ID로 둔다: 평가 회차(#19), 도움 요청(#47 — 외래키도 그쪽 마이그레이션이 건다).
+ * 다른 패키지의 대상 일부는 ID로 둔다: 평가 회차(외래키는 V2), 도움 요청(#47 — Entity와 외래키는 그쪽 마이그레이션).
  */
 @Entity
 @Table(name = "agenda_item")

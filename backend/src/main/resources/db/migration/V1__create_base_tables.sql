@@ -229,7 +229,7 @@ CREATE TABLE meeting_attendee (
 
 -- 회의 안건(결정 기록 포함). 행을 지우지 않는다 — 거두면 WITHDRAWN.
 -- 원본은 종류에 맞게 하나만: ISSUE → task, PR → submission, HELP_REQUEST → 도움 요청, LEARNING · OTHER → 없음.
--- evaluation_round_id의 외래키는 evaluation_round를 만드는 #19가, source_help_request_id의 외래키는
+-- evaluation_round_id의 외래키는 evaluation_round를 만드는 V2가, source_help_request_id의 외래키는
 -- help_request를 만드는 #47(A)이 건다(#7이 허용한 도움 요청 ↔ 안건 순환 외래키). 전환된 안건은 도움 요청당 하나.
 CREATE TABLE agenda_item (
     id                           BIGINT       NOT NULL AUTO_INCREMENT,
