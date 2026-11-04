@@ -22,7 +22,8 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
  *
  * 강사: {@code TestLogin.githubUser(userId, githubUserId).session()}에 더해, 그 GitHub 사용자 ID를
  * {@code app.instructor-github-user-ids}(허용 목록)에 넣고 그 사무실에 강사 지정이 있어야 한다.
- * 지정 테이블(#7 T4-a) 전에는 {@code @MockitoBean InstructorAssignmentLookup}으로 지정을 흉내 낸다.
+ * 지정은 {@code instructor_assignment} 행을 넣거나({@code InstructorAssignmentAuthorizationTest} 참고),
+ * DB 없이 확인할 때는 {@code @MockitoBean InstructorAssignmentService}로 흉내 낸다.
  * 쓰기 요청은 CSRF 토큰과 {@code Origin}도 보내야 한다(CommonFoundationIntegrationTest 참고).
  */
 public final class TestLogin {

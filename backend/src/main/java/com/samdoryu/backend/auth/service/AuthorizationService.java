@@ -5,6 +5,7 @@ import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.common.security.AppProperties;
+import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -18,11 +19,11 @@ import org.springframework.stereotype.Service;
 public class AuthorizationService {
 
     private final AppProperties appProperties;
-    private final InstructorAssignmentLookup instructorAssignmentLookup;
+    private final InstructorAssignmentService instructorAssignmentService;
 
-    public AuthorizationService(AppProperties appProperties, InstructorAssignmentLookup instructorAssignmentLookup) {
+    public AuthorizationService(AppProperties appProperties, InstructorAssignmentService instructorAssignmentService) {
         this.appProperties = appProperties;
-        this.instructorAssignmentLookup = instructorAssignmentLookup;
+        this.instructorAssignmentService = instructorAssignmentService;
     }
 
     /** 검사 순서 1 — 세션의 로그인 사용자. 없으면 {@code unauthorized}. */
@@ -45,7 +46,7 @@ public class AuthorizationService {
 
         // 허용 목록의 강사 계정은 콜라보레이터여도 어느 사무실에서도 팀원 역할로 판정하지 않는다(P1 — 권한 상승 방지).
         if (isAllowlistedInstructor(principal)) {
-            if (instructorAssignmentLookup.isAssigned(id, principal.githubUserId())) {
+            if (instructorAssignmentService.isCurrentlyAssigned(id, principal.githubUserId())) {
                 return new WorkspaceAccess(id, principal.userId(), WorkspaceRole.INSTRUCTOR, null);
             }
             throw new ApiException(ErrorCode.NOT_FOUND);
