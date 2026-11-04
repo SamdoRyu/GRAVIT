@@ -60,6 +60,20 @@ class HelpRequestContractTest {
     }
 
     @Test
+    void closeRequestExampleRoundTrips() throws IOException {
+        assertRoundTrip("help-request-close-request.json", HelpRequestCloseRequest.class);
+    }
+
+    @Test
+    void closeLearningMustBe1To200Chars() {
+        assertThat(VALIDATOR.validate(new HelpRequestCloseRequest(null, null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpRequestCloseRequest(null, ""))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpRequestCloseRequest(null, "a".repeat(201)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new HelpRequestCloseRequest(null, "a"))).isEmpty();
+        assertThat(VALIDATOR.validate(new HelpRequestCloseRequest("31", "a".repeat(200)))).isEmpty();
+    }
+
+    @Test
     void statusUsesContractJsonValues() {
         assertThat(MAPPER.writeValueAsString(HelpRequestStatus.values()))
                 .isEqualTo("[\"open\",\"discussing\",\"resolved\",\"on_agenda\",\"ended\"]");

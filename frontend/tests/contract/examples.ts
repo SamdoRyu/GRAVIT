@@ -8,6 +8,7 @@ import type {
   ErrorResponse,
   EvaluateRequest,
   HelpCommentCreateRequest,
+  HelpRequestCloseRequest,
   HelpRequestCreateRequest,
   HelpRequestDetail,
   HelpRequestSummary,
@@ -181,6 +182,12 @@ export const helpCommentCreateRequestExample = {
   content: 'application.yaml의 server.servlet.session.cookie.same-site를 lax로 두면 돼요',
 } satisfies HelpCommentCreateRequest
 
+// contract/examples/help/help-request-close-request.json — CONTRACTS_API.md 「11」
+export const helpRequestCloseRequestExample = {
+  helpfulCommentId: '31',
+  learning: 'SameSite는 쿠키마다 정하고, Spring에서는 server.servlet.session.cookie.same-site로 바꾼다',
+} satisfies HelpRequestCloseRequest
+
 // contract/examples/help/help-request-create-request.json — CONTRACTS_API.md 「11」
 export const helpRequestCreateRequestExample = {
   content: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
@@ -237,6 +244,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'common/error-response.json': errorResponseExample,
   'evaluation/evaluate-request.json': evaluateRequestExample,
   'help/help-comment-create-request.json': helpCommentCreateRequestExample,
+  'help/help-request-close-request.json': helpRequestCloseRequestExample,
   'help/help-request-create-request.json': helpRequestCreateRequestExample,
   'help/help-request-detail.json': helpRequestDetailExample,
   'help/help-request-summary.json': helpRequestSummaryExample,
