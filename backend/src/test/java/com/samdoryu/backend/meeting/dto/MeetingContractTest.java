@@ -43,6 +43,11 @@ class MeetingContractTest {
     }
 
     @Test
+    void meetingExampleRoundTrips() throws IOException {
+        assertRoundTrip("meeting.json", MeetingDto.class);
+    }
+
+    @Test
     void enumsUseContractJsonValues() {
         assertThat(MAPPER.writeValueAsString(AgendaKind.values()))
                 .isEqualTo("[\"issue\",\"pr\",\"help_request\",\"learning\",\"other\"]");

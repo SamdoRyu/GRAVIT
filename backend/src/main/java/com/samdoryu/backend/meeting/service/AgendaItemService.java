@@ -5,9 +5,11 @@ import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
 import com.samdoryu.backend.meeting.domain.AgendaItem;
+import com.samdoryu.backend.meeting.domain.InstructorFeedback;
 import com.samdoryu.backend.meeting.dto.AgendaItemCreateRequest;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
+import com.samdoryu.backend.meeting.repository.InstructorFeedbackRepository;
 import com.samdoryu.backend.realtime.SnapshotResource;
 import com.samdoryu.backend.realtime.WorkspaceEventHub;
 import com.samdoryu.backend.sync.domain.Submission;
@@ -17,6 +19,8 @@ import com.samdoryu.backend.workspace.domain.Workspace;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,14 +32,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class AgendaItemService {
 
     private final AgendaItemRepository agendaItemRepository;
+    private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final SyncedItemService syncedItemService;
     private final EvaluationRoundService evaluationRoundService;
     private final WorkspaceEventHub eventHub;
     private final EntityManager entityManager;
 
-    public AgendaItemService(AgendaItemRepository agendaItemRepository, SyncedItemService syncedItemService,
+    public AgendaItemService(AgendaItemRepository agendaItemRepository,
+            InstructorFeedbackRepository instructorFeedbackRepository, SyncedItemService syncedItemService,
             EvaluationRoundService evaluationRoundService, WorkspaceEventHub eventHub, EntityManager entityManager) {
         this.agendaItemRepository = agendaItemRepository;
+        this.instructorFeedbackRepository = instructorFeedbackRepository;
         this.syncedItemService = syncedItemService;
         this.evaluationRoundService = evaluationRoundService;
         this.eventHub = eventHub;
@@ -75,6 +82,17 @@ public class AgendaItemService {
         agendaItemRepository.save(item);
         eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
         return AgendaItemDto.of(item, List.of());
+    }
+
+    /** Snapshot {@code agendaItems} 조각 — 거둔 것 포함 전부, raisedAt 오름차순. 강사 피드백은 한 번에 읽어 나눈다. */
+    @Transactional(readOnly = true)
+    public List<AgendaItemDto> listAll(Long workspaceId) {
+        Map<Long, List<InstructorFeedback>> feedbacks = instructorFeedbackRepository
+                .findByAgendaItemWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
+                .collect(Collectors.groupingBy(feedback -> feedback.getAgendaItem().getId()));
+        return agendaItemRepository.findByWorkspaceIdOrderByRaisedAtAscIdAsc(workspaceId).stream()
+                .map(item -> AgendaItemDto.of(item, feedbacks.getOrDefault(item.getId(), List.of())))
+                .toList();
     }
 
     /** 이슈 · PR 안건의 원본 ID — 없으면 {@code invalid}(종류와 원본이 맞지 않음). */
