@@ -1,9 +1,9 @@
-<!-- GRAVIT 이전 정보 (이 블록만 GRAVIT에서 추가했다. 아래 본문은 원본과 한 글자도 다르지 않다)
+<!-- GRAVIT 이전 정보 (이 블록은 GRAVIT에서 추가했다. 본문은 원본을 옮긴 뒤 GRAVIT에서 고친 곳이 있다 — docs/README.md 「GRAVIT에서 고친 곳」)
   원본: SamdoRyu/docs-for-PJ-review @ 796fc25b459cd4a25af89e085c093f4e2c25f5b0 — docs/CONTRACTS_API.md
   이전일: 2026-11-03
   기준 위치 전환 절차: docs/README.md
 -->
-> **[GRAVIT 이전본]** 원본 [docs-for-PJ-review@796fc25 `docs/CONTRACTS_API.md`](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/CONTRACTS_API.md) 를 그대로 옮겼다(2026-11-03). 본문에서 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md 등)는 [docs/README.md](README.md)의 고정 링크 표에서 연다. 계약 변경 권한과 기준 위치는 [docs/README.md](README.md)를 따른다.
+> **[GRAVIT 이전본]** 원본 [docs-for-PJ-review@796fc25 `docs/CONTRACTS_API.md`](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/CONTRACTS_API.md) 를 옮겼다(2026-11-03). 그 뒤 GRAVIT에서 고친 곳은 [docs/README.md](README.md) 「GRAVIT에서 고친 곳」에 적는다. 본문에서 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md 등)는 [docs/README.md](README.md)의 고정 링크 표에서 연다. 계약 변경 권한과 기준 위치는 [docs/README.md](README.md)를 따른다.
 
 # API 계약 — 오피스 v1
 
@@ -242,7 +242,7 @@ interface WorkspaceSnapshot {
   viewer: Viewer;
   settings: TeamSettings;
   sync: SyncStatus;
-  members: MemberDto[];               // 빠진 팀원 포함 전부(과거 기록이 가리키므로). 지금 팀원 먼저 deskIndex 순, 그 뒤 빠진 팀원
+  members: MemberDto[];               // 빠진 팀원 포함 전부(과거 기록이 가리키므로). 지금 팀원 먼저 deskIndex 순(자리가 없는 지금 팀원은 그 뒤 id 순), 그 뒤 빠진 팀원
   tasks: TaskDto[];                   // 이슈 전부. githubIssueNumber 오름차순
   submissions: SubmissionDto[];       // PR 전부. githubPrNumber 오름차순
   requirements: RequirementDto[];     // 상태 무관 전부. position 오름차순
@@ -277,7 +277,7 @@ interface MemberDto {
   githubLogin: string | null;
   displayName: string;
   avatarUrl: string | null;           // FR-OFF-06
-  deskIndex: number | null;           // 0~9 — 테마의 책상 자리 번호(좌표 아님). 빠진 팀원은 null — 책상 · 아바타 없음
+  deskIndex: number | null;           // 0~7 — 테마의 책상 자리 번호(좌표 아님). 빠진 팀원과 자리가 없는 팀원(8자리가 다 참)은 null — 책상 · 아바타 없음
   isRepoAdmin: boolean;
   removedAt: Instant | null;          // 콜라보레이터에서 빠진 시각
   syncedAt: Instant | null;

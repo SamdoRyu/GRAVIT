@@ -5,21 +5,32 @@
 | [CONTRACTS.md](CONTRACTS.md) | `SamdoRyu/docs-for-PJ-review` @ `796fc25b459cd4a25af89e085c093f4e2c25f5b0` — `docs/CONTRACTS.md` | 2026-11-03 |
 | [CONTRACTS_API.md](CONTRACTS_API.md) | 같은 커밋 — `docs/CONTRACTS_API.md` | 2026-11-03 |
 
-- 두 파일의 **본문은 원본과 바이트 단위로 같다.** GRAVIT에서 추가한 것은 맨 위 7줄(이전 정보 주석과 안내 한 줄)뿐이다.
-- 확인 방법 — Git Bash, GRAVIT 루트에서. `../docs-for-PJ-review`는 기획 저장소 clone 경로로 바꾼다. 아무것도 출력하지 않으면 같다:
+- 두 파일은 원본을 옮긴 뒤 **GRAVIT에서 고친 곳이 있다** — 아래 「GRAVIT에서 고친 곳」 표가 전부다. 맨 위 7줄(이전 정보 주석과 안내 한 줄)도 GRAVIT에서 추가했다.
+- 확인 방법 — Git Bash, GRAVIT 루트에서. `../docs-for-PJ-review`는 기획 저장소 clone 경로로 바꾼다. 나오는 차이(`>` 줄이 GRAVIT)가 아래 표의 고친 곳뿐이어야 한다:
 
   ```bash
   for f in CONTRACTS.md CONTRACTS_API.md; do
-    tail -n +8 "docs/$f" | diff -q --strip-trailing-cr - <(git -C ../docs-for-PJ-review show "796fc25:docs/$f")
+    tail -n +8 "docs/$f" | diff --strip-trailing-cr <(git -C ../docs-for-PJ-review show "796fc25:docs/$f") -
   done
   ```
+
+### GRAVIT에서 고친 곳
+
+| 날짜 | 파일 · 위치 | 내용 | 근거 |
+| --- | --- | --- | --- |
+| 2026-11-04 | 두 파일 맨 위 주석 · 안내 한 줄 | "원본과 같다" → 이 표를 가리키게 | — |
+| 2026-11-04 | CONTRACTS.md 「2」 `Member` · 소유와 변경 주체 | `deskIndex` 0~7(최대 8자리), 8자리가 다 차 있으면 비워 둠 | 2026-11-04 결정 — 작업 포드 8개 |
+| 2026-11-04 | CONTRACTS.md 「3」 표시 상태 표 · 「10」 대표 담당자 규칙 | 대표 담당자에게 책상 자리가 없으면 `backlog` | 같음 |
+| 2026-11-04 | CONTRACTS.md 「8」 | 기본 테마 이름: 사무실 → 우주정거장(확정 시안 `frontend/public/station/`) | #76 · #77 |
+| 2026-11-04 | CONTRACTS.md 「10」 | 행 추가: 아바타 이동 연출 · 작업 포드 표시 · 책상 자리가 없는 팀원 | C 요청(빛 신호 이동) · 2026-11-04 결정 |
+| 2026-11-04 | CONTRACTS_API.md 「5」 `MemberDto.deskIndex` · `members` 정렬 | 0~7, 자리가 없는 지금 팀원은 `null`이고 deskIndex 있는 팀원 뒤 | 2026-11-04 결정 — 작업 포드 8개 |
 
 ## 계약 문서의 기준 위치
 
 ### 전환 (2026-11-03)
 
 - **기준은 GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`이다.** 계약 변경은 GRAVIT에서 관리한다.
-- **기준 계약 커밋: `e14fb85a6fe0ff8aea8be6a2a6c66a9b626fef03`** — 두 파일을 마지막으로 바꾼 GRAVIT 커밋(본문은 기획 저장소 `796fc25`와 같다). 두 파일이 다시 바뀌면 그 커밋 SHA가 새 기준이다.
+- **기준 계약 커밋: `e14fb85a6fe0ff8aea8be6a2a6c66a9b626fef03`** — 두 파일을 마지막으로 바꾼 GRAVIT 커밋. 두 파일이 다시 바뀌면 그 커밋 SHA가 새 기준이다(2026-11-04 수정이 `main`에 반영되면 그 커밋으로 바꾼다).
 - 기획 저장소의 두 파일은 커밋 `796fc25`까지의 원본 이력으로만 남긴다(더 고치지 않는다). 같은 계약을 두 곳에서 따로 고치지 않는다.
 
 | 전환 조건 | 상태 |

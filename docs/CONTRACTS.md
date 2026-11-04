@@ -1,9 +1,9 @@
-<!-- GRAVIT 이전 정보 (이 블록만 GRAVIT에서 추가했다. 아래 본문은 원본과 한 글자도 다르지 않다)
+<!-- GRAVIT 이전 정보 (이 블록은 GRAVIT에서 추가했다. 본문은 원본을 옮긴 뒤 GRAVIT에서 고친 곳이 있다 — docs/README.md 「GRAVIT에서 고친 곳」)
   원본: SamdoRyu/docs-for-PJ-review @ 796fc25b459cd4a25af89e085c093f4e2c25f5b0 — docs/CONTRACTS.md
   이전일: 2026-11-03
   기준 위치 전환 절차: docs/README.md
 -->
-> **[GRAVIT 이전본]** 원본 [docs-for-PJ-review@796fc25 `docs/CONTRACTS.md`](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/CONTRACTS.md) 를 그대로 옮겼다(2026-11-03). 본문에서 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md 등)는 [docs/README.md](README.md)의 고정 링크 표에서 연다. 계약 변경 권한과 기준 위치는 [docs/README.md](README.md)를 따른다.
+> **[GRAVIT 이전본]** 원본 [docs-for-PJ-review@796fc25 `docs/CONTRACTS.md`](https://github.com/SamdoRyu/docs-for-PJ-review/blob/796fc25b459cd4a25af89e085c093f4e2c25f5b0/docs/CONTRACTS.md) 를 옮겼다(2026-11-03). 그 뒤 GRAVIT에서 고친 곳은 [docs/README.md](README.md) 「GRAVIT에서 고친 곳」에 적는다. 본문에서 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md 등)는 [docs/README.md](README.md)의 고정 링크 표에서 연다. 계약 변경 권한과 기준 위치는 [docs/README.md](README.md)를 따른다.
 
 # 공통 계약 — 오피스 v1
 
@@ -64,7 +64,7 @@
 | `ReviewAccount` (심사용 계정) | 서버 | 로그인 ID(`username` · 유일), 비밀번호 해시(평문 금지 — Spring `PasswordEncoder`), 사용 가능 여부 | AppUser(`REVIEW`) 1–1. [확정] 시연 사무실에만 접근하고 GitHub 권한이 없다. 심사용 로그인이 켜진 환경에서만 쓰인다. 비밀번호 · 해시를 저장소에 커밋하지 않는다 (2026-11-01 추가 결정) | FR-AUTH-01 · P15 |
 | (승인된 강사 계정) | 서버 | [확정] **서버 설정 허용 목록**의 GitHub 사용자 ID 목록 — DB에 두지 않고 관리 화면이 없다(2026-11-01 추가 결정 — ARCHITECTURE.md 「인증과 권한」 대안 A). 설정 이름은 환경 변수 가이드 | — | P1 |
 | `InstructorAssignment` | 사무실 | **강사 GitHub 사용자 ID**(`instructorGithubUserId`), 지정한 사람 → AppUser, 지정 시각, 해제 시각 | → Workspace. 강사는 AppUser 외래키가 아니라 GitHub 사용자 ID로 가리킨다 — 아직 로그인하지 않은 강사도 지정할 수 있고, 로그인 이름이 바뀌어도 그대로다. 해제해도 행을 지우지 않고 해제 시각을 남긴다. 현재 지정(해제 시각 없음)은 (사무실, GitHub 사용자 ID)당 하나 | FR-AUTH-06 · P1 |
-| `Member` (팀원) | 사무실 | 사용자 → AppUser(시연 Seed 팀원은 없음), 책상 자리(`deskIndex` 0~9, 빠진 팀원은 비움), 레포 관리자 여부, 활동 기록 수집 동의 시각, 빠진 시각(`removedAt`), `syncedAt` | → Workspace, → AppUser. 서버 설정 허용 목록의 강사 계정은 콜라보레이터여도 팀원이 아니다 [확정 — P1]. 콜라보레이터에서 빠지면 행을 지우지 않고 `removedAt`을 남기고 책상 자리를 비운다(과거 평가 · 안건 · 코멘트가 가리키므로 행은 남긴다) | 06 팀원 · FR-GH-04 |
+| `Member` (팀원) | 사무실 | 사용자 → AppUser(시연 Seed 팀원은 없음), 책상 자리(`deskIndex` 0~7 — 최대 8자리, 빠진 팀원과 자리가 없는 팀원은 비움 [확정 — 2026-11-04 결정]), 레포 관리자 여부, 활동 기록 수집 동의 시각, 빠진 시각(`removedAt`), `syncedAt` | → Workspace, → AppUser. 서버 설정 허용 목록의 강사 계정은 콜라보레이터여도 팀원이 아니다 [확정 — P1]. 콜라보레이터에서 빠지면 행을 지우지 않고 `removedAt`을 남기고 책상 자리를 비운다(과거 평가 · 안건 · 코멘트가 가리키므로 행은 남긴다) | 06 팀원 · FR-GH-04 |
 | `Task` (이슈 앱 모델) | 사무실 | `githubIssueNumber`, 제목, 열림 · 닫힘, 닫힘 사유(완료 · 계획 안 함), 라벨, GitHub 만든 · 고친 · 닫힌 시각, 상태가 바뀐 시각, `syncedAt` | → Workspace. 담당자는 `TaskAssignee`로 둔다(2026-11-01 추가 결정) | 06 GitHub 원본 데이터 |
 | `TaskAssignee` (이슈 담당자) | 사무실 | 이슈, 팀원, `syncedAt` | → Task, → Member — **Task와 Member의 다대다(N–M)를 표현하는 중간 Entity**. [확정] 담당자 수에 서버 제한이 없다(팀은 1명 권장). 동기화가 GitHub 담당자 전원으로 맞춘다. 팀원이 아닌 GitHub 담당자는 넣지 않는다 [구현 기본값]. 대표 담당자는 저장하지 않는다(「3」) (2026-11-01 추가 결정) | FR-GH-02 · FR-OFF-02 · P14 |
 | `Submission` (PR 앱 모델) | 사무실 | `githubPrNumber`, 제목, 작성자(`authorGithubUserId` · 작성자 팀원), 상태(열림 · Draft · 머지 · 닫힘), `headSha`, 리뷰 요청 · 리뷰, 라벨, 마지막 커밋 시각, 머지 · 닫힌 시각, 상태가 바뀐 시각, `syncedAt` | → Workspace, → Member(작성자 — 팀원이 아니면 없음) | 06 · FR-GH-02 |
@@ -128,7 +128,7 @@
 | --- | --- | --- | --- |
 | `Task` · `Submission` · `TaskAssignee` · `SubmissionIssueLink` | 동기화만 | 없음 | GitHub 값으로 덮어쓴다. 행을 지우지 않는다 — GitHub에서 사라진 이슈 · PR 처리는 「10」 |
 | `Member`의 GitHub 칸(로그인 이름 · 사진 · 레포 관리자 여부 · `syncedAt` · `removedAt`) | 동기화 | 없음 | 콜라보레이터 목록으로 맞춘다. 빠지면 `removedAt`을 남기고 책상 자리를 비운다 |
-| `Member`의 앱 칸(`deskIndex` · 활동 기록 수집 동의) | 앱(책상은 처음 들어올 때 빈 자리 배정) | 수집 동의 | 지금 팀원의 값은 **덮어쓰지 않는다** |
+| `Member`의 앱 칸(`deskIndex` · 활동 기록 수집 동의) | 앱(책상은 처음 들어올 때 빈 자리 배정 — 8자리가 다 차 있으면 비워 둔다 [확정 — 2026-11-04 결정]) | 수집 동의 | 지금 팀원의 값은 **덮어쓰지 않는다** |
 | `EvaluationRound` | 동기화(새 PR · 새 `headSha`) + 앱(회의의 "수정 후 재평가") | 회의 결정 | 새 회차만 연다. 이전 회차는 건드리지 않는다 |
 | `TaskDueDate` · `RequirementLink` · `AgendaItem` · `Evaluation` · `Standup` · `HelpRequest` · 카드 · 리포트 · 활동 기록 | 앱만 | 있음 | **읽지도 덮지도 않는다.** 원본 이슈 · PR이 바뀌어도 그대로다 |
 | `Requirement` | 명세 문서 재동기화(「3」) | 없음(연결만) | 매칭 규칙대로 갱신 · 상태 변경. 지우지 않는다 |
@@ -142,7 +142,7 @@
 | 대상 | 원본 상태 | 표시 상태 → 공간 역할(`placeRole`) |
 | --- | --- | --- |
 | 이슈 | 열림 · 담당자 없음 | 대기 → `backlog` |
-| 이슈 | 열림 · 담당자 있음 | 작업 중 → `desk:<대표 담당자 memberId>` — 담당자가 여럿이어도 상자는 하나 [확정] |
+| 이슈 | 열림 · 담당자 있음 | 작업 중 → `desk:<대표 담당자 memberId>` — 담당자가 여럿이어도 상자는 하나 [확정]. 대표 담당자에게 책상 자리가 없으면 `backlog` [확정 — 2026-11-04 결정] |
 | 이슈 | 닫힘 | 완료 또는 종료 → `done`. GitHub 닫힘 사유로 완료 · 종료를 구분해 보일 수 있다 [구현 기본값] |
 | PR | 열림 | 검토 → `review` |
 | PR | 머지 | 완료 → `done` |
@@ -453,7 +453,7 @@ interface ThemeLayout {
 - SceneModel은 `WorkspaceSnapshot` → `SceneEntity[]`의 순수 함수다. 테마를 모른다. 내부 ID는 테이블마다 따로 매기므로 화면 키(`key`)에는 종류를 붙인다(「2」).
 - 회의 공간의 안건 표현은 `kind`가 안건 종류(이슈 안건 → `issue` 모양)이고 `key`는 `agenda:<agendaItemId>`다. 원본 이슈 · PR의 SceneEntity는 따로 제자리에 있다.
 - 대표 담당자 = `task.assigneeMemberIds[0]`(「3」). 막힘 · 묶음 진행률 같은 도메인 값은 Snapshot의 서버 계산 값을 쓴다.
-- ThemeLayout 구현은 기본 테마(사무실) 하나다. 테마 엔진은 만들지 않는다 [확정].
+- ThemeLayout 구현은 기본 테마(우주정거장 — 확정 시안 `frontend/public/station/`, 2026-11-04) 하나다. 테마 엔진은 만들지 않는다 [확정].
 - 드롭 결과: `requirement:*` → `linkRequirement`(상자는 제자리), `meeting` → `createAgendaItem`(원본은 제자리), 그 밖은 아무 일도 없음 [확정 — 위치 규칙]. 묶음 오브젝트에 놓으면 HUD에서 요구사항을 하나 고른 뒤 `linkRequirement`.
 
 ## 9. 계약 변경 절차 [계약]
@@ -535,7 +535,7 @@ interface ThemeLayout {
 | Draft PR | 검토 공간(`review`) + Draft 배지 | 「3」 |
 | 머지되지 않고 닫힌 PR | 완료 공간(`done`) + 미병합 종료 표시 | 「3」 |
 | 닫힌 이슈 | 완료 공간, GitHub 닫힘 사유로 완료 · 종료 구분 가능 | 「3」 |
-| 대표 담당자 규칙 | 그 사무실 팀원인 담당자 중 GitHub 사용자 ID가 가장 작은 사람, 없으면 `backlog`. 서버가 이 순서로 정렬해 보낸다 | 「3」 · SceneModel |
+| 대표 담당자 규칙 | 그 사무실 팀원인 담당자 중 GitHub 사용자 ID가 가장 작은 사람, 없으면 `backlog`. 대표 담당자에게 책상 자리가 없어도 `backlog`. 서버가 이 순서로 정렬해 보낸다 | 「3」 · SceneModel |
 | 팀원이 아닌 GitHub 담당자 | `TaskAssignee`에 넣지 않는다 | 「2」 |
 | 우선순위 라벨이 여러 개 | 가장 높은 값 | 「3」 |
 | 요구사항 진행률 | 연결된 이슈 중 닫힌 이슈 수 / 연결된 이슈 수 | 「3」 |
@@ -553,6 +553,9 @@ interface ThemeLayout {
 | 화면 묶음 타입 | `WorkspaceSnapshot` — 서버 Entity와 구분 | 「8」 |
 | 아바타 색 | 팀원 구분 용도로 자유롭게(사람 비교 표시가 아님 — P6은 도형 색 규칙) | ARCHITECTURE.md 「색」 |
 | 아바타 이동 | 회의 시작 · 종료 등 앱 내부 이벤트 우선 | 05 「상태값」 |
+| 아바타 이동 연출 (우주정거장) | 연결 통로(지름 2)가 아바타(키 약 3.1)보다 작아 걸어서 이동하지 않는다. 출발 자리에서 사라짐(0.4초) → 팀원 색 빛 점이 `ThemeLayout.route()`의 통로 중심선을 따라 이동(거리 비례, 최대 약 1.8초) → 도착 자리에서 나타남(0.4초). 여러 명은 0.15초 시차. `prefers-reduced-motion`이면 빛 점 없이 사라짐 · 나타남만 (2026-11-04) | 「8」 `route` · 위 「아바타 이동」 |
+| 작업 포드 표시 (우주정거장) | 포드는 `deskIndex` 0~7의 8개다. 0~3(시안의 K · L · P · C 포드)은 앉은 팀원이 없어도 늘 그리고, 4~7은 그 자리를 쓰는 지금 팀원(`removedAt` 없음)이 있을 때만 그린다 — 팀원 수가 아니라 실제 자리 점유로 판단한다. 포드 위치는 자리 번호마다 고정이라 팀원이 들고 나도 다른 포드는 움직이지 않는다. 빈 포드에는 아바타 · 작업 상자 · 개인 상태 표시가 없다 (2026-11-04) | 「2」 `Member` · 「8」 |
+| 책상 자리가 없는 팀원 | 8자리가 다 찼을 때 들어온 팀원은 `deskIndex`가 비어 있다. 팀원 권한(평가 · 안건 · 도움 요청 등)은 같고, 3D에는 포드 · 아바타가 없으며 HUD에만 보인다. 그 사람이 대표 담당자인 이슈는 `backlog` (2026-11-04) | 「2」 · 「3」 |
 | 스탠드업 날짜 | 한국 시간 기준 날짜 | 「1」 · `Standup` |
 | 스탠드업 "막힌 것" → 도움 요청 | 내용이 채워진 작성 화면이 열리고 요청자가 올려야 생성 | FR-MTG-02 |
 | 강사 수동 동기화 | 허용하지 않음 | 「4」 |
