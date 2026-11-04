@@ -468,6 +468,29 @@ export interface HelpRequestSummary {
   createdAt: Instant
   closedAt: Instant | null
 }
+/** `POST W/help-requests` — content 1~2000자, fromStandupId는 본인의 스탠드업 */
+export interface HelpRequestCreateRequest {
+  content: string
+  fromStandupId: Id | null
+}
+/** `GET W/help-requests/{helpRequestId}` */
+export interface HelpRequestDetail extends HelpRequestSummary {
+  /** createdAt 오름차순. 안건으로 전환해도 그대로 붙어 보인다 */
+  comments: HelpCommentDto[]
+  /** 코멘트 작성자의 "내가 도운 기록" */
+  helpfulCommentId: Id | null
+  learning: string | null
+}
+export interface HelpCommentDto {
+  id: Id
+  /** 익명 아님 */
+  author: UserRef
+  /** 강사는 null */
+  authorMemberId: Id | null
+  isInstructorAnswer: boolean
+  content: string
+  createdAt: Instant
+}
 
 // ---- 「15」 개인 API — 학습 타임라인 ------------------------------------------
 

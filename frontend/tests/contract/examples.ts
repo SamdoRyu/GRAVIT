@@ -7,6 +7,9 @@ import type {
   AgendaItemCreateRequest,
   ErrorResponse,
   EvaluateRequest,
+  HelpRequestCreateRequest,
+  HelpRequestDetail,
+  HelpRequestSummary,
   MeResponse,
   PageResponse,
   TimelineEntry,
@@ -172,11 +175,64 @@ export const workspaceSnapshotExample = {
   generatedAt: '2026-11-05T03:01:12Z',
 } satisfies WorkspaceSnapshot
 
+// contract/examples/help/help-request-create-request.json — CONTRACTS_API.md 「11」
+export const helpRequestCreateRequestExample = {
+  content: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
+  fromStandupId: '3',
+} satisfies HelpRequestCreateRequest
+
+// contract/examples/help/help-request-summary.json — CONTRACTS_API.md 「11」
+export const helpRequestSummaryExample = {
+  id: '12',
+  requesterMemberId: '2',
+  content: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
+  status: 'open',
+  isAgendaCandidate: false,
+  instructorRequested: false,
+  instructorRequestedAt: null,
+  agendaItemId: null,
+  fromStandupId: '3',
+  commentCount: 0,
+  createdAt: '2026-11-05T01:20:00Z',
+  closedAt: null,
+} satisfies HelpRequestSummary
+
+// contract/examples/help/help-request-detail.json — CONTRACTS_API.md 「11」
+export const helpRequestDetailExample = {
+  id: '12',
+  requesterMemberId: '2',
+  content: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
+  status: 'discussing',
+  isAgendaCandidate: false,
+  instructorRequested: false,
+  instructorRequestedAt: null,
+  agendaItemId: null,
+  fromStandupId: '3',
+  commentCount: 1,
+  createdAt: '2026-11-05T01:20:00Z',
+  closedAt: null,
+  comments: [
+    {
+      id: '31',
+      author: { userId: '7', githubLogin: 'bob', displayName: '밥', avatarUrl: null },
+      authorMemberId: '3',
+      isInstructorAnswer: false,
+      content: 'server.servlet.session.cookie.same-site 를 확인해 보세요',
+      createdAt: '2026-11-05T02:05:00Z',
+    },
+  ],
+  helpfulCommentId: null,
+  learning: null,
+} satisfies HelpRequestDetail
+
 /** contract/examples/ 기준 상대 경로 → TS 사본. 공통 JSON마다 하나씩 있어야 한다(④가 검사). */
 export const EXAMPLES: Record<string, unknown> = {
   'auth/me-response.json': meResponseExample,
   'common/error-response.json': errorResponseExample,
   'evaluation/evaluate-request.json': evaluateRequestExample,
+  'help/help-request-create-request.json': helpRequestCreateRequestExample,
+  'help/help-request-detail.json': helpRequestDetailExample,
+  'help/help-request-summary.json': helpRequestSummaryExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
