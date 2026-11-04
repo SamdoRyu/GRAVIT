@@ -1,7 +1,7 @@
 // Filter bar for the kanban / list tabs: search + a "필터" toggle that reveals the rest. OWNER: ui-builder.
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { Id, Priority } from '../data/types'
+import type { Id, DemoPriority } from '../data/types'
 import { PRIORITIES, PRIORITY_META } from '../data/meta'
 import { hasActiveFilters } from '../data/selectors'
 import { useOffice } from '../store'
@@ -119,7 +119,7 @@ export function FilterBar() {
           <div className="fgroup">
             <span className="fgroup-label">우선순위</span>
             <div className="fchips" role="group" aria-label="우선순위 필터">
-              {PRIORITIES.map((p: Priority) => {
+              {PRIORITIES.map((p: DemoPriority) => {
                 const on = priorities.includes(p)
                 return (
                   <button

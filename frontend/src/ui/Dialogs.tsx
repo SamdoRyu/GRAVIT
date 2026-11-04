@@ -1,6 +1,6 @@
 // Modal dialogs: task / member forms, remove member, confirms. OWNER: ui-builder.
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import type { Estimate, Id, MemberInput, MemberPatch, Priority, Reassign, TaskInput, TaskPatch, TaskStatus } from '../data/types'
+import type { Estimate, Id, MemberInput, MemberPatch, DemoPriority, Reassign, TaskInput, TaskPatch, TaskStatus } from '../data/types'
 import { ESTIMATES, MEMBER_COLORS, PRIORITIES, PRIORITY_META, STATUSES, STATUS_META } from '../data/meta'
 import { OFFICE, MAX_MEMBERS } from '../office/layout'
 import { taskKey, tasksOf, workload } from '../data/selectors'
@@ -123,7 +123,7 @@ interface TaskForm {
   description: string
   projectId: Id
   status: TaskStatus
-  priority: Priority
+  priority: DemoPriority
   estimate: Estimate
   assigneeId: string
   dueDate: string
@@ -258,7 +258,7 @@ function TaskDialog({ taskId, defaults }: { taskId?: Id; defaults?: Partial<Task
               </select>
             </Field>
             <Field label="우선순위">
-              <select className="select" value={form.priority} onChange={(e) => set('priority', e.target.value as Priority)}>
+              <select className="select" value={form.priority} onChange={(e) => set('priority', e.target.value as DemoPriority)}>
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {PRIORITY_META[p].label}

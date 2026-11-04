@@ -7,7 +7,7 @@ import { taskKey } from '../selectors'
 import type {
   Activity,
   ActivityKind,
-  Change,
+  DemoChange,
   Id,
   Meeting,
   MeetingEnd,
@@ -81,7 +81,7 @@ export interface MockEngine {
   /** Demo helper: change presence of several members in one go, with an optional activity. */
   setPresence(ids: Id[], presence: Presence, activity?: { message: string; memberId?: Id } | null): void
   reset(): Workspace
-  subscribe(listener: (change: Change) => void): () => void
+  subscribe(listener: (change: DemoChange) => void): () => void
   /** Writes pending changes to storage right now. */
   flush(): void
   /** Called after reset() so the demo can drop its timers. */
@@ -110,7 +110,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
   let state: Persisted | null = null
   let persistTimer: ReturnType<typeof setTimeout> | null = null
   let idFallback = 0
-  const listeners = new Set<(c: Change) => void>()
+  const listeners = new Set<(c: DemoChange) => void>()
   const resetHooks: (() => void)[] = []
   const adoptHooks: (() => void)[] = []
   /** When the manager last changed a task / member (keys "task:<id>", "member:<id>"). Shared via the meta key. */
@@ -414,7 +414,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
     state = { version: 1, workspace: next, nextNumber }
 
     // tell listeners what differs from what they last saw
-    const changes: Change[] = []
+    const changes: DemoChange[] = []
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
     const oldProjects = new Map(prev.projects.map((p) => [p.id, p]))
     for (const project of next.projects) if (!same(oldProjects.get(project.id), project)) changes.push({ type: 'project_upsert', project })
@@ -507,7 +507,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
   }
 
   /** Records the activity (if any), schedules persistence and notifies listeners. */
-  function commit(changes: Change[], draft?: ActivityDraft | null) {
+  function commit(changes: DemoChange[], draft?: ActivityDraft | null) {
     const ws = ensure().workspace
     const out = [...changes]
     if (draft) {
@@ -544,7 +544,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
     emitAll(out)
   }
 
-  function emitAll(out: Change[]) {
+  function emitAll(out: DemoChange[]) {
     for (const change of out) {
       for (const listener of [...listeners]) {
         try {
@@ -635,7 +635,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
     const [task] = s.workspace.tasks.splice(index, 1)
     if (!opts.demo) touch('task', id)
     const draft: ActivityDraft | null = opts.silent ? null : { kind: 'task_deleted', message: taskDeletedMessage(refOf(task), task.title), actorId: null }
-    const changes: Change[] = [{ type: 'task_delete', id }]
+    const changes: DemoChange[] = [{ type: 'task_delete', id }]
     const shrunk = dropAgendaTask(ongoingMeeting(s.workspace.meetings), id)
     if (shrunk) changes.push({ type: 'meeting_upsert', meeting: storeMeeting(shrunk) })
     commit(changes, draft)
@@ -687,7 +687,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
     const target = how.mode === 'member' ? findMember(how.memberId) : undefined
 
     const { tasks: moved, movedOpen } = planMemberRemoval(id, s.workspace.tasks, how, iso())
-    const changes: Change[] = []
+    const changes: DemoChange[] = []
     for (const copy of moved) {
       const task = findTask(copy.id)!
       Object.assign(task, copy)
@@ -703,7 +703,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
   }
 
   function setPresence(ids: Id[], presence: Presence, activity?: { message: string; memberId?: Id } | null): void {
-    const changes: Change[] = []
+    const changes: DemoChange[] = []
     for (const id of ids) {
       const member = findMember(id)
       if (!member || member.presence === presence) continue
@@ -739,7 +739,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
       at: iso(),
     })
     const meeting = storeMeeting(plan.meeting)
-    const changes: Change[] = []
+    const changes: DemoChange[] = []
     for (const copy of plan.members) {
       const member = findMember(copy.id)!
       Object.assign(member, copy)
@@ -760,7 +760,7 @@ export function createEngine(opts: EngineOptions): MockEngine {
     const { notes, outcomes } = checkMeetingEnd(result, current.agendaTaskIds, lookup)
 
     const plan = planMeetingEnd({ meeting: current, notes, outcomes, tasks: s.workspace.tasks, members: s.workspace.members, at: iso() })
-    const changes: Change[] = []
+    const changes: DemoChange[] = []
     for (const copy of plan.tasks) {
       const task = findTask(copy.id)!
       Object.assign(task, copy)

@@ -2,29 +2,29 @@
 // Not a *.test.ts file itself; mock.test.ts and api.test.ts call defineContractSuite().
 import assert from 'node:assert/strict'
 import { beforeEach, afterEach, describe, it } from 'node:test'
-import { DataError, type DataErrorCode, type DataSource } from '../../src/data/DataSource'
-import type { Activity, Change, Meeting, Member, MemberInput, Task, TaskInput, Workspace } from '../../src/data/types'
+import { DataError, type DataErrorCode, type DemoDataSource } from '../../src/data/DataSource'
+import type { Activity, DemoChange, Meeting, Member, MemberInput, Task, TaskInput, Workspace } from '../../src/data/types'
 
 export interface SourceHandle {
-  source: DataSource
+  source: DemoDataSource
   /** Called after each scenario: abort streams, close servers' per-test state. */
   dispose(): Promise<void> | void
 }
 
 export interface Collector {
   /** Data changes only; link-state `connection` changes go to `connections`. */
-  changes: Change[]
+  changes: DemoChange[]
   connections: string[]
   clear(): void
   /** Resolves when a change matching `pred` has arrived (pushed changes may trail the response). */
-  until(pred: (c: Change) => boolean, label: string, ms?: number): Promise<Change>
+  until(pred: (c: DemoChange) => boolean, label: string, ms?: number): Promise<DemoChange>
   /** Waits a short moment so a "nothing should arrive" check is meaningful. */
   settle(ms?: number): Promise<void>
   off(): void
 }
 
-export function collect(source: DataSource): Collector {
-  const changes: Change[] = []
+export function collect(source: DemoDataSource): Collector {
+  const changes: DemoChange[] = []
   const connections: string[] = []
   const off = source.subscribe((c) => {
     if (c.type === 'connection') connections.push(c.status)
@@ -76,9 +76,9 @@ export async function rejectsCode(p: Promise<unknown>, code: DataErrorCode, labe
   assert.fail(`${label}: expected a rejection`)
 }
 
-const isUpsert = (id: string) => (c: Change) => c.type === 'task_upsert' && c.task.id === id
-const isActivity = (pred: (a: Activity) => boolean) => (c: Change) => c.type === 'activity' && pred(c.activity)
-const indexOfChange = (changes: Change[], pred: (c: Change) => boolean) => changes.findIndex(pred)
+const isUpsert = (id: string) => (c: DemoChange) => c.type === 'task_upsert' && c.task.id === id
+const isActivity = (pred: (a: Activity) => boolean) => (c: DemoChange) => c.type === 'activity' && pred(c.activity)
+const indexOfChange = (changes: DemoChange[], pred: (c: DemoChange) => boolean) => changes.findIndex(pred)
 
 function checkWorkspace(ws: Workspace, label: string) {
   const memberIds = new Set(ws.members.map((m) => m.id))
@@ -105,13 +105,13 @@ function checkWorkspace(ws: Workspace, label: string) {
 }
 
 const byNumber = (ws: Workspace, n: number): Task => ws.tasks.find((t) => t.number === n)!
-const upsertOf = (changes: Change[], id: string) => changes.filter((x) => x.type === 'task_upsert' && x.task.id === id) as Extract<Change, { type: 'task_upsert' }>[]
-const meetingUpserts = (changes: Change[]) => changes.filter((x) => x.type === 'meeting_upsert') as Extract<Change, { type: 'meeting_upsert' }>[]
+const upsertOf = (changes: DemoChange[], id: string) => changes.filter((x) => x.type === 'task_upsert' && x.task.id === id) as Extract<DemoChange, { type: 'task_upsert' }>[]
+const meetingUpserts = (changes: DemoChange[]) => changes.filter((x) => x.type === 'meeting_upsert') as Extract<DemoChange, { type: 'meeting_upsert' }>[]
 
 export function defineContractSuite(name: string, create: () => Promise<SourceHandle>) {
   describe(`contract: ${name}`, () => {
     let handle: SourceHandle
-    let source: DataSource
+    let source: DemoDataSource
     let ws: Workspace
     let c: Collector
 
@@ -159,7 +159,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       const backlogTop = Math.max(0, ...ws.tasks.filter((t) => t.assigneeId === null).map((t) => t.order))
       assert.ok(created.order > backlogTop, 'new task goes on top of the backlog')
       await c.until(isUpsert(created.id), 'task_upsert (create)')
-      const createdActivity = (await c.until(isActivity((a) => a.taskId === created.id), 'activity (create)')) as Extract<Change, { type: 'activity' }>
+      const createdActivity = (await c.until(isActivity((a) => a.taskId === created.id), 'activity (create)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(createdActivity.activity.kind, 'task_created')
       assert.equal(createdActivity.activity.actorId, null)
       assert.equal(createdActivity.activity.message, '새 작업 WEB-37을 만들었어요')
@@ -170,7 +170,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       assert.equal(assigned.assigneeId, member.id)
       assert.ok(assigned.order > topOrder, 'assigned task lands on top of the stack')
       await c.until(isUpsert(created.id), 'task_upsert (assign)')
-      const assignAct = (await c.until(isActivity((a) => a.kind === 'task_assigned'), 'activity (assign)')) as Extract<Change, { type: 'activity' }>
+      const assignAct = (await c.until(isActivity((a) => a.kind === 'task_assigned'), 'activity (assign)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(assignAct.activity.message, `WEB-37 '계약 테스트 작업'을 ${member.name} 님에게 배정했어요`)
 
       c.clear()
@@ -184,7 +184,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       assert.equal(done.status, 'done')
       assert.ok(done.completedAt !== null, 'done sets completedAt')
       assert.ok(done.updatedAt >= started.updatedAt)
-      const doneChange = (await c.until(isUpsert(created.id), 'task_upsert (done)')) as Extract<Change, { type: 'task_upsert' }>
+      const doneChange = (await c.until(isUpsert(created.id), 'task_upsert (done)')) as Extract<DemoChange, { type: 'task_upsert' }>
       assert.equal(doneChange.task.completedAt, done.completedAt)
 
       const reopened = await source.updateTask(created.id, { status: 'todo' })
@@ -324,7 +324,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       assert.equal(types.filter((t) => t === 'task_upsert').length, open.length + done.length)
       assert.ok(types.lastIndexOf('task_upsert') < del, 'task upserts before member_delete')
       assert.ok(types.indexOf('activity') > del, 'activity after member_delete')
-      const left = c.changes.find((x) => x.type === 'activity') as Extract<Change, { type: 'activity' }>
+      const left = c.changes.find((x) => x.type === 'activity') as Extract<DemoChange, { type: 'activity' }>
       assert.equal(left.activity.message, `${victim.name} 님이 팀을 떠나 작업 ${open.length}개를 백로그로 옮겼어요`)
     })
 
@@ -357,8 +357,8 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       await c.until((x) => x.type === 'task_delete' && x.id === t.id, 'delete')
       const mine = c.changes.filter((x) => (x.type === 'task_upsert' && x.task.id === t.id) || (x.type === 'task_delete' && x.id === t.id))
       assert.deepEqual(mine.map((x) => x.type), ['task_upsert', 'task_upsert', 'task_delete'])
-      const first = mine[0] as Extract<Change, { type: 'task_upsert' }>
-      const second = mine[1] as Extract<Change, { type: 'task_upsert' }>
+      const first = mine[0] as Extract<DemoChange, { type: 'task_upsert' }>
+      const second = mine[1] as Extract<DemoChange, { type: 'task_upsert' }>
       assert.deepEqual(first.task, t)
       assert.deepEqual(second.task, u)
     })
@@ -382,7 +382,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       assert.equal(on.title, t.title, 'only the given field changes')
       assert.equal(on.status, t.status)
       assert.equal(on.assigneeId, t.assigneeId)
-      const upsert = (await c.until(isUpsert(t.id), 'task_upsert (agenda on)')) as Extract<Change, { type: 'task_upsert' }>
+      const upsert = (await c.until(isUpsert(t.id), 'task_upsert (agenda on)')) as Extract<DemoChange, { type: 'task_upsert' }>
       assert.equal(upsert.task.onAgenda, true)
       assert.equal(upsert.task.number, 31)
       assert.ok((await source.load()).tasks.find((x) => x.id === t.id)!.onAgenda)
@@ -441,10 +441,10 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       assert.deepEqual(meeting.outcomes, [])
 
       // pushed: member_upsert for every attendee (presence meeting), meeting_upsert, one meeting_started activity
-      const act = (await c.until(isActivity((a) => a.kind === 'meeting_started'), 'activity (meeting_started)')) as Extract<Change, { type: 'activity' }>
+      const act = (await c.until(isActivity((a) => a.kind === 'meeting_started'), 'activity (meeting_started)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(act.activity.actorId, null)
       assert.equal(act.activity.message, '스프린트 계획을 시작했어요 · 참석 3명 · 안건 4건')
-      const memberUpserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<Change, { type: 'member_upsert' }>[]
+      const memberUpserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<DemoChange, { type: 'member_upsert' }>[]
       assert.deepEqual(memberUpserts.map((x) => x.member.id).sort(), [...attendeeIds].sort(), 'one upsert per attendee, even one already in a meeting')
       assert.ok(memberUpserts.every((x) => x.member.presence === 'meeting'))
       const pushed = meetingUpserts(c.changes)
@@ -525,7 +525,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       for (const id of attendeeIds) assert.equal(after.members.find((m) => m.id === id)!.presence, 'working', 'attendees are back at their desks')
 
       // pushed: task upserts for decided tasks only, member upserts for the people who moved, meeting_upsert, one activity
-      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<Change, { type: 'activity' }>
+      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(act.activity.actorId, null)
       assert.equal(act.activity.message, '스프린트 계획이 끝났어요 · 결정 4건', 'keep is not a decision')
       for (const n of [35, 14, 20, 32]) {
@@ -535,7 +535,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       }
       assert.equal(upsertOf(c.changes, t31.id).length, 0, 'kept task is untouched')
       assert.equal(upsertOf(c.changes, t34.id).length, 0, 'undecided task is untouched')
-      const memberUpserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<Change, { type: 'member_upsert' }>[]
+      const memberUpserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<DemoChange, { type: 'member_upsert' }>[]
       assert.deepEqual(memberUpserts.map((x) => x.member.id).sort(), [...attendeeIds].sort())
       assert.ok(memberUpserts.every((x) => x.member.presence === 'working'))
       const pushed = meetingUpserts(c.changes)
@@ -614,7 +614,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       c.clear()
       await source.deleteTask(t35.id)
       await c.until((x) => x.type === 'task_delete' && x.id === t35.id, 'task_delete')
-      const upsert = (await c.until((x) => x.type === 'meeting_upsert' && x.meeting.agendaTaskIds.length === 1, 'meeting_upsert (agenda shrinks)')) as Extract<Change, { type: 'meeting_upsert' }>
+      const upsert = (await c.until((x) => x.type === 'meeting_upsert' && x.meeting.agendaTaskIds.length === 1, 'meeting_upsert (agenda shrinks)')) as Extract<DemoChange, { type: 'meeting_upsert' }>
       assert.equal(upsert.meeting.id, meeting.id)
       assert.deepEqual(upsert.meeting.agendaTaskIds, [t20.id])
       assert.deepEqual(upsert.meeting.attendeeIds, [m1.id, m2.id])
@@ -631,7 +631,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       })
       assert.deepEqual(ended.agendaTaskIds, [t20.id])
       assert.deepEqual(ended.outcomes, [{ taskId: t20.id, action: 'status', status: 'review' }], 'the outcome of the deleted task is dropped from the record')
-      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<Change, { type: 'activity' }>
+      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(act.activity.message, '삭제 회의가 끝났어요 · 결정 1건', 'the dropped outcome is not counted')
       const after = await source.load()
       assert.equal(byNumber(after, 20).status, 'review')
@@ -662,7 +662,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       ]
       const ended = await source.endMeeting(meeting.id, { notes: '', outcomes })
       assert.deepEqual(ended.outcomes, outcomes)
-      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<Change, { type: 'activity' }>
+      const act = (await c.until(isActivity((a) => a.kind === 'meeting_ended'), 'activity (meeting_ended)')) as Extract<DemoChange, { type: 'activity' }>
       assert.equal(act.activity.message, '완료 회의가 끝났어요 · 결정 2건')
       const after = await source.load()
       const reopened = after.tasks.find((t) => t.id === t14.id)!
@@ -686,7 +686,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       c.clear()
       await source.deleteMember(m2.id, { mode: 'backlog' })
       await c.until((x) => x.type === 'member_delete' && x.id === m2.id, 'member_delete')
-      const upsert = (await c.until((x) => x.type === 'meeting_upsert' && x.meeting.attendeeIds.length === 2, 'meeting_upsert (attendees shrink)')) as Extract<Change, { type: 'meeting_upsert' }>
+      const upsert = (await c.until((x) => x.type === 'meeting_upsert' && x.meeting.attendeeIds.length === 2, 'meeting_upsert (attendees shrink)')) as Extract<DemoChange, { type: 'meeting_upsert' }>
       assert.equal(upsert.meeting.id, meeting.id)
       assert.deepEqual(upsert.meeting.attendeeIds, [m1.id, m3.id])
       assert.deepEqual(upsert.meeting.agendaTaskIds, meeting.agendaTaskIds, 'the agenda is unchanged')
@@ -712,7 +712,7 @@ export function defineContractSuite(name: string, create: () => Promise<SourceHa
       const after = await source.load()
       assert.equal(after.members.find((m) => m.id === m1.id)!.presence, 'working')
       assert.equal(after.members.find((m) => m.id === m2.id)!.presence, 'break')
-      const upserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<Change, { type: 'member_upsert' }>[]
+      const upserts = c.changes.filter((x) => x.type === 'member_upsert') as Extract<DemoChange, { type: 'member_upsert' }>[]
       assert.deepEqual(upserts.map((x) => x.member.id), [m1.id], 'member_upsert only for who changed')
     })
 

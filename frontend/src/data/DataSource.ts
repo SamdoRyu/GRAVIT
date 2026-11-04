@@ -1,8 +1,86 @@
-// The only door between the app and its data. Owned by the architect.
-// Today: MockDataSource (seed + localStorage + demo mode). Later: ApiDataSource, GitHubDataSource…
-import type { Change, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Reassign, Task, TaskInput, TaskPatch, Workspace } from './types'
+// 앱과 데이터 사이의 유일한 문. 소유: D (프론트 HUD · 데이터).
+// 구현: mock(src/data/mock — 브라우저 seed + localStorage) · api(src/data/api — Spring /api/**).
+import type {
+  Change,
+  DemoChange,
+  ErrorCode,
+  Id,
+  LoginOptions,
+  MeResponse,
+  Meeting,
+  MeetingEnd,
+  MeetingStart,
+  Member,
+  MemberInput,
+  MemberPatch,
+  OpenWorkspaceRequest,
+  Reassign,
+  RepositoryChoiceResponse,
+  SyncStatus,
+  Task,
+  TaskInput,
+  TaskPatch,
+  Workspace,
+  WorkspaceListItem,
+  WorkspaceSnapshot,
+  WorkspaceSummary,
+} from './types'
 
+/**
+ * v1 DataSource — 메서드는 API 엔드포인트와 1:1이다(CONTRACTS_API.md 「0」 DataSource 열, CONTRACTS.md 「8」).
+ * 인자 순서는 (workspaceId, 경로의 다른 ID…, 요청 DTO), 반환은 응답 DTO 그대로(204는 void).
+ * 실패는 DataError(message, code)로 던진다.
+ *
+ * 지금은 P0 메서드만 있다(#8 T5-a). 나머지는 기능 Issue마다 그 PR에서 더한다(T5-b).
+ */
 export interface DataSource {
+  /** 화면에 보일 이름, 예: "로컬 mock 데이터" */
+  readonly label: string
+
+  /** GET /api/login-options */
+  getLoginOptions(): Promise<LoginOptions>
+  /** GET /api/me — 세션이 없으면 unauthorized */
+  getMe(): Promise<MeResponse>
+  /** POST /api/logout — 세션이 없어도 성공 */
+  logout(): Promise<void>
+
+  /** GET /api/repositories */
+  listRepositories(): Promise<RepositoryChoiceResponse>
+  /** GET /api/workspaces — displayName 오름차순 */
+  listWorkspaces(): Promise<WorkspaceListItem[]>
+  /** POST /api/workspaces — 이어서 첫 동기화를 시작한다 */
+  openWorkspace(request: OpenWorkspaceRequest): Promise<WorkspaceSummary>
+
+  /** GET W/snapshot */
+  load(workspaceId: Id): Promise<WorkspaceSnapshot>
+  /** GET W/events (SSE). 구독을 끊는 함수를 돌려준다. */
+  subscribe(workspaceId: Id, onChange: (change: Change) => void): () => void
+
+  /** POST W/sync — 202 SyncStatus(state: 'running') */
+  requestSync(workspaceId: Id): Promise<SyncStatus>
+  /** GET W/sync-status */
+  getSyncStatus(workspaceId: Id): Promise<SyncStatus>
+}
+
+/** CONTRACTS.md 「6」의 8개 에러 코드 전부. */
+export type DataErrorCode = ErrorCode
+
+/** DataSource가 거부할 때 이것을 던진다 — 화면은 `message`(한국어)를 보인다. */
+export class DataError extends Error {
+  code: DataErrorCode
+  constructor(message: string, code: DataErrorCode = 'invalid') {
+    super(message)
+    this.name = 'DataError'
+    this.code = code
+  }
+}
+
+// ============================================================================
+// 데모 DataSource — 지금 화면(store)이 쓰는 이전 인터페이스. 화면이 v1으로 옮겨 가면 지운다.
+// 계약에 없는 CRUD · 데모 모드 메서드다(CONTRACTS.md 「4」 · 「8」).
+// ============================================================================
+
+export interface DemoDataSource {
   /** Human-readable name for the UI, e.g. "로컬 데모 데이터". */
   readonly label: string
 
@@ -32,7 +110,7 @@ export interface DataSource {
    * Every change (own calls, demo mode, other users/server) is pushed here, plus one
    * `activity` change per meaningful action. Returns an unsubscribe function.
    */
-  subscribe(listener: (change: Change) => void): () => void
+  subscribe(listener: (change: DemoChange) => void): () => void
 
   /**
    * Optional: simulated teammates working on their own. Sources without it hide the toggle.
@@ -44,16 +122,4 @@ export interface DataSource {
   getDemoMode?(): Promise<boolean>
   /** Optional: wipe local data back to the seed. */
   reset?(): Promise<Workspace>
-}
-
-export type DataErrorCode = 'invalid' | 'not_found' | 'conflict' | 'unavailable'
-
-/** Rejected promises from a DataSource carry this so the UI can show `message` (Korean). */
-export class DataError extends Error {
-  code: DataErrorCode
-  constructor(message: string, code: DataErrorCode = 'invalid') {
-    super(message)
-    this.name = 'DataError'
-    this.code = code
-  }
 }

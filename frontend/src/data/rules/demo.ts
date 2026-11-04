@@ -4,13 +4,13 @@
 import { PRIORITY_META } from '../meta'
 import { backlogTasks, todayIso, workload } from '../selectors'
 import { DEMO_TASK_PREFIX, isDemoTaskId } from './constants'
-import type { Estimate, Id, Member, Priority, Project, Task, TaskInput, Workspace } from '../types'
+import type { Estimate, Id, Member, DemoPriority, Project, Task, TaskInput, Workspace } from '../types'
 
 export interface PoolTask {
   p: 'WEB' | 'APP' | 'OPS'
   title: string
   desc: string
-  pri: Priority
+  pri: DemoPriority
   est: Estimate
 }
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { createMemoryStorage, createMockDataSource, createMockDataSourceForTest, createSharedMemoryStorage } from '../../src/data/mock'
 import { STORAGE_KEY } from '../../src/data/mock/storage'
-import type { Change } from '../../src/data/types'
+import type { DemoChange } from '../../src/data/types'
 import { defineContractSuite, rejectsWith } from './scenarios'
 
 defineContractSuite('mock', async () => ({
@@ -55,7 +55,7 @@ describe('mock only', () => {
     }
     const run = async (withMeeting: boolean) => {
       const h = createMockDataSourceForTest({ storage: createMemoryStorage(), latencyMs: [0, 0], autoRun: false, locks: null, now: () => new Date(clock), random })
-      const changes: Change[] = []
+      const changes: DemoChange[] = []
       h.source.subscribe((c) => changes.push(c))
       h.source.setDemoMode!(true)
       const ws = await h.source.load()
@@ -123,7 +123,7 @@ describe('mock only', () => {
     const b = createMockDataSourceForTest({ storage: hub.view(), latencyMs: [0, 0], autoRun: false, locks: null })
     const ws = await a.source.load()
     await b.source.load()
-    const seen: Change[] = []
+    const seen: DemoChange[] = []
     b.source.subscribe((c) => seen.push(c))
     const t = ws.tasks.find((x) => x.number === 31)!
     await a.source.updateTask(t.id, { onAgenda: true })
@@ -178,7 +178,7 @@ describe('mock only', () => {
     await b.source.load()
     const meeting = await a.source.startMeeting({ title: '경합 회의', attendeeIds: [ws.members[0].id] })
     a.flush()
-    const seenByB: Change[] = []
+    const seenByB: DemoChange[] = []
     b.source.subscribe((c) => seenByB.push(c))
     // tab B deletes an agenda task (an unsaved change of the ongoing meeting) ...
     const victim = meeting.agendaTaskIds[0]
@@ -207,7 +207,7 @@ describe('mock only', () => {
     const b = createMockDataSourceForTest({ storage: hub.view(), latencyMs: [0, 0], autoRun: false, locks: null, now: () => new Date(clockB) })
     const ws = await a.source.load()
     await b.source.load()
-    const seenByB: Change[] = []
+    const seenByB: DemoChange[] = []
     b.source.subscribe((c) => seenByB.push(c))
     await a.source.startMeeting({ title: '먼저 시작', attendeeIds: [ws.members[0].id] })
     await b.source.startMeeting({ title: '나중 시작', attendeeIds: [ws.members[1].id] })

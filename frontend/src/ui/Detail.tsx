@@ -1,6 +1,6 @@
 // Detail drawer for the selected task or member. OWNER: ui-builder.
 import { useMemo, useState } from 'react'
-import type { Estimate, Id, Member, Priority, TaskStatus } from '../data/types'
+import type { Estimate, Id, Member, DemoPriority, TaskStatus } from '../data/types'
 import { memberSignal, memberVitals, SIGNAL_META } from '../data/insights'
 import { ESTIMATES, PRIORITIES, PRIORITY_META, STATUSES, STATUS_META } from '../data/meta'
 import { taskKey, tasksOf, workloadLevel } from '../data/selectors'
@@ -134,7 +134,7 @@ function TaskDetail({ taskId }: { taskId: Id }) {
           </label>
           <label className="fld">
             <span className="fld-label">우선순위</span>
-            <select className="select" value={task.priority} onChange={(e) => void st.updateTask(taskId, { priority: e.target.value as Priority })}>
+            <select className="select" value={task.priority} onChange={(e) => void st.updateTask(taskId, { priority: e.target.value as DemoPriority })}>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {PRIORITY_META[p].label}

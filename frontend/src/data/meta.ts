@@ -1,5 +1,5 @@
 // Labels, colors and option lists for domain enums. Owned by the architect.
-import type { Estimate, Presence, Priority, TaskStatus } from './types'
+import type { Estimate, Presence, DemoPriority, TaskStatus } from './types'
 
 export const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 export const STATUS_META: Record<TaskStatus, { label: string; color: string }> = {
@@ -9,8 +9,8 @@ export const STATUS_META: Record<TaskStatus, { label: string; color: string }> =
   done: { label: '완료', color: '#22b07d' },
 }
 
-export const PRIORITIES: Priority[] = ['urgent', 'high', 'medium', 'low']
-export const PRIORITY_META: Record<Priority, { label: string; color: string; weight: number }> = {
+export const PRIORITIES: DemoPriority[] = ['urgent', 'high', 'medium', 'low']
+export const PRIORITY_META: Record<DemoPriority, { label: string; color: string; weight: number }> = {
   urgent: { label: '긴급', color: '#e5484d', weight: 4 },
   high: { label: '높음', color: '#f08a24', weight: 3 },
   medium: { label: '보통', color: '#e8c33a', weight: 2 },

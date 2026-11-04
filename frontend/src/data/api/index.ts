@@ -1,9 +1,9 @@
-// OWNER: data-engineer. DataSource backed by the local server (docs/API.md).
+// OWNER: data-engineer. DemoDataSource backed by the local server (docs/API.md).
 // REST via fetch; changes via an SSE stream read with fetch + ReadableStream (so it runs in Node
 // tests and can send Last-Event-ID). The stream runs while there is at least one subscriber and
 // the workspace has been loaded; it reconnects with backoff and replays from the last seen id.
-import { DataError, type DataErrorCode, type DataSource } from '../DataSource'
-import type { Change, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Reassign, Task, TaskInput, TaskPatch, Workspace } from '../types'
+import { DataError, type DataErrorCode, type DemoDataSource } from '../DataSource'
+import type { DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Reassign, Task, TaskInput, TaskPatch, Workspace } from '../types'
 import { createSseParser } from './sse'
 
 export interface ApiOptions {
@@ -11,8 +11,8 @@ export interface ApiOptions {
   baseUrl?: string
 }
 
-/** The DataSource plus an explicit teardown (tests, hot reload). */
-export type ApiDataSource = DataSource & { close(): void }
+/** The DemoDataSource plus an explicit teardown (tests, hot reload). */
+export type ApiDataSource = DemoDataSource & { close(): void }
 
 const BACKOFF_START_MS = 1000
 const BACKOFF_MAX_MS = 10_000
@@ -52,7 +52,7 @@ type EntityKind = 'task' | 'member' | 'meeting'
 
 export function createApiDataSource(opts: ApiOptions = {}): ApiDataSource {
   const base = (opts.baseUrl ?? '').replace(/\/+$/, '')
-  const listeners = new Set<(c: Change) => void>()
+  const listeners = new Set<(c: DemoChange) => void>()
 
   let loaded = false
   /** Stream position: id of the last change delivered (or the X-Seq of the loaded workspace). */
@@ -136,7 +136,7 @@ export function createApiDataSource(opts: ApiOptions = {}): ApiDataSource {
 
   // ---- change stream -----------------------------------------------------------
 
-  function emit(change: Change) {
+  function emit(change: DemoChange) {
     for (const l of [...listeners]) {
       try {
         l(change)
@@ -169,7 +169,7 @@ export function createApiDataSource(opts: ApiOptions = {}): ApiDataSource {
     emit({ type: 'demo', on })
   }
 
-  function onChange(change: Change, seq: number | null) {
+  function onChange(change: DemoChange, seq: number | null) {
     if (seq !== null) {
       if (change.type === 'task_upsert') remember(`task:${change.task.id}`, seq, change.task)
       else if (change.type === 'task_delete') remember(`task:${change.id}`, seq, null)
@@ -231,9 +231,9 @@ export function createApiDataSource(opts: ApiOptions = {}): ApiDataSource {
               return
             }
             if (e.event !== 'change') return
-            let change: Change
+            let change: DemoChange
             try {
-              change = JSON.parse(e.data) as Change
+              change = JSON.parse(e.data) as DemoChange
             } catch {
               return
             }
@@ -295,7 +295,7 @@ export function createApiDataSource(opts: ApiOptions = {}): ApiDataSource {
     }
   }
 
-  // ---- DataSource --------------------------------------------------------------
+  // ---- DemoDataSource --------------------------------------------------------------
 
   const source: ApiDataSource = {
     label: '로컬 서버',
