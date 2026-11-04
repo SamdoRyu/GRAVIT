@@ -49,7 +49,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #47 도움 요청 만들기 · 읽기, #48 코멘트, #49 닫기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
+ * #47 도움 요청 만들기 · 읽기, #48 코멘트, #49 닫기, #56 강사에게 요청 —실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
  * 세션은 {@link TestLogin}, 쓰기는 화면과 같은 CSRF 쿠키 → 헤더 + Origin. 테스트마다 트랜잭션을 되돌린다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/help}.
  */
@@ -490,5 +490,68 @@ class HelpRequestIntegrationTest {
 
         close(ws, helpRequest, aliceSession, closeBody(null, "")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("invalid"));
+    }
+
+    // ---- #56 강사에게 요청 ------------------------------------------------------------------------
+
+    private ResultActions requestInstructor(Workspace workspace, HelpRequest helpRequest, MockHttpSession session)
+            throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post(base(workspace) + "/" + Ids.toApi(helpRequest.getId()) + "/instructor-request")
+                .session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN));
+    }
+
+    /** 요청자가 켜면 그 글에 지정된 강사가 답할 수 있고, 켜기도 강사 답변도 상태를 바꾸지 않는다. */
+    @Test
+    void requesterTurnsOnInstructorRequestThenInstructorAnswers() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        String response = requestInstructor(ws, helpRequest, aliceSession)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(Ids.toApi(helpRequest.getId())))
+                .andExpect(jsonPath("$.instructorRequested").value(true))
+                .andExpect(jsonPath("$.instructorRequestedAt").isString())
+                .andExpect(jsonPath("$.status").value("open"))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("help", "help-request-summary.json"), actual);
+        ContractShape.assertCommonRules(actual);
+
+        comment(ws, helpRequest, instructorSession, "쿠키 설정을 보세요").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isInstructorAnswer").value(true));
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    @Test
+    void alreadyRequestedKeepsTheFirstTime() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        setColumn(helpRequest, "instructor_requested_at = '2026-11-05 02:00:00'");
+
+        requestInstructor(ws, helpRequest, aliceSession).andExpect(status().isOk())
+                .andExpect(jsonPath("$.instructorRequested").value(true))
+                .andExpect(jsonPath("$.instructorRequestedAt").value("2026-11-05T02:00:00Z"));
+    }
+
+    @Test
+    void onlyRequesterCanRequestInstructor() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        requestInstructor(ws, helpRequest, bobSession).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        requestInstructor(ws, helpRequest, instructorSession).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        flushAndClear();
+        assertThat(helpRequests.findById(helpRequest.getId()).orElseThrow().isInstructorRequested()).isFalse();
+    }
+
+    /** IDOR — 다른 사무실의 도움 요청을 내 사무실 경로로 켜면 404. */
+    @Test
+    void requestingInstructorOnHelpRequestOfAnotherWorkspaceIs404() throws Exception {
+        HelpRequest elsewhere = helpRequests.saveAndFlush(new HelpRequest(otherWs, aliceElsewhere, "질문", null, T0));
+
+        requestInstructor(ws, elsewhere, aliceSession).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
     }
 }
