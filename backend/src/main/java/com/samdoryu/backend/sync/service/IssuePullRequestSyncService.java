@@ -3,17 +3,20 @@ package com.samdoryu.backend.sync.service;
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.GithubReaderSelector;
 import com.samdoryu.backend.github.dto.GithubIssue;
+import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
 import com.samdoryu.backend.github.dto.GithubRepoRef;
 import com.samdoryu.backend.github.dto.GithubReview;
 import com.samdoryu.backend.github.dto.GithubUser;
 import com.samdoryu.backend.sync.domain.StoredGithubJson;
 import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionIssueLink;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskAssignee;
 import com.samdoryu.backend.sync.domain.TaskClosedReason;
 import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionIssueLinkRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
 import com.samdoryu.backend.sync.repository.TaskRepository;
@@ -35,7 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 이슈 · PR · 리뷰 · 커밋 시각 · 라벨을 읽어 앱 모델로 저장한다(#69 · FR-GH-02 · CONTRACTS.md 「2」 소유와 변경 주체).
+ * 이슈 · PR · 리뷰 · 커밋 시각 · 라벨 · PR–이슈 공식 연결을 읽어 앱 모델로 저장한다(#69 · #71 · FR-GH-02 · 04,
+ * CONTRACTS.md 「2」 소유와 변경 주체). 팀원은 먼저 {@link WorkspaceSyncService}가 맞춘다.
  * <ul>
  *   <li>GitHub 식별자 {@code (사무실, 번호)}로 앱 행을 찾아 덮어쓰고, 없으면 만든다. 행을 지우지 않는다.</li>
  *   <li>담당자는 GitHub 담당자 중 <b>그 사무실의 지금 팀원 전원</b>으로 맞춘다 — 대표 담당자는 저장하지 않는다(순서는
@@ -57,15 +61,17 @@ public class IssuePullRequestSyncService {
     private final TaskRepository taskRepository;
     private final TaskAssigneeRepository taskAssigneeRepository;
     private final SubmissionRepository submissionRepository;
+    private final SubmissionIssueLinkRepository submissionIssueLinkRepository;
 
     public IssuePullRequestSyncService(WorkspaceService workspaceService, GithubReaderSelector readerSelector,
             TaskRepository taskRepository, TaskAssigneeRepository taskAssigneeRepository,
-            SubmissionRepository submissionRepository) {
+            SubmissionRepository submissionRepository, SubmissionIssueLinkRepository submissionIssueLinkRepository) {
         this.workspaceService = workspaceService;
         this.readerSelector = readerSelector;
         this.taskRepository = taskRepository;
         this.taskAssigneeRepository = taskAssigneeRepository;
         this.submissionRepository = submissionRepository;
+        this.submissionIssueLinkRepository = submissionIssueLinkRepository;
     }
 
     /** @param issues 이번에 저장한 이슈 수, {@code pullRequests} PR 수 */
@@ -93,7 +99,7 @@ public class IssuePullRequestSyncService {
         return new Result(issues.size(), pullRequests.size());
     }
 
-    private static GithubRepoRef repoRef(Workspace workspace) {
+    static GithubRepoRef repoRef(Workspace workspace) {
         if (workspace.getKind() == WorkspaceKind.DEMO) {
             return GithubRepoRef.DEMO;
         }
@@ -196,7 +202,39 @@ public class IssuePullRequestSyncService {
                 .stateChangedAt(stateChangedAt)
                 .syncedAt(now)
                 .build();
-        existing.ifPresentOrElse(s -> s.overwriteFrom(fresh), () -> submissionRepository.save(fresh));
+        Submission submission = existing.map(s -> s.overwriteFrom(fresh))
+                .orElseGet(() -> submissionRepository.save(fresh));
+        syncIssueLinks(workspace, submission, reader.linkedIssues(repo, pr.number()));
+    }
+
+    /**
+     * PR–이슈 연결을 GitHub 공식 연결로 맞춘다(#71 · FR-GH-04). 어댑터가 준 연결만 쓰고 본문 · 제목은 읽지 않는다.
+     * GitHub에서 풀린 연결은 지운다(담당자처럼 GitHub 값으로 덮어쓴다). 아직 저장되지 않은 이슈를 가리키면 건너뛴다 —
+     * 그 이슈가 동기화된 뒤 PR이 다시 바뀌면 이어진다.
+     */
+    private void syncIssueLinks(Workspace workspace, Submission submission, List<GithubIssueLink> links) {
+        Map<Long, SubmissionIssueLink> current = submissionIssueLinkRepository.findBySubmissionId(submission.getId())
+                .stream()
+                .collect(Collectors.toMap(link -> link.getTask().getId(), Function.identity()));
+        Map<Long, Task> wanted = new LinkedHashMap<>();
+        Map<Long, String> sources = new LinkedHashMap<>();
+        for (GithubIssueLink link : links) {
+            taskRepository.findByWorkspaceIdAndGithubIssueNumber(workspace.getId(), link.issueNumber())
+                    .ifPresent(task -> {
+                        wanted.putIfAbsent(task.getId(), task);
+                        sources.putIfAbsent(task.getId(), link.source().name());
+                    });
+        }
+        current.forEach((taskId, row) -> {
+            if (!wanted.containsKey(taskId)) {
+                submissionIssueLinkRepository.delete(row);
+            }
+        });
+        wanted.forEach((taskId, task) -> {
+            if (!current.containsKey(taskId)) {
+                submissionIssueLinkRepository.save(new SubmissionIssueLink(submission, task, sources.get(taskId)));
+            }
+        });
     }
 
     private static SubmissionState submissionState(GithubPullRequest pr) {

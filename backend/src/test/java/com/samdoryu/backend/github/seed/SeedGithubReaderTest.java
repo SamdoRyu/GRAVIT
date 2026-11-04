@@ -2,8 +2,10 @@ package com.samdoryu.backend.github.seed;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.samdoryu.backend.github.dto.GithubIssue;
+import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
 import com.samdoryu.backend.github.dto.GithubRepoRef;
 import com.samdoryu.backend.github.dto.GithubReview;
@@ -90,5 +92,23 @@ class SeedGithubReaderTest {
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> new SeedGithubReader("seed/missing.json"))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void collaboratorsAreTheFourSeedMembersAndTheMentorIsNotOne() {
+        assertThat(reader.collaborators(GithubRepoRef.DEMO))
+                .extracting(c -> c.user().login(), c -> c.admin())
+                .containsExactly(tuple("seed-kim", true), tuple("seed-lee", false), tuple("seed-park", false),
+                        tuple("seed-choi", false));
+        assertThat(reader.collaborators(GithubRepoRef.DEMO)).allSatisfy(c -> assertThat(c.user().id()).isNull());
+    }
+
+    @Test
+    void linkedIssuesAreOfficialLinksOnly() {
+        assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 7))
+                .containsExactly(new GithubIssueLink(1, GithubIssueLink.Source.CLOSING_REFERENCE));
+        assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 9)).extracting(l -> l.issueNumber()).containsExactly(4);
+        assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 10)).isEmpty();
+        assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 999)).isEmpty();
     }
 }
