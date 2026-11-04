@@ -14,6 +14,7 @@ import type {
   HelpRequestDetail,
   HelpRequestSummary,
   MeResponse,
+  MeetingDto,
   PageResponse,
   TimelineEntry,
   WorkspaceSnapshot,
@@ -83,6 +84,17 @@ export const agendaItemExample = {
     },
   ],
 } satisfies AgendaItemDto
+
+// contract/examples/meeting/meeting.json — CONTRACTS_API.md 「10」
+export const meetingExample = {
+  id: '5',
+  status: 'ended',
+  startedAt: '2026-11-05T05:00:00Z',
+  endedAt: '2026-11-05T05:45:00Z',
+  attendeeMemberIds: ['2', '3'],
+  notes: '실패 응답 모양은 계약대로 맞추기로 함',
+  discussedAgendaItemIds: ['21'],
+} satisfies MeetingDto
 
 // contract/examples/report/timeline-page.json — CONTRACTS_API.md 「15」
 export const timelinePageExample = {
@@ -286,6 +298,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-summary.json': helpRequestSummaryExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
+  'meeting/meeting.json': meetingExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
 }

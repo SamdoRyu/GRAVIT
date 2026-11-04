@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "status": "ended",
+  "startedAt": "2026-11-05T05:00:00Z",
+  "endedAt": "2026-11-05T05:45:00Z",
+  "attendeeMemberIds": ["2", "3"],
+  "notes": "실패 응답 모양은 계약대로 맞추기로 함",
+  "discussedAgendaItemIds": ["21"]
+}
