@@ -33,7 +33,7 @@ class MemberSyncServiceTest {
     private final WorkspaceService workspaceService = mock(WorkspaceService.class);
     private final MemberRepository memberRepository = mock(MemberRepository.class);
     private final MemberSyncService service = new MemberSyncService(workspaceService, memberRepository,
-            new AppProperties("http://localhost:5173", Set.of(INSTRUCTOR_ID), false));
+            new AppProperties("http://localhost:5173", Set.of(INSTRUCTOR_ID), false, null));
     private final Workspace workspace = Workspace.demo("ws", T0);
     private final List<Member> stored = new ArrayList<>();
     private long nextId = 100;

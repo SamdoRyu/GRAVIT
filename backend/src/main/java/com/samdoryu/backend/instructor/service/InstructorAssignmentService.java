@@ -1,6 +1,7 @@
 package com.samdoryu.backend.instructor.service;
 
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,13 @@ public class InstructorAssignmentService {
     public boolean isCurrentlyAssigned(Long workspaceId, Long instructorGithubUserId) {
         return instructorAssignmentRepository.existsByWorkspaceIdAndInstructorGithubUserIdAndUnassignedAtIsNull(
                 workspaceId, instructorGithubUserId);
+    }
+
+    /** 이 강사가 지금 지정된 사무실 ID 전부 — {@code GET /api/workspaces}(강사는 지정된 사무실 전부). */
+    @Transactional(readOnly = true)
+    public List<Long> currentWorkspaceIds(Long instructorGithubUserId) {
+        return instructorAssignmentRepository.findByInstructorGithubUserIdAndUnassignedAtIsNull(instructorGithubUserId)
+                .stream().map(assignment -> assignment.getWorkspace().getId()).toList();
     }
 
     /** 지금 지정된 사무실이 하나 이상인가 — {@code MeResponse.isInstructor}의 재료. */

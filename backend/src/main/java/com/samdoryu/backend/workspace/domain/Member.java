@@ -147,6 +147,13 @@ public class Member {
         return user == null ? null : user.getGithubUserId();
     }
 
+    /** 활동 기록 수집 동의(FR-ACT · P12) — 앱 칸. 이미 동의했으면 처음 시각을 그대로 둔다. */
+    public void giveActivityConsent(Instant at) {
+        if (activityConsentedAt == null) {
+            this.activityConsentedAt = Objects.requireNonNull(at);
+        }
+    }
+
     /** 콜라보레이터에서 빠짐 — 행은 남기고 책상 자리를 비운다(과거 평가 · 안건 · 코멘트가 가리킨다). */
     public void remove(Instant removedAt) {
         this.removedAt = Objects.requireNonNull(removedAt);

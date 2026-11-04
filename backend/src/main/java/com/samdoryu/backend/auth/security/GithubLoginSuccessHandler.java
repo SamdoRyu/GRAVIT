@@ -4,6 +4,7 @@ import com.samdoryu.backend.auth.service.AppPrincipal;
 import com.samdoryu.backend.auth.service.GithubLoginService;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.github.GithubUserClient;
+import com.samdoryu.backend.github.GithubUserToken;
 import com.samdoryu.backend.github.dto.GithubLoginProfile;
 import com.samdoryu.backend.github.dto.GithubRepoPermission;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,9 +27,9 @@ import org.springframework.security.web.context.SecurityContextRepository;
  * GitHub 로그인 성공 — 세션의 인증을 앱 사용자({@link AppPrincipal})로 바꾸고 화면 주소로 {@code 302}(CONTRACTS_API.md 「2」).
  * 세션 ID는 이 처리 전에 Spring Security가 새로 발급한다(세션 고정 방지).
  * <ol>
- *   <li>그 로그인 요청에만 있는 사용자 토큰으로 레포 권한을 읽는다(허용 목록 강사 계정은 읽지 않는다). GitHub 호출은 DB
- *       트랜잭션 밖에서 한다.</li>
- *   <li>사용자 · 역할을 정해 세션에 둔다. 토큰은 지우고 세션에 남기지 않는다.</li>
+ *   <li>사용자 토큰으로 레포 권한을 읽는다(허용 목록 강사 계정은 읽지 않는다). GitHub 호출은 DB 트랜잭션 밖에서 한다.</li>
+ *   <li>사용자 · 역할을 정해 세션에 둔다. 사용자 토큰은 {@link GithubUserToken}으로 <b>서버 세션에만</b> 둔다 — 레포 선택 ·
+ *       사무실 열기가 로그인 뒤에도 GitHub를 읽는다(#68). 강사 계정은 쓰지 않으므로 두지 않는다.</li>
  * </ol>
  * 레포 권한을 읽지 못하거나 GitHub 사용자 정보가 틀리면 <b>로그인하지 않은 상태</b>로 화면에 돌려보낸다 — 역할이 빠진
  * 반쪽 로그인을 만들지 않는다.
@@ -59,11 +60,18 @@ public class GithubLoginSuccessHandler implements AuthenticationSuccessHandler {
         SecurityContext context = contextHolder.createEmptyContext();
         try {
             GithubLoginProfile profile = GithubLoginProfile.from((OAuth2User) authentication.getPrincipal());
-            List<GithubRepoPermission> permissions = githubLoginService.needsRepoPermissions(profile)
-                    ? githubUserClient.repositoryPermissions(accessToken(authentication, request))
-                    : List.of();
+            String userToken = null;
+            List<GithubRepoPermission> permissions = List.of();
+            if (githubLoginService.needsRepoPermissions(profile)) {
+                userToken = accessToken(authentication, request);
+                permissions = githubUserClient.repositoryPermissions(userToken);
+            }
             AppPrincipal principal = githubLoginService.login(profile, permissions);
             context.setAuthentication(principal.toAuthentication());
+            if (userToken != null) {
+                // 레포 선택 · 사무실 열기가 로그인 뒤에도 GitHub를 읽는다 — 서버 세션에만 둔다(#68)
+                GithubUserToken.store(request.getSession(), userToken);
+            }
         } catch (IllegalArgumentException | IllegalStateException | ApiException e) {
             // 사용자 정보 형식 오류 · 토큰 없음 · GitHub 오류 — 로그인하지 않은 상태로 화면에 돌려보낸다
             log.warn("GitHub 로그인 처리 실패: {}", e instanceof ApiException api

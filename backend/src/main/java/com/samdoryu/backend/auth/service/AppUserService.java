@@ -2,6 +2,8 @@ package com.samdoryu.backend.auth.service;
 
 import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
+import com.samdoryu.backend.common.error.ApiException;
+import com.samdoryu.backend.common.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +15,12 @@ public class AppUserService {
 
     public AppUserService(AppUserRepository appUserRepository) {
         this.appUserRepository = appUserRepository;
+    }
+
+    /** 세션 사용자의 행 — 없으면(지워진 사용자) 다시 로그인해야 한다({@code unauthorized}). */
+    @Transactional(readOnly = true)
+    public AppUser require(Long userId) {
+        return appUserRepository.findById(userId).orElseThrow(() -> new ApiException(ErrorCode.UNAUTHORIZED));
     }
 
     /**
