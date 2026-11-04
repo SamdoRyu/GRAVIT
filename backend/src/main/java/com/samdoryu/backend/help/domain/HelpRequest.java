@@ -24,7 +24,7 @@ import org.hibernate.annotations.Formula;
 /**
  * 도움 요청(CONTRACTS.md 「2」 · FR-LRN-15). 행을 지우지 않는다.
  * 전환된 안건 · 코멘트 수는 저장하지 않고 읽을 때 계산한다 — 안건 쪽 {@code source_help_request_id}가 원본이다.
- * 닫기 · 안건 전환 · 강사 요청 켜기는 각 기능 Issue에서 더한다.
+ * 안건 전환은 그 기능 Issue(#51)에서 더한다.
  */
 @Entity
 @Table(name = "help_request")
@@ -99,6 +99,13 @@ public class HelpRequest {
     /** 코멘트가 붙은 뒤의 상태(FR-LRN-16). 코멘트를 받을 수 있는지는 부르는 쪽이 먼저 확인한다. */
     public void onComment(boolean byRequester, boolean instructorAnswer) {
         this.status = status.afterComment(byRequester, instructorAnswer);
+    }
+
+    /** "강사에게 요청" 켜기(FR-LRN-21). 이미 켜져 있으면 처음 시각을 그대로 둔다. 상태는 바꾸지 않는다. */
+    public void requestInstructor(Instant requestedAt) {
+        if (instructorRequestedAt == null) {
+            this.instructorRequestedAt = Objects.requireNonNull(requestedAt);
+        }
     }
 
     /** 요청자가 닫음(FR-LRN-17) → {@code resolved}. 닫을 수 있는 상태 · 코멘트 조건은 부르는 쪽이 먼저 확인한다. */

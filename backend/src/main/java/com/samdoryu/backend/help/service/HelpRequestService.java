@@ -104,6 +104,22 @@ public class HelpRequestService {
                 helpCommentRepository.findByHelpRequestIdOrderByCreatedAtAscIdAsc(helpRequestId), now);
     }
 
+    /**
+     * "강사에게 요청" 켜기(FR-LRN-21) — 요청자만. 검사 순서는 대상(404) → 요청자(403 — 강사 포함).
+     * 계약에 상태 조건이 없어 어느 상태에서든 켤 수 있고, 이미 켜져 있으면 그대로(처음 시각 유지)다.
+     */
+    @Transactional
+    public HelpRequestSummary requestInstructor(WorkspaceAccess access, Long helpRequestId) {
+        HelpRequest helpRequest = helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, access.workspaceId())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        if (!access.isSelf(helpRequest.getRequester().getId())) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        Instant now = Instant.now();
+        helpRequest.requestInstructor(now);
+        return HelpRequestSummary.of(helpRequest, now);
+    }
+
     /** 도움이 된 코멘트 — 이 글의 코멘트이고, 강사 답변 · 요청자 본인 코멘트가 아니어야 한다. 아니면 {@code invalid}. */
     private HelpComment requireHelpfulComment(HelpRequest helpRequest, Long commentId) {
         HelpComment comment = helpCommentRepository.findByIdAndHelpRequestId(commentId, helpRequest.getId())

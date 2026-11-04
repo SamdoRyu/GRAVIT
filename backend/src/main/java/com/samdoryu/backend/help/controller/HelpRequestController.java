@@ -66,4 +66,11 @@ public class HelpRequestController {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return helpRequestService.close(access, Ids.fromPath(helpRequestId), request);
     }
+
+    /** 팀원 — 요청자만(그 밖의 팀원 · 강사는 {@code forbidden_role}). 켜진 글에만 강사가 답변할 수 있다. */
+    @PostMapping("/{helpRequestId}/instructor-request")
+    public HelpRequestSummary requestInstructor(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return helpRequestService.requestInstructor(access, Ids.fromPath(helpRequestId));
+    }
 }
