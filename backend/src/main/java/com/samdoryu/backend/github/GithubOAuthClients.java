@@ -17,8 +17,8 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
  *   <li>OAuth 코드 교환 — 허용된 {@code POST}(인증 요청)</li>
  *   <li>로그인한 사용자 정보 {@code GET /user} — 읽기</li>
  * </ul>
- * 받은 사용자 토큰은 세션 · 응답 · 로그에 남기지 않는다(로그인 처리 뒤 버린다 — NFR-04). 테스트는 이 빈들을 가짜로 바꿔
- * 실제 GitHub를 부르지 않는다.
+ * 받은 사용자 토큰은 그 로그인 요청 안에서 레포 권한을 읽는 데만 쓰고({@link GithubUserClient}) 세션 · 응답 · 로그에
+ * 남기지 않는다(NFR-04). 테스트는 이 빈들을 가짜로 바꿔 실제 GitHub를 부르지 않는다.
  */
 @Configuration
 public class GithubOAuthClients {
@@ -35,6 +35,6 @@ public class GithubOAuthClients {
 
     @Bean
     OAuth2AuthorizedClientRepository githubAuthorizedClientRepository() {
-        return new DiscardingAuthorizedClientRepository();
+        return new LoginRequestAuthorizedClientRepository();
     }
 }
