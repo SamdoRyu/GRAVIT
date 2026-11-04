@@ -3,6 +3,8 @@ package com.samdoryu.backend.help.controller;
 import com.samdoryu.backend.auth.service.AuthorizationService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.help.dto.HelpCommentCreateRequest;
+import com.samdoryu.backend.help.dto.HelpCommentDto;
 import com.samdoryu.backend.help.dto.HelpRequestCreateRequest;
 import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
@@ -45,5 +47,14 @@ public class HelpRequestController {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         Long memberId = access.requireTeamMember();
         return helpRequestService.create(access.workspaceId(), memberId, request);
+    }
+
+    /** 팀원, 또는 지정된 강사 — "강사에게 요청"이 켜진 글만(그 밖의 강사는 {@code forbidden_role}). */
+    @PostMapping("/{helpRequestId}/comments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HelpCommentDto addComment(@PathVariable String workspaceId, @PathVariable String helpRequestId,
+            @Valid @RequestBody HelpCommentCreateRequest request) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return helpRequestService.addComment(access, Ids.fromPath(helpRequestId), request);
     }
 }

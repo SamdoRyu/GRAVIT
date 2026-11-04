@@ -49,7 +49,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #47 도움 요청 만들기 · 읽기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
+ * #47 도움 요청 만들기 · 읽기, #48 코멘트 — 실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
  * 세션은 {@link TestLogin}, 쓰기는 화면과 같은 CSRF 쿠키 → 헤더 + Origin. 테스트마다 트랜잭션을 되돌린다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/help}.
  */
@@ -88,6 +88,7 @@ class HelpRequestIntegrationTest {
     private Standup bobStandup;
     private Standup otherWsStandup;
     private MockHttpSession aliceSession;
+    private MockHttpSession bobSession;
     private MockHttpSession instructorSession;
 
     @BeforeEach
@@ -108,6 +109,8 @@ class HelpRequestIntegrationTest {
         // 앨리스는 ws에서만 팀원으로 로그인한 세션 — otherWs 역할은 세션에 없다.
         aliceSession = TestLogin.githubUser(aliceUser.getId(), 1001L)
                 .member(ws.getId(), alice.getId(), WorkspaceRole.REPO_ADMIN).session();
+        bobSession = TestLogin.githubUser(bobUser.getId(), 1002L)
+                .member(ws.getId(), bob.getId(), WorkspaceRole.PARTICIPANT).session();
         instructorSession = TestLogin.githubUser(instructorUser.getId(), INSTRUCTOR_GITHUB_ID).session();
     }
 
@@ -131,6 +134,28 @@ class HelpRequestIntegrationTest {
     private static String body(String content, Standup fromStandup) {
         String standupId = fromStandup == null ? "null" : "\"" + Ids.toApi(fromStandup.getId()) + "\"";
         return "{\"content\":\"" + content + "\",\"fromStandupId\":" + standupId + "}";
+    }
+
+    private ResultActions comment(Workspace workspace, HelpRequest helpRequest, MockHttpSession session, String content)
+            throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post(base(workspace) + "/" + Ids.toApi(helpRequest.getId()) + "/comments").session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"" + content + "\"}"));
+    }
+
+    private HelpRequestStatus statusOf(HelpRequest helpRequest) {
+        flushAndClear();
+        return helpRequests.findById(helpRequest.getId()).orElseThrow().getStatus();
+    }
+
+    /** 상태 · 강사 요청을 바꾸는 API는 다른 Issue(#49 · #51 · #56) 몫이라 테스트 준비는 DB로 한다. */
+    private void setColumn(HelpRequest helpRequest, String assignment) {
+        em.flush();
+        em.createNativeQuery("update help_request set " + assignment + " where id = ?1")
+                .setParameter(1, helpRequest.getId()).executeUpdate();
+        em.clear();
     }
 
     /** 영속성 컨텍스트를 비워 다음 읽기가 DB(계산 열 포함)에서 오게 한다. */
@@ -269,5 +294,90 @@ class HelpRequestIntegrationTest {
                 .containsExactly(Ids.toApi(earlier.getId()), Ids.toApi(later.getId()));
         assertThat(summaries).extracting(HelpRequestSummary::isAgendaCandidate).containsExactly(true, false);
         assertThat(helpRequestService.listSummaries(otherWs.getId(), T0)).isEmpty();
+    }
+
+    // ---- #48 코멘트 ----------------------------------------------------------------------------
+
+    @Test
+    void otherMembersFirstCommentStartsDiscussion() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "세션이 끊겨요", null, T0));
+
+        String response = comment(ws, helpRequest, bobSession, "same-site 확인해 보세요")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.authorMemberId").value(Ids.toApi(bob.getId())))
+                .andExpect(jsonPath("$.author.displayName").value("밥"))
+                .andExpect(jsonPath("$.isInstructorAnswer").value(false))
+                .andExpect(jsonPath("$.content").value("same-site 확인해 보세요"))
+                .andReturn().getResponse().getContentAsString();
+
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(
+                ContractShape.readExample("help", "help-request-detail.json").get("comments").get(0), actual);
+        ContractShape.assertCommonRules(actual);
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+        assertThat(helpComments.findByHelpRequestIdOrderByCreatedAtAscIdAsc(helpRequest.getId())).hasSize(1);
+    }
+
+    @Test
+    void requesterOwnCommentKeepsOpen() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, aliceSession, "추가 정보예요").andExpect(status().isCreated());
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    @Test
+    void resolvedOrEndedIs409() throws Exception {
+        HelpRequest resolved = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "해결됨", null, T0));
+        HelpRequest ended = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "종료됨", null, T0));
+        setColumn(resolved, "status = 'RESOLVED'");
+        setColumn(ended, "status = 'ENDED'");
+
+        comment(ws, resolved, bobSession, "늦었지만").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        comment(ws, ended, bobSession, "늦었지만").andExpect(status().isConflict());
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void instructorOnUnrequestedHelpIs403() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, instructorSession, "답변").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void instructorAnswerOnRequestedHelpKeepsStatus() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        setColumn(helpRequest, "instructor_requested_at = '2026-11-05 02:00:00'");
+
+        comment(ws, helpRequest, instructorSession, "쿠키 설정을 보세요")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isInstructorAnswer").value(true))
+                .andExpect(jsonPath("$.authorMemberId").value(nullValue()))
+                .andExpect(jsonPath("$.author.displayName").value("강사"));
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    /** IDOR — 다른 사무실의 도움 요청에 내 사무실 경로로 코멘트하면 404. */
+    @Test
+    void commentOnHelpRequestOfAnotherWorkspaceIs404() throws Exception {
+        HelpRequest elsewhere = helpRequests.saveAndFlush(new HelpRequest(otherWs, aliceElsewhere, "질문", null, T0));
+
+        comment(ws, elsewhere, aliceSession, "코멘트").andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void emptyCommentIs400() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, bobSession, "").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
     }
 }

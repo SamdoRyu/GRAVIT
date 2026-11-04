@@ -21,6 +21,34 @@ class HelpRequestStatusTest {
         assertThat(HelpRequestStatus.ENDED.isOpenForDiscussion()).isFalse();
     }
 
+    @Test
+    void resolvedAndEndedRejectComments() {
+        assertThat(HelpRequestStatus.OPEN.acceptsComments()).isTrue();
+        assertThat(HelpRequestStatus.DISCUSSING.acceptsComments()).isTrue();
+        assertThat(HelpRequestStatus.ON_AGENDA.acceptsComments()).isTrue();
+        assertThat(HelpRequestStatus.RESOLVED.acceptsComments()).isFalse();
+        assertThat(HelpRequestStatus.ENDED.acceptsComments()).isFalse();
+    }
+
+    @Test
+    void otherMembersFirstCommentStartsDiscussion() {
+        assertThat(HelpRequestStatus.OPEN.afterComment(false, false)).isEqualTo(HelpRequestStatus.DISCUSSING);
+    }
+
+    @Test
+    void requesterCommentAndInstructorAnswerKeepOpen() {
+        assertThat(HelpRequestStatus.OPEN.afterComment(true, false)).isEqualTo(HelpRequestStatus.OPEN);
+        assertThat(HelpRequestStatus.OPEN.afterComment(false, true)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    @ParameterizedTest
+    @EnumSource(names = {"DISCUSSING", "ON_AGENDA"})
+    void commentDoesNotChangeOtherAcceptingStatus(HelpRequestStatus status) {
+        assertThat(status.afterComment(false, false)).isEqualTo(status);
+        assertThat(status.afterComment(true, false)).isEqualTo(status);
+        assertThat(status.afterComment(false, true)).isEqualTo(status);
+    }
+
     @ParameterizedTest
     @EnumSource(names = {"OPEN", "DISCUSSING"})
     void unresolvedBecomesCandidateExactlyAt48Hours(HelpRequestStatus status) {
