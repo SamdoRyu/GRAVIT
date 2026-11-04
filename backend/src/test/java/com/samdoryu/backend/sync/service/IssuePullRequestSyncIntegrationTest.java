@@ -5,12 +5,10 @@ import static org.mockito.BDDMockito.given;
 
 import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
-import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.GithubReaderSelector;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
 import com.samdoryu.backend.github.dto.GithubRepoRef;
-import com.samdoryu.backend.github.dto.GithubReview;
 import com.samdoryu.backend.github.dto.GithubUser;
 import com.samdoryu.backend.github.seed.SeedGithubReader;
 import com.samdoryu.backend.plan.domain.TaskDueDate;
@@ -32,9 +30,7 @@ import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -164,11 +160,12 @@ class IssuePullRequestSyncIntegrationTest {
     @Nested
     class GithubWorkspaceWithFakeReader {
 
-        private final FakeReader fake = new FakeReader();
+        private final FakeGithubReader fake = new FakeGithubReader();
         private Workspace ws;
 
         @BeforeEach
         void setUp() {
+            fake.expectedRepo = new GithubRepoRef("samdoryu", "repo", 77L);
             given(readerSelector.forKind(WorkspaceKind.GITHUB)).willReturn(fake);
             AppUser alice = users.saveAndFlush(AppUser.github(2002L, "alice", "앨리스", null));
             AppUser bob = users.saveAndFlush(AppUser.github(1001L, "bob", "밥", null));
@@ -258,39 +255,6 @@ class IssuePullRequestSyncIntegrationTest {
         private GithubPullRequest pr(int number, GithubUser author, String sha) {
             return new GithubPullRequest(number, "PR " + number, author, false, false, false, sha, List.of(),
                     List.of(new GithubUser(1001L, "bob", null)), T0, T0, null, null);
-        }
-    }
-
-    /** 실제 사무실용 가짜 어댑터 — GitHub를 부르지 않는다. */
-    static class FakeReader implements GithubReader {
-
-        List<GithubIssue> issues = new ArrayList<>();
-        List<GithubPullRequest> pullRequests = new ArrayList<>();
-
-        @Override
-        public WorkspaceKind kind() {
-            return WorkspaceKind.GITHUB;
-        }
-
-        @Override
-        public List<GithubIssue> issuesUpdatedSince(GithubRepoRef repo, Instant since) {
-            assertThat(repo).isEqualTo(new GithubRepoRef("samdoryu", "repo", 77L));
-            return issues;
-        }
-
-        @Override
-        public List<GithubPullRequest> pullRequestsUpdatedSince(GithubRepoRef repo, Instant since) {
-            return pullRequests;
-        }
-
-        @Override
-        public List<GithubReview> reviews(GithubRepoRef repo, int pullRequestNumber) {
-            return List.of();
-        }
-
-        @Override
-        public Optional<Instant> lastCommitAt(GithubRepoRef repo, int pullRequestNumber) {
-            return Optional.empty();
         }
     }
 }
