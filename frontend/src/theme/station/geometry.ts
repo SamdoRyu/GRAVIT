@@ -2,6 +2,15 @@
 // 단위는 시안과 같다(x → 동, z → 남, y 위). 시안 원본은 고치지 않는다.
 // 포드 4~7(시안에 없음)은 2026-11-04 결정: 시안 포드와 같은 모델을 남북 방향으로 넘패드 9 · 1 · 3 · 7 자리에 둔다.
 
+/**
+ * 시안 단위 → 화면 월드 단위. 시안 정거장은 이전 사무실보다 약 2.4배 커서, 정거장을 줄여 상자 · 아바타 · 카메라 · 드래그의
+ * 기존 크기를 그대로 쓴다. 이 파일의 값은 모두 시안 단위이고, ThemeLayout과 테마 컴포넌트가 바깥으로 낼 때만 곱한다.
+ */
+export const WORLD_SCALE = 0.42
+
+/** 정거장이 차지하는 범위(시안 단위) — 카메라 맞춤용 */
+export const STATION_BOUNDS = { minX: 0, maxX: 56, minY: -3, maxY: 11, minZ: 0, maxZ: 44 } as const
+
 /** 모듈 축의 높이 */
 export const HULL_Y = 3.2
 
@@ -75,6 +84,30 @@ export const DOCK = { x: 9.5, z: 33, radius: 4.2, length: 14, deckY: deckY(4.2) 
 export const SCANNER = { x: 48, z: 29, radius: 2.6, length: 16, floorY: HULL_Y - 2.6 * 0.62 + 0.15 } as const
 /** G. 아카이브 화물칸 — 완료 선반 */
 export const ARCHIVE = { x: 47, z: 4.5, radius: 3.6, length: 9, deckY: deckY(3.6) } as const
+
+/** F. 발사 대기 거치대 — 장식(머지 준비 상태는 계약에 없다) */
+export const LAUNCH_RACK = { x: 47, z: 17.6, y: 2.0 } as const
+
+/** 지휘 브리지 회의 좌석: 탁자 둘레 각도(도), 반지름 — 시안 bridge 모드 승무원 자리에서 넓힘 */
+export const BRIDGE_SEATS = { radius: 5.6, angles: [70, 20, 200, 250, 120, 330, 160, 290, 45, 225] } as const
+
+/** 연결 통로: 축, 시작 · 끝(축 좌표), 다른 축의 위치 — 시안 tube() 목록 + 추가 포드 4~7을 옆 포드에 잇는 짧은 통로 */
+export const TUBES: readonly { axis: Axis; from: number; to: number; at: number }[] = [
+  { axis: 'x', from: 18.4, to: 25.0, at: 7.5 },
+  { axis: 'z', from: 18.8, to: 24.6, at: 9.5 },
+  { axis: 'x', from: 13.6, to: 17.6, at: 30 },
+  { axis: 'z', from: 10.8, to: 19.8, at: 28 },
+  { axis: 'x', from: 38.2, to: 40.2, at: 29.5 },
+  { axis: 'z', from: 20.0, to: 26.6, at: 47 },
+  { axis: 'z', from: 10.4, to: 15.6, at: 47 },
+]
+/** 추가 포드 deskIndex → 옆 시안 포드와 잇는 통로(포드가 그려질 때만 그린다) */
+export const EXTRA_POD_TUBES: Readonly<Record<number, { axis: Axis; from: number; to: number; at: number }>> = {
+  4: { axis: 'x', from: 30.5, to: 31.25, at: 21.5 },
+  5: { axis: 'x', from: 24.75, to: 25.5, at: 38.5 },
+  6: { axis: 'x', from: 30.5, to: 31.25, at: 38.5 },
+  7: { axis: 'x', from: 24.75, to: 25.5, at: 21.5 },
+}
 
 /** 화물 한 칸의 간격(크기 약 1) */
 export const CARGO_PITCH = 1.3

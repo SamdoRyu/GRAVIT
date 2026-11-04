@@ -8,7 +8,7 @@ import { useOffice } from '../store'
 import { clearSceneTarget, isOverCanvas, resetDropTracking, updateDropTarget } from './dropTarget'
 import { dragPoint, sceneApi, setCursor } from './runtime'
 import { useDynamicLayer } from './shared'
-import { BOX_D, BOX_W, boxHeight } from './slots'
+import { BOX_D, BOX_H, BOX_W } from './slots'
 
 export function DragLayer() {
   const drag = useOffice((s) => s.drag)
@@ -87,9 +87,8 @@ export function DragLayer() {
   })
 
   if (!drag || drag.from !== 'panel' || !task) return null
-  const h = boxHeight(task.estimate)
   return (
-    <mesh ref={ghost} visible={false} scale={[BOX_W * 1.1, h, BOX_D * 1.1]} renderOrder={6}>
+    <mesh ref={ghost} visible={false} scale={[BOX_W * 1.1, BOX_H, BOX_D * 1.1]} renderOrder={6}>
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color={PRIORITY_META[task.priority].color} transparent opacity={0.8} depthWrite={false} />
     </mesh>

@@ -1,26 +1,28 @@
-// OWNER: scene-builder. Root of everything rendered inside <Canvas>.
+// OWNER: scene-builder. Root of everything rendered inside <Canvas>: the space station (confirmed theme) and the
+// workspace's boxes and crew placed by the station ThemeLayout.
+import { useMemo } from 'react'
+import { StationEnvironment } from '../theme/station/StationEnvironment'
+import { StationSky } from '../theme/station/StationSky'
+import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
-import { Decor } from './Furniture'
-import { Desks } from './Desks'
 import { DragLayer } from './DragLayer'
-import { Lighting } from './Lighting'
 import { MeetingRoomState } from './MeetingRoomState'
-import { Overlays } from './Overlays'
-import { Room } from './Room'
 import { TaskBoxes } from './TaskBoxes'
 import { TaskTooltip } from './TaskTooltip'
 import { clickSlop } from './runtime'
 import { NoPick } from './shared'
+import { podsShown, stationFor } from './stationSeats'
 import { useOffice } from '../store'
-import { OFFICE } from '../office/layout'
 
 export function OfficeScene() {
+  const members = useOffice((s) => s.members)
+  const pods = useMemo(() => podsShown(stationFor(members).seats), [members])
   return (
     <>
-      <Lighting />
+      <StationSky />
       <CameraRig />
-      {/* Anything that doesn't stop propagation lands here: a click on empty floor / furniture clears the selection. */}
+      {/* Anything that doesn't stop propagation lands here: a click on empty space / the hull clears the selection. */}
       <group
         onClick={(e) => {
           if (e.delta > clickSlop(e)) return
@@ -29,20 +31,18 @@ export function OfficeScene() {
           if (s.selection) s.select(null)
         }}
       >
-        {/* Large invisible ground so clicks outside the room count too. */}
-        <mesh position={[OFFICE.width / 2, -0.45, OFFICE.depth / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[200, 200]} />
+        {/* Large invisible plane so clicks around the station count too. */}
+        <mesh position={[12, -0.45, 9]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[300, 300]} />
           <meshBasicMaterial visible={false} />
         </mesh>
         <NoPick>
-          <Room />
-          <Decor />
-          <Desks />
+          <StationEnvironment podsShown={pods} />
         </NoPick>
         <Avatars />
         <TaskBoxes />
-        <Overlays />
         <MeetingRoomState />
+        <ArchiveTag />
       </group>
       <TaskTooltip />
       <DragLayer />

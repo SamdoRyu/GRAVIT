@@ -1,30 +1,28 @@
-// Synchronous drop-target hit test: pointer (client px) → ray vs tall boxes → member desk/avatar, backlog shelf or meeting table.
-// Called from DOM event handlers (never from useFrame) so the target is always current when pointerup lands.
-import { Box3, Plane, Ray, Raycaster, Vector2, Vector3 } from 'three'
-import { OFFICE } from '../office/layout'
+// Synchronous drop-target hit test: pointer (client px) → ray → a crew member's avatar, or the station zone under the
+// pointer (crew pod, docking bay, bridge) from the ThemeLayout. Called from DOM event handlers (never from useFrame) so the
+// target is always current when pointerup lands.
+import { Box3, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useOffice, type DropTarget } from '../store'
-import { BACKLOG_CENTER_X, TABLE_TOP_Y } from './Furniture'
-import { ROOMS } from './paths'
+import type { PlaceRole } from './model/types'
 import { avatarLive, DRAG_Y, dragPoint, sceneApi } from './runtime'
+import { stationFor } from './stationSeats'
 
 const ray = new Raycaster()
 const ndc = new Vector2()
 const planeDrag = new Plane(new Vector3(0, 1, 0), -DRAG_Y)
+/** Zones are read where the ray meets this height: about the pod decks, between the bridge floor and the bay deck. */
+const planeZones = new Plane(new Vector3(0, 1, 0), -0.6)
 const tmpBox = new Box3()
-const localRay = new Ray()
-// Desk footprint + chair area in desk-local space (+z = monitor side), up to 3 m tall.
-const deskBox = new Box3(new Vector3(-1.05, 0, -1.6), new Vector3(1.05, 3, 0.8))
-// Meeting table + a small margin, low enough that a ray aimed at an attendee's body hits the bot first.
-const MT = ROOMS.meeting
-const tableBox = new Box3(
-  new Vector3(MT.cx - MT.tableW / 2 - 0.25, 0, MT.cz - MT.tableD / 2 - 0.2),
-  new Vector3(MT.cx + MT.tableW / 2 + 0.25, TABLE_TOP_Y + 0.25, MT.cz + MT.tableD / 2 + 0.2),
-)
-// Rest of the room floor: only used when nothing else (bot, desk, shelf) was under the pointer at all.
-const MR = OFFICE.meetingRoom
-const roomBox = new Box3(new Vector3(MR.x, 0, MR.z), new Vector3(MR.x + MR.w, 0.6, MR.z + MR.d))
 const hitA = new Vector3()
 const hitB = new Vector3()
+
+/** Station zone → what the store's drop does today (demo store; CONTRACTS.md 「8」 drop rules apply once the screen moves to v1). */
+function toTarget(role: PlaceRole): DropTarget | null {
+  if (role.startsWith('desk:')) return { kind: 'member', id: role.slice('desk:'.length) }
+  if (role === 'backlog') return { kind: 'backlog' }
+  if (role === 'meeting') return { kind: 'agenda' }
+  return null
+}
 
 /** undefined = nothing published yet this drag, so the first hit always overwrites a stale (panel) target. */
 let last: DropTarget | null | undefined
@@ -70,18 +68,17 @@ export function updateDropTarget(clientX: number, clientY: number) {
     dragPoint.active = true
   }
 
-  // Nearest hit of the pointer ray against tall boxes wins: a bot, an occupied desk (footprint + chair area),
-  // or the backlog shelf. Boxes are tall so pointing at a stack of task boxes hits the right desk.
+  // A crew member's avatar under the pointer wins; otherwise the station zone where the ray meets the deck height.
   let target: DropTarget | null = null
   let best = Infinity
-  const members = useOffice.getState().members
+  const state = useOffice.getState()
+  const members = state.members
   const o = ray.ray.origin
-  const dir = ray.ray.direction
 
   for (const [id, live] of avatarLive) {
     if (!live.visible || !members[id]) continue
-    tmpBox.min.set(live.x - 0.45, 0, live.z - 0.45)
-    tmpBox.max.set(live.x + 0.45, 1.7, live.z + 0.45)
+    tmpBox.min.set(live.x - 0.45, live.y, live.z - 0.45)
+    tmpBox.max.set(live.x + 0.45, live.y + 1.7, live.z + 0.45)
     if (ray.ray.intersectBox(tmpBox, hitB)) {
       const t = o.distanceTo(hitB)
       if (t < best) {
@@ -91,45 +88,12 @@ export function updateDropTarget(clientX: number, clientY: number) {
     }
   }
 
-  for (const d of OFFICE.desks) {
-    let owner: string | null = null
-    for (const id in members) {
-      if (members[id].deskId === d.id) {
-        owner = id
-        break
-      }
-    }
-    if (!owner) continue // free desks are not drop targets
-    // Ray into desk-local space (rotation about Y by `facing`), then test a tall box there.
-    const c = Math.cos(d.facing)
-    const sn = Math.sin(d.facing)
-    const ox = o.x - d.x
-    const oz = o.z - d.z
-    localRay.origin.set(ox * c - oz * sn, o.y, ox * sn + oz * c)
-    localRay.direction.set(dir.x * c - dir.z * sn, dir.y, dir.x * sn + dir.z * c)
-    if (localRay.intersectBox(deskBox, hitB)) {
-      const t = localRay.origin.distanceTo(hitB)
-      if (t < best) {
-        best = t
-        target = { kind: 'member', id: owner }
-      }
-    }
-  }
-
-  const A = OFFICE.backlogShelf
-  tmpBox.min.set(BACKLOG_CENTER_X - 0.6, 0, A.z - 0.1)
-  tmpBox.max.set(BACKLOG_CENTER_X + 0.6, 3, A.z + A.d + 0.1)
-  if (ray.ray.intersectBox(tmpBox, hitB) && o.distanceTo(hitB) < best) {
-    best = o.distanceTo(hitB)
-    target = { kind: 'backlog' }
-  }
-
-  // Meeting table: only for open tasks that aren't on the agenda yet (dropping back on it is a no-op).
-  const drag = useOffice.getState().drag
-  const dragged = drag ? useOffice.getState().tasks[drag.taskId] : undefined
-  if (dragged && dragged.status !== 'done' && !dragged.onAgenda) {
-    if (ray.ray.intersectBox(tableBox, hitB) && o.distanceTo(hitB) < best) target = { kind: 'agenda' }
-    else if (target === null && ray.ray.intersectBox(roomBox, hitB)) target = { kind: 'agenda' }
+  if (target === null && ray.ray.intersectPlane(planeZones, hitB)) {
+    const role = stationFor(members).layout.dropZoneAt([hitB.x, hitB.y, hitB.z])
+    target = role ? toTarget(role) : null
+    // The bridge takes only open tasks that aren't on the agenda yet (dropping back on it is a no-op).
+    const dragged = state.drag ? state.tasks[state.drag.taskId] : undefined
+    if (target?.kind === 'agenda' && (!dragged || dragged.status === 'done' || dragged.onAgenda)) target = null
   }
   publish(target)
 }

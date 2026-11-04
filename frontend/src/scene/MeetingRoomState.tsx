@@ -1,19 +1,22 @@
-// Meeting-room status layer: calm "in session" glow + sign, "안건 N" tag when idle, and the agenda drop highlight.
+// Command-bridge (meeting room) status layer: calm "in session" glow + sign, "안건 N" tag when idle, and the agenda drop highlight.
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MeshBasicMaterial, type Group } from 'three'
 import { isOpen } from '../data/selectors'
-import { OFFICE } from '../office/layout'
 import { ongoingMeeting, useOffice } from '../store'
 import { PALETTE } from '../theme'
-import { ROOMS } from './paths'
-import { TABLE_TOP_Y } from './Furniture'
+import { BRIDGE, WORLD_SCALE } from '../theme/station/geometry'
 import { noRaycast } from './runtime'
 import { SceneHtml } from './shared'
 import { AGENDA_VISIBLE } from './slots'
 
-const R = OFFICE.meetingRoom
-const INSET = 0.25
+// The bridge in world units: centre, deck and table-top heights, and the deck radius.
+const CX = BRIDGE.x * WORLD_SCALE
+const CZ = BRIDGE.z * WORLD_SCALE
+const FLOOR_Y = BRIDGE.floorY * WORLD_SCALE
+const TABLE_Y = BRIDGE.tableTopY * WORLD_SCALE
+const DECK_R = (BRIDGE.radius - 0.3) * WORLD_SCALE
+const TABLE_R = 3.0 * WORLD_SCALE
 const EDGE = 0.07
 
 const pill = {
@@ -49,7 +52,7 @@ function RoomLabel({ title, startedAt, agendaCount }: { title: string | null; st
   const minutes = useElapsedMinutes(startedAt)
   const live = title !== null
   return (
-    <group position={[ROOMS.meeting.cx, live ? 2.9 : 1.7, ROOMS.meeting.cz]}>
+    <group position={[CX, live ? 3.4 : 2.2, CZ]}>
       <SceneHtml center zIndexRange={[0, 0]} pointerEvents="none">
         {live ? (
           <div style={{ ...pill, padding: '4px 11px' }}>
@@ -68,7 +71,7 @@ function RoomLabel({ title, startedAt, agendaCount }: { title: string | null; st
   )
 }
 
-/** Soft accent wash + thin frame on the room floor; eases in and out with the session. */
+/** Soft accent wash + thin ring on the bridge deck; eases in and out with the session. */
 function SessionGlow({ on }: { on: boolean }) {
   const group = useRef<Group>(null)
   const k = useRef(0)
@@ -96,27 +99,13 @@ function SessionGlow({ on }: { on: boolean }) {
     edge.opacity = k.current * (0.26 + 0.14 * breathe)
   })
 
-  const w = R.w - INSET * 2
-  const d = R.d - INSET * 2
-  const cx = ROOMS.meeting.cx
-  const cz = ROOMS.meeting.cz
   return (
     <group ref={group} visible={false}>
-      <mesh position={[cx, 0.012, cz]} rotation={[-Math.PI / 2, 0, 0]} material={wash} renderOrder={1} raycast={noRaycast}>
-        <planeGeometry args={[w, d]} />
+      <mesh position={[CX, FLOOR_Y + 0.012, CZ]} rotation={[-Math.PI / 2, 0, 0]} material={wash} renderOrder={1} raycast={noRaycast}>
+        <circleGeometry args={[DECK_R, 48]} />
       </mesh>
-      {/* frame: four thin strips */}
-      <mesh position={[cx, 0.014, cz - d / 2 + EDGE / 2]} rotation={[-Math.PI / 2, 0, 0]} material={edge} renderOrder={1} raycast={noRaycast}>
-        <planeGeometry args={[w, EDGE]} />
-      </mesh>
-      <mesh position={[cx, 0.014, cz + d / 2 - EDGE / 2]} rotation={[-Math.PI / 2, 0, 0]} material={edge} renderOrder={1} raycast={noRaycast}>
-        <planeGeometry args={[w, EDGE]} />
-      </mesh>
-      <mesh position={[cx - w / 2 + EDGE / 2, 0.014, cz]} rotation={[-Math.PI / 2, 0, 0]} material={edge} renderOrder={1} raycast={noRaycast}>
-        <planeGeometry args={[EDGE, d - EDGE * 2]} />
-      </mesh>
-      <mesh position={[cx + w / 2 - EDGE / 2, 0.014, cz]} rotation={[-Math.PI / 2, 0, 0]} material={edge} renderOrder={1} raycast={noRaycast}>
-        <planeGeometry args={[EDGE, d - EDGE * 2]} />
+      <mesh position={[CX, FLOOR_Y + 0.014, CZ]} rotation={[-Math.PI / 2, 0, 0]} material={edge} renderOrder={1} raycast={noRaycast}>
+        <ringGeometry args={[DECK_R - EDGE, DECK_R, 64]} />
       </mesh>
     </group>
   )
@@ -126,15 +115,14 @@ function SessionGlow({ on }: { on: boolean }) {
 function AgendaDrop() {
   const hot = useOffice((s) => s.dropTarget?.kind === 'agenda')
   if (!hot) return null
-  const { cx, cz, tableW, tableD } = ROOMS.meeting
   return (
     <group>
-      <mesh position={[cx, TABLE_TOP_Y + 0.012, cz]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
-        <planeGeometry args={[tableW + 0.1, tableD + 0.1]} />
+      <mesh position={[CX, TABLE_Y + 0.012, CZ]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
+        <circleGeometry args={[TABLE_R, 48]} />
         <meshBasicMaterial color={PALETTE.dropOk} transparent opacity={0.5} depthWrite={false} />
       </mesh>
-      <mesh position={[cx, 0.03, cz]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
-        <planeGeometry args={[R.w - INSET * 2, R.d - INSET * 2]} />
+      <mesh position={[CX, FLOOR_Y + 0.03, CZ]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
+        <circleGeometry args={[DECK_R, 48]} />
         <meshBasicMaterial color={PALETTE.dropOk} transparent opacity={0.16} depthWrite={false} />
       </mesh>
     </group>
