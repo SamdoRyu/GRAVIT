@@ -284,7 +284,21 @@ function isMockState(v: unknown): v is MockState {
   return s.version === MOCK_STATE_VERSION && typeof s.nextId === 'number' && Array.isArray(s.workspaces) && (s.session === null || s.session === 'github' || s.session === 'review')
 }
 
-/** 저장된 상태를 읽는다. 없으면 seed, 읽을 수 없으면 경고를 남기고 seed로 다시 시작한다. */
+/**
+ * 이전 실행에서 끝나지 못한 동기화를 동기화 전 상태로 되돌린다. 완료 타이머(startSync)는 메모리에만 있어
+ * 새로 고침 · 탭 종료와 함께 사라지므로, 저장된 running은 다시 끝나지 않는다. 인스턴스를 만들 때만 부르므로
+ * 이 인스턴스가 시작한 동기화는 건드리지 않는다. startSync가 이전 상태에 state만 바꿔 저장하므로
+ * state만 되돌리면 마지막 성공 · 실패 기록이 그대로 남는다. running이 아닌 사무실은 바꾸지 않는다.
+ */
+function stopInterruptedSyncs(state: MockState): MockState {
+  for (const ws of state.workspaces) {
+    const sync = ws?.snapshot?.sync
+    if (sync?.state === 'running') ws.snapshot.sync = { ...sync, state: 'idle' }
+  }
+  return state
+}
+
+/** 저장된 상태를 읽는다. 없으면 seed, 읽을 수 없으면 경고를 남기고 seed로 다시 시작한다. 끊긴 동기화는 되돌린다. */
 function readState(storage: StorageLike, seed: () => MockState): MockState {
   let raw: string | null
   try {
@@ -296,7 +310,7 @@ function readState(storage: StorageLike, seed: () => MockState): MockState {
   if (raw === null) return seed()
   try {
     const data: unknown = JSON.parse(raw)
-    if (isMockState(data)) return data
+    if (isMockState(data)) return stopInterruptedSyncs(data)
   } catch (e) {
     console.warn('mock v1: 저장된 데이터가 JSON이 아니에요', e)
   }

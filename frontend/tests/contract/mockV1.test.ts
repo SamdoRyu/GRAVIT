@@ -1,7 +1,7 @@
 // v1 mock DataSource — P0 메서드의 성공 · 실패 경로와 Snapshot 모양(계약 예시와 같은 최상위 키).
 // 권한 규칙 자체는 Spring 통합 테스트가 맡는다(CONTRACTS.md 「8」 · 「9」). 여기서는 mock이 화면 흐름에 맞게 도는지 본다.
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { afterEach, describe, it, mock } from 'node:test'
 import { DataError, type DataErrorCode } from '../../src/data/DataSource'
 import { createMemoryStorage, type StorageLike } from '../../src/data/mock'
 import { createV1MockDataSource, V1_STORAGE_KEY, type MockSession } from '../../src/data/mock/v1'
@@ -245,6 +245,58 @@ describe('mock v1 — 동기화', () => {
     assert.ok(done.lastSucceededAt !== null && done.lastSucceededAt.endsWith('Z'))
     assert.deepEqual((await source.load(TEAM_WS)).sync, done)
     c.unsubscribe()
+  })
+
+  describe('새로 고침으로 끊긴 동기화 (fake timer)', () => {
+    const SYNC_MS = 800
+    const FIXED_NOW = () => new Date('2026-11-05T03:00:00Z')
+    const instance = (storage: StorageLike) => createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], syncDurationMs: SYNC_MS, now: FIXED_NOW })
+
+    afterEach(() => mock.timers.reset())
+
+    it('A — 끝나기 전에 새로 만든 인스턴스는 running을 이어받지 않고, 동기화 전 상태로 돌아가 새 동기화를 시작할 수 있다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const storage = createMemoryStorage()
+      const before = instance(storage)
+      const pre = await before.getSyncStatus(TEAM_WS)
+      assert.equal((await before.requestSync(TEAM_WS)).state, 'running')
+      // 타이머가 돌기 전에 같은 저장소로 새 인스턴스 = 새로 고침 (이전 탭의 타이머는 사라진 것으로 본다)
+      const reloaded = instance(storage)
+      assert.deepEqual(await reloaded.getSyncStatus(TEAM_WS), pre, '동기화 전 상태 그대로 (lastSucceededAt 보존)')
+      assert.equal((await reloaded.requestSync(TEAM_WS)).state, 'running', 'conflict 없이 새로 시작')
+      mock.timers.tick(SYNC_MS)
+      const done = await reloaded.getSyncStatus(TEAM_WS)
+      assert.equal(done.state, 'idle')
+      assert.equal(done.lastSucceededAt, '2026-11-05T03:00:00Z')
+    })
+
+    it('B — 같은 인스턴스의 정상 동기화는 running을 유지하다 타이머가 돌면 끝난다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const source = instance(createMemoryStorage())
+      assert.equal((await source.requestSync(TEAM_WS)).state, 'running')
+      mock.timers.tick(SYNC_MS - 1)
+      assert.equal((await source.getSyncStatus(TEAM_WS)).state, 'running', '끝나기 전')
+      await rejectsCode(source.requestSync(TEAM_WS), 'conflict')
+      mock.timers.tick(1)
+      const done = await source.getSyncStatus(TEAM_WS)
+      assert.equal(done.state, 'idle')
+      assert.equal(done.lastSucceededAt, '2026-11-05T03:00:00Z')
+      assert.equal(done.isFailing, false)
+    })
+
+    it('C — 끊긴 동기화를 되돌려도 다른 사무실과 그 사무실의 다른 데이터는 그대로다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const storage = createMemoryStorage()
+      const before = instance(storage)
+      const demoBefore = await before.load(DEMO_WS)
+      const teamBefore = await before.load(TEAM_WS)
+      await before.requestSync(TEAM_WS)
+
+      const reloaded = instance(storage)
+      assert.deepEqual(await reloaded.load(DEMO_WS), demoBefore, '시연 사무실 전체')
+      const teamAfter = await reloaded.load(TEAM_WS)
+      assert.deepEqual(teamAfter, teamBefore, '팀 사무실 — sync가 동기화 전 상태로 돌아가 나머지와 함께 같다')
+    })
   })
 
   it('구독을 끊으면 더 받지 않고, 다른 사무실의 알림은 오지 않는다', async () => {
