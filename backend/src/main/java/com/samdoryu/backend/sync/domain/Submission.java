@@ -123,4 +123,32 @@ public class Submission {
         this.stateChangedAt = Objects.requireNonNull(stateChangedAt);
         this.syncedAt = Objects.requireNonNull(syncedAt);
     }
+
+    /**
+     * 동기화 — 같은 PR의 새 GitHub 값으로 덮어쓴다(「2」 소유: 동기화만 쓴다). {@code fresh}는 저장하지 않은 임시 값이다.
+     *
+     * @return this
+     */
+    public Submission overwriteFrom(Submission fresh) {
+        if (!workspace.getId().equals(fresh.workspace.getId()) || githubPrNumber != fresh.githubPrNumber) {
+            throw new IllegalArgumentException("같은 사무실 · 같은 PR 번호만 덮어쓴다");
+        }
+        this.title = fresh.title;
+        this.authorGithubUserId = fresh.authorGithubUserId;
+        this.authorGithubLogin = fresh.authorGithubLogin;
+        this.authorMember = fresh.authorMember;
+        this.state = fresh.state;
+        this.headSha = fresh.headSha;
+        this.reviewRequestsJson = fresh.reviewRequestsJson;
+        this.reviewsJson = fresh.reviewsJson;
+        this.labelsJson = fresh.labelsJson;
+        this.lastCommitAt = fresh.lastCommitAt;
+        this.githubCreatedAt = fresh.githubCreatedAt;
+        this.githubUpdatedAt = fresh.githubUpdatedAt;
+        this.mergedAt = fresh.mergedAt;
+        this.closedAt = fresh.closedAt;
+        this.stateChangedAt = fresh.stateChangedAt;
+        this.syncedAt = fresh.syncedAt;
+        return this;
+    }
 }

@@ -13,4 +13,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     Optional<Member> findByWorkspaceIdAndUserId(Long workspaceId, Long userId);
 
     List<Member> findByWorkspaceId(Long workspaceId);
+
+    /** 지금 팀원 — 콜라보레이터에서 빠진 팀원은 뺀다. */
+    List<Member> findByWorkspaceIdAndRemovedAtIsNull(Long workspaceId);
 }

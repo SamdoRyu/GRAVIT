@@ -89,9 +89,20 @@ public class Member {
                 deskIndex, repoAdmin, Objects.requireNonNull(syncedAt));
     }
 
-    /** 시연 사무실 Seed 팀원 — 사용자 · GitHub 칸이 없다. */
-    public static Member demoSeed(Workspace workspace, String displayName, String avatarUrl, int deskIndex) {
-        return new Member(workspace, null, null, displayName, avatarUrl, deskIndex, false, null);
+    /**
+     * 시연 사무실 Seed 팀원 — 사용자 · GitHub 사용자 ID가 없다.
+     *
+     * @param seedLogin Seed 어댑터 결과의 로그인 이름(예: {@code seed-kim}). 시연 사무실 동기화가 이 이름으로 담당자 · 작성자를 짝짓는다
+     */
+    public static Member demoSeed(Workspace workspace, String seedLogin, String displayName, String avatarUrl,
+            int deskIndex) {
+        return new Member(workspace, null, Objects.requireNonNull(seedLogin), displayName, avatarUrl, deskIndex,
+                false, null);
+    }
+
+    /** GitHub 사용자 ID — 실제 팀원은 사용자의 것, 시연 Seed 팀원은 없다(null). */
+    public Long githubUserId() {
+        return user == null ? null : user.getGithubUserId();
     }
 
     /** 콜라보레이터에서 빠짐 — 행은 남기고 책상 자리를 비운다(과거 평가 · 안건 · 코멘트가 가리킨다). */
