@@ -15,14 +15,19 @@ import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * 사무실의 팀원(CONTRACTS.md 「2」). 테이블 이름은 {@code team_member}다 — {@code MEMBER}가 MySQL 8 예약어다.
  * 행을 지우지 않는다: 콜라보레이터에서 빠지면 {@link #remove(Instant)}로 빠진 시각을 남기고 책상 자리를 비운다.
  * 허용 목록의 강사 계정은 콜라보레이터여도 팀원 행을 만들지 않는다(P1) — 동기화가 지킨다.
  * GitHub 칸(로그인 이름 · 사진 · 레포 관리자 여부 · 시각)은 동기화가, 앱 칸(책상 · 수집 동의)은 앱이 쓴다(「2」 소유).
+ * <p>
+ * {@link DynamicUpdate}: 바뀐 열만 UPDATE한다. 동기화가 팀원을 읽은 뒤 그 사이에 앱이 책상 · 수집 동의를 바꿔도, 동기화는
+ * 자기가 바꾼 GitHub 칸만 써서 앱 칸을 옛 값으로 덮어쓰지 않는다(#71 완료 조건 1).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "team_member")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

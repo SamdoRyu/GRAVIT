@@ -112,7 +112,10 @@ class WorkspaceSyncIntegrationTest {
             assertThat(kim.getDisplayName()).isEqualTo("김팀장");
         }
 
-        /** 완료 조건 1 — 동기화 뒤에도 책상 자리 · 활동 기록 수집 동의가 그대로(「2」 앱 칸). */
+        /**
+         * 완료 조건 1 — 동기화 뒤에도 책상 자리 · 활동 기록 수집 동의가 그대로(「2」 앱 칸).
+         * 동기화가 들고 있는 팀원(메모리)은 옛 책상 · 동의인 채로, DB만 앱이 바꾼 상황이다 — 동기화가 옛 값으로 덮으면 안 된다.
+         */
         @Test
         void deskAndConsentSurviveSyncAndGithubFieldsAreUpdated() {
             fake.collaborators = List.of(collaborator(1001L, "kim", false), collaborator(1002L, "lee", false));
