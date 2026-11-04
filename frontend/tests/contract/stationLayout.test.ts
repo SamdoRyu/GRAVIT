@@ -5,7 +5,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import { deskSeats } from '../../src/scene/model/buildSceneModel'
 import type { PlaceRole, Vec3 } from '../../src/scene/model/types'
-import { ALWAYS_SHOWN_PODS, POD, PODS } from '../../src/theme/station/geometry'
+import { ALWAYS_SHOWN_PODS, POD, PODS, WORLD_SCALE } from '../../src/theme/station/geometry'
 import { createStationLayout } from '../../src/theme/station/stationLayout'
 
 const load = (workspaceId: string) =>
@@ -51,8 +51,8 @@ describe('stationLayout — 작업 포드', () => {
 
   it('아무도 앉지 않은 포드는 드롭 구역이 아니다', () => {
     const layout = createStationLayout(new Map([['m0', 0]]))
-    assert.equal(layout.dropZoneAt([PODS[4].x, 0, PODS[4].z]), null)
-    assert.equal(layout.dropZoneAt([PODS[0].x, 0, PODS[0].z]), 'desk:m0')
+    assert.equal(layout.dropZoneAt([PODS[4].x * WORLD_SCALE, 0, PODS[4].z * WORLD_SCALE]), null)
+    assert.equal(layout.dropZoneAt([PODS[0].x * WORLD_SCALE, 0, PODS[0].z * WORLD_SCALE]), 'desk:m0')
   })
 
   it('자리가 없는 팀원의 desk 역할은 호출 쪽 버그로 본다', () => {

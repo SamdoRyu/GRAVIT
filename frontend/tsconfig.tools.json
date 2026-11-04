@@ -19,5 +19,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["tests", "scripts", "src/data", "src/office", "src/scene/model", "src/theme/station"]
+  "include": ["tests", "scripts", "src/data", "src/office", "src/scene/model", "src/theme/station/geometry.ts", "src/theme/station/stationLayout.ts", "src/scene/stationSeats.ts"]
 }

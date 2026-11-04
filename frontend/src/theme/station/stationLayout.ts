@@ -1,7 +1,7 @@
 // 우주정거장 ThemeLayout — 공간 역할 → 좌표 · 드롭 구역 (CONTRACTS.md 「8」). 소유: C.
 // 도메인 규칙(무엇이 어느 역할인지)은 SceneModel이 정한다. 여기는 그 역할이 정거장의 어디인지만 안다.
 import type { PlaceRole, ThemeLayout, Vec3 } from '../../scene/model/types'
-import { ARCHIVE, BRIDGE, CARGO_PITCH, CARGO_STACK, COMM_HUB, DOCK, POD, PODS, SCANNER, type Pod } from './geometry'
+import { ARCHIVE, BRIDGE, CARGO_PITCH, CARGO_STACK, COMM_HUB, DOCK, POD, PODS, SCANNER, WORLD_SCALE, type Pod } from './geometry'
 
 /** 포드 하나의 작업 상자 칸: 열(포드 축을 따라 허브 쪽으로) × 층 */
 const POD_COLUMNS = 3
@@ -66,27 +66,35 @@ export function createStationLayout(seats: ReadonlyMap<string, number>): ThemeLa
     return pod
   }
 
+  /** 시안 단위 자리 */
+  function slot(role: PlaceRole, index: number): Vec3 {
+    if (role.startsWith(DESK_PREFIX)) return podCargo(podOfMember(role.slice(DESK_PREFIX.length)), index)
+    switch (role) {
+      case 'backlog': // 도킹 베이 바닥: 2열 × 8줄
+        return grid(index, 16, (s) => [DOCK.x + 0.9 + (s % 2) * 1.5, DOCK.z - 5.4 + Math.floor(s / 2) * 1.5], DOCK.deckY)
+      case 'review': // 스캐너 터널 바닥: 한 줄 9칸
+        return grid(index, 9, (s) => [SCANNER.x - 6.5 + s * 1.6, SCANNER.z], SCANNER.floorY)
+      case 'done': // 아카이브 바닥: 2열 × 7줄
+        return grid(index, 14, (s) => [ARCHIVE.x + 0.6 + (s % 2) * 1.3, ARCHIVE.z - 3.4 + Math.floor(s / 2) * 1.25], ARCHIVE.deckY)
+      case 'meeting':
+        return agendaSlot(index)
+      case 'board': // 통신 허브 게시 선반: 한 줄 7칸
+        return grid(index, 7, (s) => [COMM_HUB.x - 3.3 + s * 1.05, COMM_HUB.shelf.z], COMM_HUB.shelf.y)
+      default:
+        // 요구사항 구역은 시안에 없어 #15에서 정거장 안에 만든다(CLAUDE.md 「디자인 테마」).
+        throw new Error(`stationLayout: ${role} 구역은 아직 없어요`)
+    }
+  }
+
   return {
     anchor(role: PlaceRole, index: number): Vec3 {
-      if (role.startsWith(DESK_PREFIX)) return podCargo(podOfMember(role.slice(DESK_PREFIX.length)), index)
-      switch (role) {
-        case 'backlog': // 도킹 베이 바닥: 2열 × 8줄
-          return grid(index, 16, (s) => [DOCK.x + 0.9 + (s % 2) * 1.5, DOCK.z - 5.4 + Math.floor(s / 2) * 1.5], DOCK.deckY)
-        case 'review': // 스캐너 터널 바닥: 한 줄 9칸
-          return grid(index, 9, (s) => [SCANNER.x - 6.5 + s * 1.6, SCANNER.z], SCANNER.floorY)
-        case 'done': // 아카이브 바닥: 2열 × 7줄
-          return grid(index, 14, (s) => [ARCHIVE.x + 0.6 + (s % 2) * 1.3, ARCHIVE.z - 3.4 + Math.floor(s / 2) * 1.25], ARCHIVE.deckY)
-        case 'meeting':
-          return agendaSlot(index)
-        case 'board': // 통신 허브 게시 선반: 한 줄 7칸
-          return grid(index, 7, (s) => [COMM_HUB.x - 3.3 + s * 1.05, COMM_HUB.shelf.z], COMM_HUB.shelf.y)
-        default:
-          // 요구사항 구역은 시안에 없어 #15에서 정거장 안에 만든다(CLAUDE.md 「디자인 테마」).
-          throw new Error(`stationLayout: ${role} 구역은 아직 없어요`)
-      }
+      const [x, y, z] = slot(role, index)
+      return [x * WORLD_SCALE, y * WORLD_SCALE, z * WORLD_SCALE]
     },
 
-    dropZoneAt([x, , z]: Vec3): PlaceRole | null {
+    dropZoneAt([wx, , wz]: Vec3): PlaceRole | null {
+      const x = wx / WORLD_SCALE
+      const z = wz / WORLD_SCALE
       for (const [deskIndex, memberId] of memberAt) {
         const pod = PODS[deskIndex]
         if (pod && insidePod(pod, x, z)) return `${DESK_PREFIX}${memberId}`

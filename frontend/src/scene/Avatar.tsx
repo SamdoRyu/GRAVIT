@@ -1,5 +1,7 @@
 // One cube bot: a rounded cube in the member color with a dark screen face (two eye dots) and a floating
-// status diamond. Presence decides where it goes; it hovers/glides along the waypoint graph, never teleports.
+// status diamond. Presence decides where it is: its crew pod, the bridge, or gone. The station's tubes are smaller than
+// the crew, so it never walks between rooms: it fades out where it was and fades in at the new spot
+// (CONTRACTS.md 「10」 아바타 이동 연출 — the light trail between the two comes with the meeting issues).
 import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { Color, MathUtils, MeshStandardMaterial, OctahedronGeometry, type Group } from 'three'
@@ -7,30 +9,20 @@ import type { Id, Member, Presence } from '../data/types'
 import { SIGNAL_META } from '../data/insights'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
+import { bridgeSeat, crewSpot, EXIT_SPOT, type Spot } from '../theme/station/spots'
 import { roundedGeo, SceneHtml, UNIT_CYL, UNIT_SPHERE, useDynamicLayer } from './shared'
 import { parseSignalKey, signalKeyOf, useToday } from './signals'
-import {
-  ENTRANCE_NODE,
-  ENTRANCE_OUT,
-  EXIT_SPOT,
-  NODES,
-  deskIndex,
-  deskSeat,
-  findRoute,
-  loungeSpot,
-  meetingSeat,
-  type Spot,
-} from './paths'
 import { avatarLive, clickSlop, setCursor, type AvatarLive } from './runtime'
 
-const SPEED = 1.4
 const CUBE = 0.55
 const BODY = roundedGeo(CUBE, CUBE, CUBE, 0.16)
 const SCREEN = roundedGeo(0.42, 0.22, 0.05, 0.06)
 const EYE_BAR = roundedGeo(0.075, 0.03, 0.03, 0.012)
 const GEM = new OctahedronGeometry(1, 0)
-const HOVER_Y = 0.05
-const SEAT_Y = 0.47
+const HOVER_Y = 0.12
+const SEAT_Y = 0.02
+/** Seconds to fade out at the old spot, and again to fade in at the new one. */
+const FADE_S = 0.4
 const WHITE = new Color('#ffffff')
 const BLACK = new Color('#000000')
 
@@ -41,15 +33,15 @@ function lerpAngle(a: number, b: number, k: number) {
   return a + d * k
 }
 
-function spotFor(deskId: string, memberId: Id, presence: Presence): Spot {
-  const idx = deskIndex(deskId, memberId)
+/** Where a crew member is. `seat` = their pod number; members without a pod are not in 3D (the caller skips them). */
+function spotFor(seat: number, presence: Presence): Spot {
   switch (presence) {
     case 'working':
-      return deskSeat(deskId) ?? loungeSpot(idx)
-    case 'meeting':
-      return meetingSeat(idx)
+      return crewSpot(seat, true) ?? EXIT_SPOT
     case 'break':
-      return loungeSpot(idx)
+      return crewSpot(seat, false) ?? EXIT_SPOT
+    case 'meeting':
+      return bridgeSeat(seat)
     default:
       return EXIT_SPOT
   }
@@ -58,65 +50,48 @@ function spotFor(deskId: string, memberId: Id, presence: Presence): Spot {
 interface Walker {
   init: boolean
   x: number
+  y: number
   z: number
   yaw: number
+  /** Where it stands now (it is moved here while invisible). */
   spot: Spot | null
-  anchor: number
-  rx: number[]
-  rz: number[]
-  rn: number[]
-  ri: number
-  atSpot: boolean
+  /** Where it should be; differs from `spot` while fading out. */
+  next: Spot | null
   sit: number
-  walk: number
-  phase: number
   alpha: number
+  /** Last alpha written to the materials. */
+  shown: number
   gone: boolean
 }
 
 function newWalker(): Walker {
-  return { init: false, x: 0, z: 0, yaw: 0, spot: null, anchor: ENTRANCE_NODE, rx: [], rz: [], rn: [], ri: 0, atSpot: false, sit: 0, walk: 0, phase: 0, alpha: -1, gone: false }
+  return { init: false, x: 0, y: 0, z: 0, yaw: 0, spot: null, next: null, sit: 0, alpha: 0, shown: -1, gone: false }
 }
 
-function replan(w: Walker, spot: Spot) {
-  let start: number
-  if (w.atSpot && w.spot) start = w.spot.node
-  else if (w.ri < w.rx.length && w.rn[w.ri] >= 0) start = w.rn[w.ri]
-  else if (w.spot) start = w.spot.node
-  else start = w.anchor
-  const nodes = findRoute(start, spot.node)
-  const rx: number[] = []
-  const rz: number[] = []
-  const rn: number[] = []
-  for (const n of nodes) {
-    rx.push(NODES[n].x)
-    rz.push(NODES[n].z)
-    rn.push(n)
-  }
-  rx.push(spot.x)
-  rz.push(spot.z)
-  rn.push(-1)
-  w.rx = rx
-  w.rz = rz
-  w.rn = rn
-  w.ri = 0
-  w.atSpot = false
+function place(w: Walker, spot: Spot) {
   w.spot = spot
+  w.x = spot.x
+  w.y = spot.y
+  w.z = spot.z
+  w.yaw = spot.facing
+  w.sit = spot.seated ? 1 : 0
 }
 
 interface AvatarProps {
   member: Member
+  /** The member's crew pod (deskIndex). */
+  seat: number
+  /** 'target' = already there when the office loads; 'entrance' = fades in (a member who just joined). */
   spawn: 'target' | 'entrance'
   leaving: boolean
   onGone: (id: Id) => void
 }
 
-export const Avatar = memo(function Avatar({ member, spawn, leaving, onGone }: AvatarProps) {
+export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGone }: AvatarProps) {
   const id = member.id
-  const deskId = member.deskId
   const presence: Presence = leaving ? 'away' : member.presence
-  // Only identity, desk and presence decide where the bot goes; other edits must not make it stand up.
-  const spot = useMemo(() => spotFor(deskId, id, presence), [deskId, id, presence])
+  // Only identity, seat and presence decide where the bot is; other edits must not make it stand up.
+  const spot = useMemo(() => spotFor(seat, presence), [seat, presence])
 
   // Signal is memoized on tasks/member changes; nothing is computed per frame.
   const today = useToday()
@@ -160,7 +135,7 @@ export const Avatar = memo(function Avatar({ member, spawn, leaving, onGone }: A
   useDynamicLayer(root)
   const walker = useRef<Walker>(newWalker())
   const walkerReset = useRef(false)
-  const live = useRef<AvatarLive>({ x: 0, z: 0, visible: false })
+  const live = useRef<AvatarLive>({ x: 0, y: 0, z: 0, visible: false })
   const seed = useMemo(() => {
     let h = 0
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997
@@ -184,81 +159,39 @@ export const Avatar = memo(function Avatar({ member, spawn, leaving, onGone }: A
   useFrame((state, delta) => {
     const g = root.current
     if (!g) return
-    // `delta` (real time) drives walking so low fps doesn't slow the bots; `dt` is only for smoothing/animation.
     const dt = Math.min(delta, 0.1)
     const w = walker.current
     if (walkerReset.current) {
       walkerReset.current = false
-      w.alpha = -1 // new materials: re-apply the door fade
+      w.shown = -1 // new materials: re-apply the opacity
     }
 
     if (!w.init) {
       w.init = true
-      if (spawn === 'entrance') {
-        w.x = ENTRANCE_OUT.x
-        w.z = ENTRANCE_OUT.z
-        w.yaw = Math.PI / 2
-        w.spot = null
-      } else {
-        w.x = spot.x
-        w.z = spot.z
-        w.yaw = spot.facing
-        w.spot = spot
-        w.atSpot = true
-        w.sit = spot.seated ? 1 : 0
-      }
+      place(w, spot)
+      w.alpha = spawn === 'entrance' ? 0 : 1
     }
-    if (w.spot !== spot) {
-      replan(w, spot)
+    if (w.next !== spot) {
+      w.next = spot
       w.gone = false
     }
 
-    // ---- movement along waypoints (leftover distance carries over to the next waypoint) ----
-    let moving = false
-    let desiredYaw = w.yaw
-    if (!w.atSpot) {
-      if (delta > 1 && w.spot) {
-        // The tab was in the background: arrive instead of replaying the whole walk.
-        w.x = w.spot.x
-        w.z = w.spot.z
-        w.ri = w.rx.length
-      }
-      let step = SPEED * delta
-      moving = true
-      while (!w.atSpot) {
-        if (w.ri >= w.rx.length) {
-          w.atSpot = true
-          break
-        }
-        const dx = w.rx[w.ri] - w.x
-        const dz = w.rz[w.ri] - w.z
-        const d = Math.hypot(dx, dz)
-        if (d <= step) {
-          step -= d
-          w.x = w.rx[w.ri]
-          w.z = w.rz[w.ri]
-          if (w.rn[w.ri] >= 0) w.anchor = w.rn[w.ri]
-          w.ri++
-        } else {
-          w.x += (dx / d) * step
-          w.z += (dz / d) * step
-          desiredYaw = Math.atan2(dx, dz)
-          break
-        }
-      }
+    // ---- transit: fade out where it is, move while invisible, fade in at the new spot ----
+    const travelling = w.spot !== w.next
+    if (travelling && w.next) {
+      // A tab in the background arrives at once instead of replaying the fade.
+      w.alpha = delta > 1 ? 0 : Math.max(0, w.alpha - dt / FADE_S)
+      if (w.alpha === 0) place(w, w.next)
+    } else if (!w.spot?.exit) {
+      w.alpha = Math.min(1, w.alpha + dt / FADE_S)
     }
-    if (w.atSpot && w.spot) desiredYaw = w.spot.facing
-    w.yaw = lerpAngle(w.yaw, desiredYaw, 1 - Math.exp(-(moving ? 9 : 6) * dt))
-
-    const sitGoal = w.atSpot && w.spot?.seated ? 1 : 0
+    if (w.spot) w.yaw = lerpAngle(w.yaw, w.spot.facing, 1 - Math.exp(-6 * dt))
+    const sitGoal = w.spot?.seated ? 1 : 0
     w.sit += (sitGoal - w.sit) * (1 - Math.exp(-7 * dt))
-    w.walk += ((moving ? 1 : 0) - w.walk) * (1 - Math.exp(-8 * dt))
-    if (moving) w.phase += dt * 6
 
-    // ---- fade at the door ----
-    const alpha = MathUtils.clamp((w.x + 1.0) / 1.2, 0, 1)
-    if (Math.abs(alpha - w.alpha) > 0.004) {
-      w.alpha = alpha
+    const alpha = w.spot?.exit ? 0 : w.alpha
+    if (Math.abs(alpha - w.shown) > 0.004) {
+      w.shown = alpha
       const tr = alpha < 0.999
       for (const m of Object.values(mats)) {
         if (m.transparent !== tr) {
@@ -270,29 +203,26 @@ export const Avatar = memo(function Avatar({ member, spawn, leaving, onGone }: A
       g.visible = alpha > 0.01
     }
     live.current.x = w.x
+    live.current.y = w.y
     live.current.z = w.z
     live.current.visible = alpha > 0.05
 
-    if (leaving && w.atSpot && w.spot?.exit && !w.gone) {
+    if (leaving && !travelling && w.spot?.exit && !w.gone) {
       w.gone = true
       onGone(id)
     }
 
     // ---- pose ----
-    g.position.x = w.x
-    g.position.z = w.z
+    g.position.set(w.x, w.y, w.z)
     const t = state.clock.elapsedTime
     const working = presence === 'working' && w.sit > 0.5
-    const bob = Math.sin(w.phase * 1.6) * 0.025 * w.walk
-    const idleBob = Math.sin(t * 1.5 + seed * 6) * 0.012 * (1 - w.walk) * (1 - w.sit)
-    const y = MathUtils.lerp(HOVER_Y + bob + idleBob, SEAT_Y, w.sit)
+    const idleBob = Math.sin(t * 1.5 + seed * 6) * 0.012 * (1 - w.sit)
+    const y = MathUtils.lerp(HOVER_Y + idleBob, SEAT_Y, w.sit)
     const breathe = Math.sin(t * 1.8 + seed * 9) * 0.01 * w.sit
     const l = lift.current
     if (l) {
       l.position.y = y
       l.rotation.y = w.yaw
-      l.rotation.x = 0.1 * w.walk
-      l.rotation.z = Math.sin(w.phase * 0.8) * 0.035 * w.walk
       l.scale.y = 1 + breathe
     }
     const e = eyes.current

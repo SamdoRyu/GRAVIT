@@ -4,15 +4,27 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import { MathUtils, PerspectiveCamera as ScratchCamera, TOUCH, Vector3, type PerspectiveCamera } from 'three'
 import { useOffice } from '../store'
-import { deskById, OFFICE } from '../office/layout'
+import { STATION_BOUNDS, WORLD_SCALE } from '../theme/station/geometry'
+import { crewSpot } from '../theme/station/spots'
 import type { Selection } from '../store'
 import { avatarLive, boxLive, cameraGesture, cameraLock, type ControlsImpl } from './runtime'
+import { stationFor } from './stationSeats'
 
-const TARGET0: [number, number, number] = [OFFICE.width / 2, 0, OFFICE.depth / 2]
+// Station extent in world units (the station is drawn at WORLD_SCALE).
+const B = {
+  minX: STATION_BOUNDS.minX * WORLD_SCALE,
+  maxX: STATION_BOUNDS.maxX * WORLD_SCALE,
+  minY: STATION_BOUNDS.minY * WORLD_SCALE,
+  maxY: STATION_BOUNDS.maxY * WORLD_SCALE,
+  minZ: STATION_BOUNDS.minZ * WORLD_SCALE,
+  maxZ: STATION_BOUNDS.maxZ * WORLD_SCALE,
+}
+/** Look-at point of the design's home view (station.js: target (30, 3, 20)). */
+const TARGET0: [number, number, number] = [30 * WORLD_SCALE, 3 * WORLD_SCALE, 20 * WORLD_SCALE]
 const FOV = 23 // near-isometric
 const MIN_DIST = 7
 const MAX_DIST = 80
-/** Share of the free area the office may span (the rest is margin). */
+/** Share of the free area the station may span (the rest is margin). */
 const SPAN = 0.94
 const FOCUS_MEMBER = 12
 const FOCUS_TASK = 14
@@ -27,14 +39,14 @@ const MOVED_DIST = 0.015
 const MOVED_TARGET = 0.1
 const GESTURE_TAIL_MS = 800
 
-// Office bounding box (floor, plinth and the tallest props) used to frame the whole thing.
+// Station bounding box used to frame the whole thing.
 const CORNERS: Vector3[] = []
-for (const x of [0, OFFICE.width]) for (const y of [-0.3, 2.6]) for (const z of [0, OFFICE.depth]) CORNERS.push(new Vector3(x, y, z))
+for (const x of [B.minX, B.maxX]) for (const y of [B.minY, B.maxY]) for (const z of [B.minZ, B.maxZ]) CORNERS.push(new Vector3(x, y, z))
 const scratch = new ScratchCamera(FOV, 1, 0.1, 300)
 const corner = new Vector3()
 const box = { w: 0, h: 0, cx: 0, cy: 0 }
 
-/** Projected pixel extent / centre (relative to the view centre, y down) of the office seen from `dist` along `d`. */
+/** Projected pixel extent / centre (relative to the view centre, y down) of the station seen from `dist` along `d`. */
 function measure(dist: number, d: Vector3, tgt: Vector3, W: number, H: number) {
   scratch.fov = FOV
   scratch.aspect = W / H
@@ -61,7 +73,7 @@ function measure(dist: number, d: Vector3, tgt: Vector3, W: number, H: number) {
   box.cy = (y0 + y1) / 2
 }
 
-/** Camera distance (along `d`) at which the whole office fits the free area, plus the pixel centre of the office then. */
+/** Camera distance (along `d`) at which the whole station fits the free area, plus its pixel centre then. */
 function fitDistance(d: Vector3, tgt: Vector3, W: number, H: number, availW: number, availH: number) {
   let dist = 30
   for (let i = 0; i < 5; i++) {
@@ -89,15 +101,15 @@ function resolve(sel: Selection, out: Fly): boolean {
     if (live && live.visible) {
       out.tx = live.x
       out.tz = live.z
-      out.ty = 0.8
+      out.ty = live.y + 0.6
       return true
     }
-    const m = useOffice.getState().members[sel.id]
-    const desk = m ? deskById(m.deskId) : undefined
-    if (desk) {
-      out.tx = desk.x
-      out.tz = desk.z
-      out.ty = 0.8
+    const seat = stationFor(useOffice.getState().members).seats.get(sel.id)
+    const spot = seat === undefined ? null : crewSpot(seat, true)
+    if (spot) {
+      out.tx = spot.x
+      out.tz = spot.z
+      out.ty = spot.y + 0.6
       return true
     }
     return false
@@ -184,7 +196,7 @@ export function CameraRig() {
     camera.updateProjectionMatrix()
   }
 
-  // Narrow FOV, office framed in the area not covered by HUD panels. The whole office (floor + walls) is projected
+  // Narrow FOV, station framed in the area not covered by HUD panels. The whole station is projected
   // to find the distance that fits it with a margin (by width in portrait, by height in landscape) and the shift that
   // centres it in the free area. The first fit is instant; later ones (insets change, window resize) ease in useFrame.
   // After the user orbits/zooms only the centring follows the insets; the distance is theirs.
@@ -315,10 +327,10 @@ export function CameraRig() {
       if ((rem < 0.05 && Math.abs(len - f.dist) < 0.15) || f.t > 3) f.active = false
     }
 
-    // Keep the look-at point over the floor; shift the camera by the same amount.
-    const cx = MathUtils.clamp(c.target.x, 0, OFFICE.width)
-    const cz = MathUtils.clamp(c.target.z, 0, OFFICE.depth)
-    const cy = MathUtils.clamp(c.target.y, 0, 1.5)
+    // Keep the look-at point over the station; shift the camera by the same amount.
+    const cx = MathUtils.clamp(c.target.x, B.minX, B.maxX)
+    const cz = MathUtils.clamp(c.target.z, B.minZ, B.maxZ)
+    const cy = MathUtils.clamp(c.target.y, 0, 2)
     const ox = cx - c.target.x
     const oy = cy - c.target.y
     const oz = cz - c.target.z
