@@ -5,6 +5,7 @@
 // JSON을 바로 import하지 않는 이유: 리터럴이 string으로 넓어져 유니언 검사가 안 된다(CONTRACTS.md 「9」).
 import type {
   AgendaItemCreateRequest,
+  AgendaItemDto,
   ErrorResponse,
   EvaluateRequest,
   HelpCommentCreateRequest,
@@ -47,6 +48,41 @@ export const agendaItemCreateRequestExample = {
   tried: '로컬에서 401 응답 확인',
   unresolvedReason: '추천·비추천 의견이 갈림',
 } satisfies AgendaItemCreateRequest
+
+// contract/examples/meeting/agenda-item.json — CONTRACTS_API.md 「10」
+export const agendaItemExample = {
+  id: '21',
+  kind: 'pr',
+  status: 'discussed',
+  title: '실패 응답 모양을 계약대로 바꿀까?',
+  background: null,
+  tried: '로컬에서 401 응답 확인',
+  unresolvedReason: '추천·비추천 의견이 갈림',
+  source: { type: 'submission', id: '9' },
+  evaluationRoundId: '4',
+  raisedByMemberId: '2',
+  raisedAt: '2026-11-05T02:00:00Z',
+  decision: {
+    conclusion: '에러 응답을 계약 모양으로 맞추고 다시 평가받는다',
+    learning: '에러 응답 모양은 전역 예외 처리 한 곳에서 바꾼다',
+    prDecision: 'revise_and_reevaluate',
+    followUpAssigneeMemberId: '3',
+    followUpDueDate: '2026-11-07',
+    meetingId: '5',
+    decidedByMemberId: '3',
+    decidedAt: '2026-11-05T05:30:00Z',
+  },
+  feedbackRequested: true,
+  feedbackRequestedAt: '2026-11-05T05:40:00Z',
+  instructorFeedbacks: [
+    {
+      id: '7',
+      instructor: { userId: '40', githubLogin: 'instructor-kim', displayName: '김강사', avatarUrl: null },
+      body: '401과 403을 나누는 기준을 결정 기록에 한 줄 남겨 두면 좋겠어요',
+      createdAt: '2026-11-05T06:00:00Z',
+    },
+  ],
+} satisfies AgendaItemDto
 
 // contract/examples/report/timeline-page.json — CONTRACTS_API.md 「15」
 export const timelinePageExample = {
@@ -249,6 +285,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-detail.json': helpRequestDetailExample,
   'help/help-request-summary.json': helpRequestSummaryExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
+  'meeting/agenda-item.json': agendaItemExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
 }
