@@ -89,4 +89,25 @@ public class Task {
         this.stateChangedAt = Objects.requireNonNull(stateChangedAt);
         this.syncedAt = Objects.requireNonNull(syncedAt);
     }
+
+    /**
+     * 동기화 — 같은 이슈의 새 GitHub 값으로 덮어쓴다(「2」 소유: 동기화만 쓴다). {@code fresh}는 저장하지 않은 임시 값이다.
+     *
+     * @return this
+     */
+    public Task overwriteFrom(Task fresh) {
+        if (!workspace.getId().equals(fresh.workspace.getId()) || githubIssueNumber != fresh.githubIssueNumber) {
+            throw new IllegalArgumentException("같은 사무실 · 같은 이슈 번호만 덮어쓴다");
+        }
+        this.title = fresh.title;
+        this.state = fresh.state;
+        this.closedReason = fresh.closedReason;
+        this.labelsJson = fresh.labelsJson;
+        this.githubCreatedAt = fresh.githubCreatedAt;
+        this.githubUpdatedAt = fresh.githubUpdatedAt;
+        this.closedAt = fresh.closedAt;
+        this.stateChangedAt = fresh.stateChangedAt;
+        this.syncedAt = fresh.syncedAt;
+        return this;
+    }
 }

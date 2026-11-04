@@ -72,7 +72,7 @@ class CoreSchemaIntegrationTest {
                 "docs/requirements.md"));
         syncStates.saveAndFlush(new SyncState(ws));
         members.saveAndFlush(Member.collaborator(ws, admin, 0, true, T0));
-        members.saveAndFlush(Member.demoSeed(demo, "시연 팀원", null, 0));
+        members.saveAndFlush(Member.demoSeed(demo, "seed-kim", "시연 팀원", null, 0));
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, 9001L, admin, T0));
         em.clear();
 

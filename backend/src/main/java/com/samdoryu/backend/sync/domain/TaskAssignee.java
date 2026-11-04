@@ -46,4 +46,9 @@ public class TaskAssignee {
         this.member = Objects.requireNonNull(member);
         this.syncedAt = Objects.requireNonNull(syncedAt);
     }
+
+    /** 동기화에서 여전히 담당자임을 확인함. */
+    public void markSynced(Instant syncedAt) {
+        this.syncedAt = Objects.requireNonNull(syncedAt);
+    }
 }

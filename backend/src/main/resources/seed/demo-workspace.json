@@ -1,0 +1,99 @@
+{
+  "issues": [
+    {
+      "number": 1, "title": "로그인 화면 만들기", "closed": false, "closedReason": null,
+      "labels": ["area:auth", "priority:high"],
+      "assignees": [{ "id": null, "login": "seed-kim", "avatarUrl": null }],
+      "createdAt": "2026-11-03T01:00:00Z", "updatedAt": "2026-11-04T02:00:00Z", "closedAt": null
+    },
+    {
+      "number": 2, "title": "사무실 책상 배치", "closed": false, "closedReason": null,
+      "labels": ["area:office", "priority:medium"],
+      "assignees": [
+        { "id": null, "login": "seed-park", "avatarUrl": null },
+        { "id": null, "login": "seed-lee", "avatarUrl": null }
+      ],
+      "createdAt": "2026-11-03T01:10:00Z", "updatedAt": "2026-11-04T03:00:00Z", "closedAt": null
+    },
+    {
+      "number": 3, "title": "README 정리", "closed": false, "closedReason": null,
+      "labels": ["priority:low"],
+      "assignees": [],
+      "createdAt": "2026-11-03T01:20:00Z", "updatedAt": "2026-11-03T01:20:00Z", "closedAt": null
+    },
+    {
+      "number": 4, "title": "에러 응답 모양 통일", "closed": true, "closedReason": "COMPLETED",
+      "labels": ["area:common"],
+      "assignees": [{ "id": null, "login": "seed-choi", "avatarUrl": null }],
+      "createdAt": "2026-11-03T01:30:00Z", "updatedAt": "2026-11-04T05:00:00Z", "closedAt": "2026-11-04T05:00:00Z"
+    },
+    {
+      "number": 5, "title": "다크 모드", "closed": true, "closedReason": "NOT_PLANNED",
+      "labels": [],
+      "assignees": [{ "id": null, "login": "seed-mentor", "avatarUrl": null }],
+      "createdAt": "2026-11-03T01:40:00Z", "updatedAt": "2026-11-03T09:00:00Z", "closedAt": "2026-11-03T09:00:00Z"
+    },
+    {
+      "number": 6, "title": "회의 안건 화면", "closed": false, "closedReason": null,
+      "labels": ["area:meeting"],
+      "assignees": [
+        { "id": null, "login": "seed-mentor", "avatarUrl": null },
+        { "id": null, "login": "seed-park", "avatarUrl": null }
+      ],
+      "createdAt": "2026-11-03T01:50:00Z", "updatedAt": "2026-11-04T04:00:00Z", "closedAt": null
+    }
+  ],
+  "pullRequests": [
+    {
+      "pullRequest": {
+        "number": 7, "title": "feat(auth): 로그인 화면", "author": { "id": null, "login": "seed-kim", "avatarUrl": null },
+        "draft": false, "closed": false, "merged": false, "headSha": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+        "labels": ["area:auth"],
+        "requestedReviewers": [{ "id": null, "login": "seed-lee", "avatarUrl": null }],
+        "createdAt": "2026-11-04T02:30:00Z", "updatedAt": "2026-11-04T06:00:00Z", "mergedAt": null, "closedAt": null
+      },
+      "reviews": [
+        { "reviewer": { "id": null, "login": "seed-choi", "avatarUrl": null }, "state": "COMMENTED", "submittedAt": "2026-11-04T05:30:00Z" }
+      ],
+      "lastCommitAt": "2026-11-04T05:50:00Z"
+    },
+    {
+      "pullRequest": {
+        "number": 8, "title": "feat(office): 책상 배치", "author": { "id": null, "login": "seed-lee", "avatarUrl": null },
+        "draft": true, "closed": false, "merged": false, "headSha": "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
+        "labels": ["area:office"],
+        "requestedReviewers": [],
+        "createdAt": "2026-11-04T03:30:00Z", "updatedAt": "2026-11-04T03:30:00Z", "mergedAt": null, "closedAt": null
+      },
+      "reviews": [],
+      "lastCommitAt": "2026-11-04T03:20:00Z"
+    },
+    {
+      "pullRequest": {
+        "number": 9, "title": "fix: 에러 응답 모양 통일", "author": { "id": null, "login": "seed-choi", "avatarUrl": null },
+        "draft": false, "closed": true, "merged": true, "headSha": "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+        "labels": ["area:common"],
+        "requestedReviewers": [],
+        "createdAt": "2026-11-03T08:00:00Z", "updatedAt": "2026-11-04T05:00:00Z",
+        "mergedAt": "2026-11-04T05:00:00Z", "closedAt": "2026-11-04T05:00:00Z"
+      },
+      "reviews": [
+        { "reviewer": { "id": null, "login": "seed-kim", "avatarUrl": null }, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-03T10:00:00Z" },
+        { "reviewer": { "id": null, "login": "seed-kim", "avatarUrl": null }, "state": "APPROVED", "submittedAt": "2026-11-04T04:30:00Z" }
+      ],
+      "lastCommitAt": "2026-11-04T04:00:00Z"
+    },
+    {
+      "pullRequest": {
+        "number": 10, "title": "chore: 실험 브랜치", "author": { "id": null, "login": "seed-park", "avatarUrl": null },
+        "draft": false, "closed": true, "merged": false, "headSha": "4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e",
+        "labels": [],
+        "requestedReviewers": [],
+        "createdAt": "2026-11-03T06:00:00Z", "updatedAt": "2026-11-03T07:00:00Z", "mergedAt": null,
+        "closedAt": "2026-11-03T07:00:00Z"
+      },
+      "reviews": [],
+      "lastCommitAt": "2026-11-03T06:10:00Z"
+    }
+  ]
+}
