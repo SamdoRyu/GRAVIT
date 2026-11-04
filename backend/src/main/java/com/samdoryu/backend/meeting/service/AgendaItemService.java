@@ -1,0 +1,87 @@
+package com.samdoryu.backend.meeting.service;
+
+import com.samdoryu.backend.common.error.ApiException;
+import com.samdoryu.backend.common.error.ErrorCode;
+import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
+import com.samdoryu.backend.meeting.domain.AgendaItem;
+import com.samdoryu.backend.meeting.dto.AgendaItemCreateRequest;
+import com.samdoryu.backend.meeting.dto.AgendaItemDto;
+import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
+import com.samdoryu.backend.realtime.SnapshotResource;
+import com.samdoryu.backend.realtime.WorkspaceEventHub;
+import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.service.SyncedItemService;
+import com.samdoryu.backend.workspace.domain.Member;
+import com.samdoryu.backend.workspace.domain.Workspace;
+import jakarta.persistence.EntityManager;
+import java.time.Instant;
+import java.util.List;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 회의 안건(FR-MTG-03 · FR-LRN-14). 인가 검사 순서 1 · 2 · 4는 Controller가 끝낸 뒤 부른다 — 여기서는 요청 모양(400)과
+ * 원본(404 — 같은 사무실 것만)을 본다. 개수 제한은 없다.
+ */
+@Service
+public class AgendaItemService {
+
+    private final AgendaItemRepository agendaItemRepository;
+    private final SyncedItemService syncedItemService;
+    private final EvaluationRoundService evaluationRoundService;
+    private final WorkspaceEventHub eventHub;
+    private final EntityManager entityManager;
+
+    public AgendaItemService(AgendaItemRepository agendaItemRepository, SyncedItemService syncedItemService,
+            EvaluationRoundService evaluationRoundService, WorkspaceEventHub eventHub, EntityManager entityManager) {
+        this.agendaItemRepository = agendaItemRepository;
+        this.syncedItemService = syncedItemService;
+        this.evaluationRoundService = evaluationRoundService;
+        this.eventHub = eventHub;
+        this.entityManager = entityManager;
+    }
+
+    /**
+     * 안건 올리기 → {@code confirmed}. 종류와 원본이 맞지 않거나 {@code help_request} 종류면 {@code invalid},
+     * 원본이 없거나 다른 사무실 것이면 {@code not_found}. PR 안건은 그때의 현재 평가 회차를 기억한다.
+     *
+     * @param raisedByMemberId 세션 사용자의 그 사무실 팀원 ID(강사는 Controller에서 이미 거부됨)
+     */
+    @Transactional
+    public AgendaItemDto create(Long workspaceId, Long raisedByMemberId, AgendaItemCreateRequest request) {
+        Workspace workspace = entityManager.getReference(Workspace.class, workspaceId);
+        Member raisedBy = entityManager.getReference(Member.class, raisedByMemberId);
+        Instant now = Instant.now();
+        AgendaItem item = switch (request.kind()) {
+            case ISSUE -> AgendaItem.forTask(workspace,
+                    syncedItemService.requireTask(workspaceId, requireSourceId(request)),
+                    request.title(), request.background(), request.tried(), request.unresolvedReason(), raisedBy, now);
+            case PR -> {
+                Submission submission = syncedItemService.requireSubmission(workspaceId, requireSourceId(request));
+                yield AgendaItem.forSubmission(workspace, submission,
+                        evaluationRoundService.currentRoundId(submission.getId()),
+                        request.title(), request.background(), request.tried(), request.unresolvedReason(), raisedBy, now);
+            }
+            case LEARNING, OTHER -> {
+                if (request.sourceId() != null) {
+                    throw new ApiException(ErrorCode.INVALID, "배운 점 · 기타 안건에는 원본이 없어요");
+                }
+                yield AgendaItem.withoutSource(workspace, request.kind(),
+                        request.title(), request.background(), request.tried(), request.unresolvedReason(), raisedBy, now);
+            }
+            case HELP_REQUEST -> throw new ApiException(ErrorCode.INVALID, "도움 요청은 도움 요청에서 안건으로 옮겨요");
+        };
+        agendaItemRepository.save(item);
+        eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
+        return AgendaItemDto.of(item, List.of());
+    }
+
+    /** 이슈 · PR 안건의 원본 ID — 없으면 {@code invalid}(종류와 원본이 맞지 않음). */
+    private static Long requireSourceId(AgendaItemCreateRequest request) {
+        if (request.sourceId() == null) {
+            throw new ApiException(ErrorCode.INVALID, "이슈 · PR 안건은 원본을 골라야 해요");
+        }
+        return Ids.fromBody(request.sourceId());
+    }
+}
