@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it, mock } from 'node:test'
 import { DataError, type DataErrorCode } from '../../src/data/DataSource'
-import { createMemoryStorage, type StorageLike } from '../../src/data/mock'
+import { createMemoryStorage, createSharedMemoryStorage, type StorageLike } from '../../src/data/mock'
 import { createV1MockDataSource, V1_STORAGE_KEY, type MockSession } from '../../src/data/mock/v1'
 import type { Change, OpenWorkspaceRequest } from '../../src/data/types'
 import { workspaceSnapshotExample } from './examples'
@@ -296,6 +296,87 @@ describe('mock v1 — 동기화', () => {
       assert.deepEqual(await reloaded.load(DEMO_WS), demoBefore, '시연 사무실 전체')
       const teamAfter = await reloaded.load(TEAM_WS)
       assert.deepEqual(teamAfter, teamBefore, '팀 사무실 — sync가 동기화 전 상태로 돌아가 나머지와 함께 같다')
+    })
+  })
+
+  describe('여러 탭 · 저장값 (fake timer)', () => {
+    const SYNC_MS = 800
+    const FIXED_NOW = () => new Date('2026-11-05T03:00:00Z')
+    const tab = (storage: StorageLike, session?: MockSession | null) =>
+      createV1MockDataSource({ storage, session, latencyMs: [0, 0], syncDurationMs: SYNC_MS, now: FIXED_NOW })
+    const quiet = <T>(fn: () => T): T => {
+      const warn = console.warn
+      console.warn = () => {}
+      try {
+        return fn()
+      } finally {
+        console.warn = warn
+      }
+    }
+
+    afterEach(() => mock.timers.reset())
+
+    it('다른 탭이 연 사무실은 이 탭이 나중에 저장해도 사라지지 않는다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const shared = createSharedMemoryStorage()
+      const a = tab(shared.view(), 'github')
+      const b = tab(shared.view())
+      const opened = await b.openWorkspace(openRequest({ specDocumentPath: null }))
+      await a.requestSync(TEAM_WS)
+      mock.timers.tick(SYNC_MS) // A · B 동기화가 끝나며 각자 저장
+      const reloaded = tab(shared.view())
+      assert.ok((await reloaded.listWorkspaces()).some((w) => w.id === opened.id), 'B가 연 사무실')
+      assert.ok((await a.listWorkspaces()).some((w) => w.id === opened.id), 'A도 본다')
+    })
+
+    it('한 탭에서 로그아웃하면 다른 탭도 로그인 안 됨이 된다', async () => {
+      const shared = createSharedMemoryStorage()
+      const a = tab(shared.view(), 'github')
+      const b = tab(shared.view())
+      await a.logout()
+      await rejectsCode(b.getMe(), 'unauthorized')
+    })
+
+    it('새 탭의 끊긴 동기화 복구가 다른 탭에서 진행 중인 동기화를 끊지 않는다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const shared = createSharedMemoryStorage()
+      const a = tab(shared.view(), 'github')
+      await a.requestSync(TEAM_WS)
+      const b = tab(shared.view()) // 만들 때 저장된 running을 되돌리고 저장한다
+      assert.equal((await b.getSyncStatus(TEAM_WS)).state, 'idle', '새 탭은 이어받지 않는다')
+      assert.equal((await a.getSyncStatus(TEAM_WS)).state, 'running', 'A는 아직 진행 중')
+      await rejectsCode(a.requestSync(TEAM_WS), 'conflict')
+      mock.timers.tick(SYNC_MS)
+      assert.equal((await a.getSyncStatus(TEAM_WS)).state, 'idle')
+      assert.equal((await b.getSyncStatus(TEAM_WS)).state, 'idle', 'A의 완료가 B에도 보인다')
+    })
+
+    it('동기화가 성공해도 마지막 실패 기록은 남고 isFailing은 false가 된다', async () => {
+      mock.timers.enable({ apis: ['setTimeout'] })
+      const storage = createMemoryStorage()
+      tab(storage, 'github')
+      const saved = JSON.parse(storage.getItem(V1_STORAGE_KEY) ?? 'null')
+      const failure = { lastFailedAt: '2026-11-05T02:50:00Z', lastFailureCode: 'github_rate_limited', lastFailureMessage: 'GitHub 요청 한도를 넘었어요', isFailing: true }
+      saved.workspaces[0].snapshot.sync = { ...saved.workspaces[0].snapshot.sync, ...failure }
+      storage.setItem(V1_STORAGE_KEY, JSON.stringify(saved))
+
+      const source = tab(storage)
+      await source.requestSync(TEAM_WS)
+      mock.timers.tick(SYNC_MS)
+      const done = await source.getSyncStatus(TEAM_WS)
+      assert.equal(done.state, 'idle')
+      assert.equal(done.lastSucceededAt, '2026-11-05T03:00:00Z')
+      assert.equal(done.isFailing, false)
+      assert.deepEqual([done.lastFailedAt, done.lastFailureCode, done.lastFailureMessage], [failure.lastFailedAt, failure.lastFailureCode, failure.lastFailureMessage])
+    })
+
+    it('버전은 맞지만 사무실 항목이 깨진 저장값은 TypeError 없이 seed로 다시 시작한다', async () => {
+      for (const broken of [[{}], [{ snapshot: { workspace: { id: 'ws_x' } }, consentedUserIds: [] }], ['nope']]) {
+        const storage = createMemoryStorage()
+        storage.setItem(V1_STORAGE_KEY, JSON.stringify({ version: 1, session: 'github', nextId: 100, workspaces: broken }))
+        const source = quiet(() => tab(storage))
+        assert.deepEqual((await source.listWorkspaces()).map((w) => w.id).sort(), [DEMO_WS, TEAM_WS].sort(), JSON.stringify(broken))
+      }
     })
   })
 

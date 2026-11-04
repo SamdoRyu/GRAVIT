@@ -38,6 +38,10 @@ export interface MockState {
   workspaces: MockWorkspace[]
 }
 
+/**
+ * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
+ * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
+ */
 export const MOCK_STATE_VERSION = 1
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {

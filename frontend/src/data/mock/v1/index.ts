@@ -4,9 +4,9 @@
 // 로그인 여부(unauthorized)와 "내가 들어갈 수 있는 사무실"(not_found)은 지킨다.
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
-import type { Change, Id, MeResponse, OpenWorkspaceRequest, RepositoryChoice, SyncStatus, Viewer, WorkspaceSnapshot } from '../../types'
+import type { Change, Id, Instant, MeResponse, OpenWorkspaceRequest, RepositoryChoice, SyncStatus, Viewer, WorkspaceSnapshot } from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
-import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, idleSync, openedWorkspace, toInstant, type MockSession, type MockState, type MockWorkspace } from './seed'
+import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockSession, type MockState, type MockWorkspace } from './seed'
 
 export type { MockSession } from './seed'
 
@@ -53,11 +53,24 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
   const reviewLoginEnabled = opts.reviewLoginEnabled ?? true
   const syncDurationMs = opts.syncDurationMs ?? DEFAULT_SYNC_DURATION_MS
 
-  const state = readState(storage, () => createSeed(now(), 'github'))
+  let state = readState(storage, () => createSeed(now(), 'github'))
   if (opts.session !== undefined) state.session = opts.session
   save()
 
   const listeners = new Map<Id, Set<(change: Change) => void>>()
+  /** 이 인스턴스가 시작해 아직 끝나지 않은 동기화 (사무실 ID) */
+  const activeSyncs = new Set<Id>()
+
+  // 다른 탭이 저장하면 그 상태를 받아 쓴다 — 탭마다 따로 들고 있다가 서로 덮어쓰지 않게(나중에 저장한 탭이 이기는 문제).
+  // 받은 값의 running은 그 탭의 진행 중인 동기화일 수 있으니 되돌리지 않고, 이 탭이 진행 중인 동기화는 running으로 둔다.
+  storage.subscribe?.(V1_STORAGE_KEY, (raw) => {
+    const next = parseState(raw)
+    if (!next) return // 지워졌거나 읽을 수 없는 값 — 지금 상태를 유지하고 다음 저장 때 다시 쓴다
+    for (const ws of next.workspaces) {
+      if (activeSyncs.has(ws.snapshot.workspace.id)) ws.snapshot.sync = { ...ws.snapshot.sync, state: 'running' }
+    }
+    state = next
+  })
 
   async function wait(): Promise<void> {
     const ms = maxLatency <= 0 ? 0 : minLatency + random() * (maxLatency - minLatency)
@@ -138,13 +151,18 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
   function startSync(ws: MockWorkspace): SyncStatus {
     const workspaceId = ws.snapshot.workspace.id
     ws.snapshot.sync = { ...ws.snapshot.sync, state: 'running' }
+    activeSyncs.add(workspaceId)
     save()
     emit(workspaceId, { type: 'sync', status: ws.snapshot.sync })
     setTimeout(() => {
+      activeSyncs.delete(workspaceId)
+      // 그 사이 다른 탭의 상태로 바뀌었을 수 있으니 붙잡아 둔 객체가 아니라 지금 상태에서 다시 찾는다
+      const current = state.workspaces.find((w) => w.snapshot.workspace.id === workspaceId)
+      if (!current) return
       // 시연 사무실도 GitHub를 부르지 않고 같은 방식으로 바로 성공한다(CONTRACTS.md 「4」)
-      ws.snapshot.sync = idleSync(toInstant(now()))
+      current.snapshot.sync = succeededSync(current.snapshot.sync, toInstant(now()))
       save()
-      emit(workspaceId, { type: 'sync', status: ws.snapshot.sync })
+      emit(workspaceId, { type: 'sync', status: current.snapshot.sync })
       emit(workspaceId, { type: 'changed', resources: [...SYNCED_RESOURCES] })
     }, syncDurationMs)
     return structuredClone(ws.snapshot.sync)
@@ -278,10 +296,56 @@ function validateOpenRequest(r: OpenWorkspaceRequest): void {
   }
 }
 
+/**
+ * 동기화 성공 — 마지막 실패 기록(lastFailed*)은 남긴다. 실패 중인지는 isFailing이 말한다(CONTRACTS_API.md 「4」).
+ * mock은 명세 문서를 읽지 않으므로 경고는 없다.
+ */
+function succeededSync(prev: SyncStatus, at: Instant): SyncStatus {
+  return { ...prev, state: 'idle', lastSucceededAt: at, isFailing: false, specWarnings: [] }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Snapshot에서 배열이어야 하는 칸 */
+const SNAPSHOT_LISTS = ['members', 'tasks', 'submissions', 'requirements', 'requirementLinks', 'agendaItems', 'meetings', 'helpRequests', 'activityNotes'] as const
+
+/** 저장된 사무실 한 개의 뼈대 검사 — 이 파일이 읽는 칸이 있는지만 본다(값 하나하나는 검사하지 않는다). */
+function isMockWorkspace(v: unknown): v is MockWorkspace {
+  if (!isRecord(v) || !Array.isArray(v.consentedUserIds) || !isRecord(v.snapshot)) return false
+  const s = v.snapshot
+  return (
+    isRecord(s.workspace) &&
+    typeof s.workspace.id === 'string' &&
+    isRecord(s.settings) &&
+    isRecord(s.sync) &&
+    (s.sync.state === 'idle' || s.sync.state === 'running') &&
+    isRecord(s.flow) &&
+    SNAPSHOT_LISTS.every((key) => Array.isArray(s[key]))
+  )
+}
+
 function isMockState(v: unknown): v is MockState {
-  if (typeof v !== 'object' || v === null) return false
-  const s = v as Partial<MockState>
-  return s.version === MOCK_STATE_VERSION && typeof s.nextId === 'number' && Array.isArray(s.workspaces) && (s.session === null || s.session === 'github' || s.session === 'review')
+  if (!isRecord(v)) return false
+  return (
+    v.version === MOCK_STATE_VERSION &&
+    typeof v.nextId === 'number' &&
+    (v.session === null || v.session === 'github' || v.session === 'review') &&
+    Array.isArray(v.workspaces) &&
+    v.workspaces.every(isMockWorkspace)
+  )
+}
+
+/** 저장된 문자열 → 상태. 없거나 JSON이 아니거나 모양이 다르면 null (이유는 경고로 남긴다). */
+function parseState(raw: string | null): MockState | null {
+  if (raw === null) return null
+  try {
+    const data: unknown = JSON.parse(raw)
+    if (isMockState(data)) return data
+    console.warn('mock v1: 저장된 데이터 모양이 달라요')
+  } catch (e) {
+    console.warn('mock v1: 저장된 데이터가 JSON이 아니에요', e)
+  }
+  return null
 }
 
 /**
@@ -292,8 +356,7 @@ function isMockState(v: unknown): v is MockState {
  */
 function stopInterruptedSyncs(state: MockState): MockState {
   for (const ws of state.workspaces) {
-    const sync = ws?.snapshot?.sync
-    if (sync?.state === 'running') ws.snapshot.sync = { ...sync, state: 'idle' }
+    if (ws.snapshot.sync.state === 'running') ws.snapshot.sync = { ...ws.snapshot.sync, state: 'idle' }
   }
   return state
 }
@@ -308,12 +371,8 @@ function readState(storage: StorageLike, seed: () => MockState): MockState {
     return seed()
   }
   if (raw === null) return seed()
-  try {
-    const data: unknown = JSON.parse(raw)
-    if (isMockState(data)) return stopInterruptedSyncs(data)
-  } catch (e) {
-    console.warn('mock v1: 저장된 데이터가 JSON이 아니에요', e)
-  }
-  console.warn('mock v1: 저장된 데이터 모양이 달라 seed로 다시 시작해요')
+  const parsed = parseState(raw)
+  if (parsed) return stopInterruptedSyncs(parsed)
+  console.warn('mock v1: 저장된 데이터를 쓸 수 없어 seed로 다시 시작해요')
   return seed()
 }
