@@ -1,0 +1,26 @@
+{
+  "id": "12",
+  "requesterMemberId": "2",
+  "content": "OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요",
+  "status": "discussing",
+  "isAgendaCandidate": false,
+  "instructorRequested": false,
+  "instructorRequestedAt": null,
+  "agendaItemId": null,
+  "fromStandupId": "3",
+  "commentCount": 1,
+  "createdAt": "2026-11-05T01:20:00Z",
+  "closedAt": null,
+  "comments": [
+    {
+      "id": "31",
+      "author": { "userId": "7", "githubLogin": "bob", "displayName": "밥", "avatarUrl": null },
+      "authorMemberId": "3",
+      "isInstructorAnswer": false,
+      "content": "server.servlet.session.cookie.same-site 를 확인해 보세요",
+      "createdAt": "2026-11-05T02:05:00Z"
+    }
+  ],
+  "helpfulCommentId": null,
+  "learning": null
+}

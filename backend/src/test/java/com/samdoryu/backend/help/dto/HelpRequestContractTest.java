@@ -15,7 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 계약 테스트 ① — contract/examples/help 예시 ↔ Java DTO (CONTRACTS 「9」).
- * 실제 HTTP 응답 ↔ 예시(②)는 T3 · T4 머지 뒤 통합 테스트에서 한다.
+ * 실제 HTTP 응답 ↔ 예시(②)는 {@code HelpRequestIntegrationTest}.
  */
 class HelpRequestContractTest {
 
@@ -38,6 +38,11 @@ class HelpRequestContractTest {
     @Test
     void summaryExampleRoundTrips() throws IOException {
         assertRoundTrip("help-request-summary.json", HelpRequestSummary.class);
+    }
+
+    @Test
+    void detailExampleRoundTrips() throws IOException {
+        assertRoundTrip("help-request-detail.json", HelpRequestDetail.class);
     }
 
     @Test
