@@ -100,4 +100,12 @@ public class HelpRequest {
     public void onComment(boolean byRequester, boolean instructorAnswer) {
         this.status = status.afterComment(byRequester, instructorAnswer);
     }
+
+    /** 요청자가 닫음(FR-LRN-17) → {@code resolved}. 닫을 수 있는 상태 · 코멘트 조건은 부르는 쪽이 먼저 확인한다. */
+    public void close(HelpComment helpfulComment, String learning, Instant closedAt) {
+        this.status = HelpRequestStatus.RESOLVED;
+        this.helpfulComment = helpfulComment;
+        this.learning = Objects.requireNonNull(learning);
+        this.closedAt = Objects.requireNonNull(closedAt);
+    }
 }

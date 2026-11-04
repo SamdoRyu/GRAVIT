@@ -477,6 +477,12 @@ export interface HelpRequestCreateRequest {
 export interface HelpCommentCreateRequest {
   content: string
 }
+/** `POST W/help-requests/{helpRequestId}/close` — 요청자만. learning 1~200자 */
+export interface HelpRequestCloseRequest {
+  /** 이 글의 코멘트 — 강사 답변 · 요청자 본인 코멘트는 안 됨 */
+  helpfulCommentId: Id | null
+  learning: string
+}
 /** `GET W/help-requests/{helpRequestId}` */
 export interface HelpRequestDetail extends HelpRequestSummary {
   /** createdAt 오름차순. 안건으로 전환해도 그대로 붙어 보인다 */

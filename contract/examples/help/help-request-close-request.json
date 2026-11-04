@@ -1,0 +1,1 @@
+{ "helpfulCommentId": "31", "learning": "SameSite는 쿠키마다 정하고, Spring에서는 server.servlet.session.cookie.same-site로 바꾼다" }
