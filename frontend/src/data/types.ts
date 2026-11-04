@@ -473,6 +473,10 @@ export interface HelpRequestCreateRequest {
   content: string
   fromStandupId: Id | null
 }
+/** `POST W/help-requests/{helpRequestId}/comments` — content 1~2000자 */
+export interface HelpCommentCreateRequest {
+  content: string
+}
 /** `GET W/help-requests/{helpRequestId}` */
 export interface HelpRequestDetail extends HelpRequestSummary {
   /** createdAt 오름차순. 안건으로 전환해도 그대로 붙어 보인다 */
