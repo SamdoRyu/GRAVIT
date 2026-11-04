@@ -1,6 +1,6 @@
 // OWNER: scene-builder. Root of everything rendered inside <Canvas>: the space station (confirmed theme) and the
 // workspace's boxes and crew placed by the station ThemeLayout.
-import { useMemo } from 'react'
+import { Suspense, useMemo } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
 import { ArchiveTag } from './ArchiveTag'
@@ -39,7 +39,10 @@ export function OfficeScene() {
         <NoPick>
           <StationEnvironment podsShown={pods} />
         </NoPick>
-        <Avatars />
+        {/* The crew glTF loads after the station: nothing waits for it. */}
+        <Suspense fallback={null}>
+          <Avatars />
+        </Suspense>
         <TaskBoxes />
         <MeetingRoomState />
         <ArchiveTag />

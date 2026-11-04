@@ -1,30 +1,33 @@
-// One cube bot: a rounded cube in the member color with a dark screen face (two eye dots) and a floating
-// status diamond. Presence decides where it is: its crew pod, the bridge, or gone. The station's tubes are smaller than
-// the crew, so it never walks between rooms: it fades out where it was and fades in at the new spot
+// One crew member: the confirmed design's 스페이 (Spay) glTF avatar with a floating status diamond. Presence decides
+// where it is: its crew pod, the bridge, or gone. The station's tubes are smaller than the crew, so it never walks
+// between rooms: it fades out where it was and fades in at the new spot
 // (CONTRACTS.md 「10」 아바타 이동 연출 — the light trail between the two comes with the meeting issues).
-import { useFrame } from '@react-three/fiber'
-import { memo, useEffect, useMemo, useRef } from 'react'
-import { Color, MathUtils, MeshStandardMaterial, OctahedronGeometry, type Group } from 'three'
+import { useAnimations, useGLTF } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Color, MeshStandardMaterial, NoColorSpace, OctahedronGeometry, type Group, type Material, type Mesh, type Texture } from 'three'
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { Id, Member, Presence } from '../data/types'
 import { SIGNAL_META } from '../data/insights'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
+import { crewEnvironment } from '../theme/station/crewEnvironment'
+import { applyCrewPalette, crewColor, setCrewColor } from '../theme/station/crewPalette'
 import { bridgeSeat, crewSpot, EXIT_SPOT, type Spot } from '../theme/station/spots'
-import { roundedGeo, SceneHtml, UNIT_CYL, UNIT_SPHERE, useDynamicLayer } from './shared'
+import { SceneHtml, useDynamicLayer } from './shared'
 import { parseSignalKey, signalKeyOf, useToday } from './signals'
-import { avatarLive, clickSlop, setCursor, type AvatarLive } from './runtime'
+import { avatarLive, clickSlop, noRaycast, setCursor, type AvatarLive } from './runtime'
 
-const CUBE = 0.55
-const BODY = roundedGeo(CUBE, CUBE, CUBE, 0.16)
-const SCREEN = roundedGeo(0.42, 0.22, 0.05, 0.06)
-const EYE_BAR = roundedGeo(0.075, 0.03, 0.03, 0.012)
+/** Crew avatar from the confirmed design (public/station — read only). Model: height 1, feet at the origin, facing +z. */
+export const CREW_MODEL_URL = '/station/models/spay_avatar.glb'
+/** World height of a crew member: the design's crew (about 3.1 station units) at WORLD_SCALE. */
+const CREW_HEIGHT = 1.3
+const CHEER_S = 2
 const GEM = new OctahedronGeometry(1, 0)
-const HOVER_Y = 0.12
-const SEAT_Y = 0.02
 /** Seconds to fade out at the old spot, and again to fade in at the new one. */
 const FADE_S = 0.4
-const WHITE = new Color('#ffffff')
-const BLACK = new Color('#000000')
+
+useGLTF.preload(CREW_MODEL_URL)
 
 function lerpAngle(a: number, b: number, k: number) {
   let d = (b - a) % (Math.PI * 2)
@@ -47,6 +50,20 @@ function spotFor(seat: number, presence: Presence): Spot {
   }
 }
 
+/**
+ * The design paints its textures for three r150's legacy output (no colour decoding); the canvas renders the same
+ * way (`linear`), so the glTF's colour textures are read as-is. Shared by every clone, set once.
+ */
+const preparedTextures = new WeakSet<Texture>()
+function useLinearTextures(textures: (Texture | null)[]) {
+  for (const t of textures) {
+    if (!t || preparedTextures.has(t)) continue
+    t.colorSpace = NoColorSpace
+    t.needsUpdate = true
+    preparedTextures.add(t)
+  }
+}
+
 interface Walker {
   init: boolean
   x: number
@@ -57,7 +74,6 @@ interface Walker {
   spot: Spot | null
   /** Where it should be; differs from `spot` while fading out. */
   next: Spot | null
-  sit: number
   alpha: number
   /** Last alpha written to the materials. */
   shown: number
@@ -65,7 +81,7 @@ interface Walker {
 }
 
 function newWalker(): Walker {
-  return { init: false, x: 0, y: 0, z: 0, yaw: 0, spot: null, next: null, sit: 0, alpha: 0, shown: -1, gone: false }
+  return { init: false, x: 0, y: 0, z: 0, yaw: 0, spot: null, next: null, alpha: 0, shown: -1, gone: false }
 }
 
 function place(w: Walker, spot: Spot) {
@@ -74,7 +90,6 @@ function place(w: Walker, spot: Spot) {
   w.y = spot.y
   w.z = spot.z
   w.yaw = spot.facing
-  w.sit = spot.seated ? 1 : 0
 }
 
 interface AvatarProps {
@@ -90,7 +105,7 @@ interface AvatarProps {
 export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGone }: AvatarProps) {
   const id = member.id
   const presence: Presence = leaving ? 'away' : member.presence
-  // Only identity, seat and presence decide where the bot is; other edits must not make it stand up.
+  // Only identity, seat and presence decide where the crew member is; other edits must not move them.
   const spot = useMemo(() => spotFor(seat, presence), [seat, presence])
 
   // Signal is memoized on tasks/member changes; nothing is computed per frame.
@@ -104,43 +119,83 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
   const hovered = useOffice((s) => s.hover?.kind === 'member' && s.hover.id === id)
   const dropHot = useOffice((s) => s.dropTarget?.kind === 'member' && s.dropTarget.id === id)
 
-  const variant = member.avatarVariant
-  const mats = useMemo(() => {
-    const mk = (c: Color) => new MeshStandardMaterial({ color: c, roughness: 0.55 })
-    const base = new Color(member.color)
-    return {
-      body: mk(base),
-      screen: mk(base.clone().lerp(BLACK, 0.72)),
-      eye: new MeshStandardMaterial({ color: WHITE.clone().lerp(base, 0.06), roughness: 0.4, emissive: WHITE.clone().lerp(base, 0.2), emissiveIntensity: 0.35 }),
-      nub: mk(base.clone().lerp(WHITE, 0.35)),
-      gem: new MeshStandardMaterial({ color: new Color(SIGNAL_META.ok.color), roughness: 0.3, emissive: new Color(SIGNAL_META.ok.color), emissiveIntensity: 0.5 }),
-    }
-  }, [member.color])
+  // ---- the glTF crew: one skinned clone per member, with its own materials so each can fade on its own ----
+  const gltf = useGLTF(CREW_MODEL_URL)
+  const gl = useThree((s) => s.gl)
+  const crew = useMemo(() => {
+    const env = crewEnvironment(gl)
+    const root = cloneSkinned(gltf.scene) as Group
+    const materials: Material[] = []
+    const textures: (Texture | null)[] = []
+    root.traverse((o) => {
+      const mesh = o as Mesh
+      if (!mesh.isMesh) return
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      mesh.frustumCulled = false // a skinned mesh moving away from its bind pose must not be culled
+      mesh.raycast = noRaycast // picking uses the simple hit volume below
+      const mat = (mesh.material as MeshStandardMaterial).clone()
+      applyCrewPalette(mat, crewColor(0))
+      mat.envMap = env
+      mat.envMapIntensity = 0.7
+      textures.push(mat.map)
+      mesh.material = mat
+      materials.push(mat)
+    })
+    return { root, materials, textures }
+  }, [gltf, gl])
+  useLinearTextures(crew.textures)
+  // 팀원 색 = 포드 번호의 팔레트 색(남색 부분만 바뀐다)
   useEffect(() => {
-    mats.gem.color.set(signalColor)
-    mats.gem.emissive.set(signalColor)
-  }, [mats, signalColor])
+    for (const m of crew.materials) setCrewColor(m as MeshStandardMaterial, crewColor(seat))
+  }, [crew, seat])
+  const gemMat = useMemo(
+    () => new MeshStandardMaterial({ color: new Color(SIGNAL_META.ok.color), roughness: 0.3, emissive: new Color(SIGNAL_META.ok.color), emissiveIntensity: 0.5 }),
+    [],
+  )
+  const fadeMats = useMemo(() => [...crew.materials, gemMat], [crew, gemMat])
   useEffect(() => {
-    walkerReset.current = true
+    gemMat.color.set(signalColor)
+    gemMat.emissive.set(signalColor)
+  }, [gemMat, signalColor])
+  useEffect(() => {
+    walker.current.shown = -1 // new materials: re-apply the opacity
     return () => {
-      Object.values(mats).forEach((m) => m.dispose())
+      fadeMats.forEach((m) => m.dispose())
     }
-  }, [mats])
+  }, [fadeMats])
 
   const root = useRef<Group>(null)
-  const lift = useRef<Group>(null)
+  const body = useRef<Group>(null)
   const float = useRef<Group>(null)
   const gem = useRef<Group>(null)
-  const eyes = useRef<Group>(null)
   useDynamicLayer(root)
   const walker = useRef<Walker>(newWalker())
-  const walkerReset = useRef(false)
   const live = useRef<AvatarLive>({ x: 0, y: 0, z: 0, visible: false })
   const seed = useMemo(() => {
     let h = 0
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997
     return h / 997
   }, [id])
+
+  // ---- animation: Idle, with a short Cheer when clicked (the design's 반가워하기) ----
+  const { actions, mixer } = useAnimations(gltf.animations, body)
+  const current = useRef<string | null>(null)
+  const cheerUntil = useRef(0)
+  const play = useCallback(
+    (name: string) => {
+      const next = actions[name]
+      if (!next || current.current === name) return
+      next.reset().setEffectiveWeight(1).fadeIn(0.35).play()
+      if (current.current) actions[current.current]?.fadeOut(0.35)
+      current.current = name
+    },
+    [actions],
+  )
+  useEffect(() => {
+    play('Idle')
+    mixer.setTime(seed * 3) // crew members don't idle in lockstep
+  }, [play, mixer, seed])
 
   useEffect(() => {
     const l = live.current
@@ -152,19 +207,11 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
     }
   }, [id])
 
-  useEffect(() => {
-    if (lift.current) lift.current.rotation.order = 'YXZ'
-  }, [])
-
   useFrame((state, delta) => {
     const g = root.current
     if (!g) return
     const dt = Math.min(delta, 0.1)
     const w = walker.current
-    if (walkerReset.current) {
-      walkerReset.current = false
-      w.shown = -1 // new materials: re-apply the opacity
-    }
 
     if (!w.init) {
       w.init = true
@@ -186,14 +233,12 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
       w.alpha = Math.min(1, w.alpha + dt / FADE_S)
     }
     if (w.spot) w.yaw = lerpAngle(w.yaw, w.spot.facing, 1 - Math.exp(-6 * dt))
-    const sitGoal = w.spot?.seated ? 1 : 0
-    w.sit += (sitGoal - w.sit) * (1 - Math.exp(-7 * dt))
 
     const alpha = w.spot?.exit ? 0 : w.alpha
     if (Math.abs(alpha - w.shown) > 0.004) {
       w.shown = alpha
       const tr = alpha < 0.999
-      for (const m of Object.values(mats)) {
+      for (const m of fadeMats) {
         if (m.transparent !== tr) {
           m.transparent = tr
           m.needsUpdate = true
@@ -212,41 +257,23 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
       onGone(id)
     }
 
+    if (current.current === 'Cheer' && performance.now() > cheerUntil.current) play('Idle')
+
     // ---- pose ----
     g.position.set(w.x, w.y, w.z)
+    if (body.current) body.current.rotation.y = w.yaw
     const t = state.clock.elapsedTime
-    const working = presence === 'working' && w.sit > 0.5
-    const idleBob = Math.sin(t * 1.5 + seed * 6) * 0.012 * (1 - w.sit)
-    const y = MathUtils.lerp(HOVER_Y + idleBob, SEAT_Y, w.sit)
-    const breathe = Math.sin(t * 1.8 + seed * 9) * 0.01 * w.sit
-    const l = lift.current
-    if (l) {
-      l.position.y = y
-      l.rotation.y = w.yaw
-      l.scale.y = 1 + breathe
-    }
-    const e = eyes.current
-    if (e) {
-      // blink every few seconds; glance around slightly while working
-      const period = 3.6 + seed * 2.4
-      const bp = (t + seed * 10) % period
-      e.scale.y = bp < 0.12 ? 0.12 : 1
-      e.position.x = working ? Math.sin(t * 0.55 + seed * 7) * 0.035 : 0
-      e.position.y = working ? Math.sin(t * 0.37 + seed * 3) * 0.012 : 0
-    }
-    if (float.current) float.current.position.y = y + CUBE + 0.42 + Math.sin(t * 1.3 + seed * 5) * 0.04
+    if (float.current) float.current.position.y = CREW_HEIGHT + 0.28 + Math.sin(t * 1.3 + seed * 5) * 0.04
     if (gem.current) {
       gem.current.rotation.y += dt * 0.9
-      if (alert) mats.gem.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + seed * 4))
-      else if (mats.gem.emissiveIntensity !== 0.5) mats.gem.emissiveIntensity = 0.5
+      if (alert) gemMat.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + seed * 4))
+      else if (gemMat.emissiveIntensity !== 0.5) gemMat.emissiveIntensity = 0.5
     }
   })
 
   const ringColor = dropHot ? PALETTE.dropOk : selected ? PALETTE.selection : hovered ? PALETTE.hover : null
   const showTag = selected || hovered || dropHot
   const tagText = signal.reasons.length ? `${member.name} · ${signal.reasons.join(', ')}` : `${member.name} · ${SIGNAL_META.ok.label}`
-  const roundEyes = variant % 2 === 0
-  const eyeY = CUBE / 2 + 0.03
 
   return (
     <group
@@ -267,35 +294,22 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
         e.stopPropagation()
         if (e.delta > clickSlop(e)) return
         useOffice.getState().select({ kind: 'member', id })
+        cheerUntil.current = performance.now() + CHEER_S * 1000
+        play('Cheer')
       }}
     >
-      <group ref={lift}>
-        <mesh geometry={BODY} material={mats.body} position={[0, CUBE / 2, 0]} castShadow receiveShadow />
-        <mesh geometry={SCREEN} material={mats.screen} position={[0, eyeY, CUBE / 2 - 0.008]} />
-        <group ref={eyes}>
-          {roundEyes ? (
-            <>
-              <mesh geometry={UNIT_SPHERE} material={mats.eye} position={[-0.09, eyeY, CUBE / 2 + 0.022]} scale={[0.035, 0.035, 0.02]} />
-              <mesh geometry={UNIT_SPHERE} material={mats.eye} position={[0.09, eyeY, CUBE / 2 + 0.022]} scale={[0.035, 0.035, 0.02]} />
-            </>
-          ) : (
-            <>
-              <mesh geometry={EYE_BAR} material={mats.eye} position={[-0.09, eyeY, CUBE / 2 + 0.03]} rotation={[0, 0, Math.PI / 2]} />
-              <mesh geometry={EYE_BAR} material={mats.eye} position={[0.09, eyeY, CUBE / 2 + 0.03]} rotation={[0, 0, Math.PI / 2]} />
-            </>
-          )}
-        </group>
-        {variant % 3 === 0 && (
-          <>
-            <mesh geometry={UNIT_CYL} material={mats.nub} position={[0, CUBE + 0.04, 0]} scale={[0.012, 0.08, 0.012]} />
-            <mesh geometry={UNIT_SPHERE} material={mats.nub} position={[0, CUBE + 0.095, 0]} scale={0.032} castShadow />
-          </>
-        )}
+      <group ref={body} scale={CREW_HEIGHT}>
+        <primitive object={crew.root} />
       </group>
+      {/* invisible hit volume: hover / click / drop on the crew member */}
+      <mesh position={[0, CREW_HEIGHT / 2, 0]}>
+        <cylinderGeometry args={[0.32, 0.32, CREW_HEIGHT, 12]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
 
-      {/* soft ring on the floor for selection / hover / drop */}
+      {/* soft ring on the deck for selection / hover / drop */}
       {ringColor && (
-        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={dropHot ? 1.3 : 1} renderOrder={4}>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={dropHot ? 1.3 : 1} renderOrder={4} raycast={noRaycast}>
           <ringGeometry args={[0.5, 0.62, 40]} />
           <meshBasicMaterial color={ringColor} transparent opacity={0.65} depthWrite={false} />
         </mesh>
@@ -304,7 +318,7 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
       {/* status diamond (plumbob): slow spin, gentle bob, color = signal */}
       <group ref={float}>
         <group ref={gem}>
-          <mesh geometry={GEM} material={mats.gem} scale={[0.09, 0.15, 0.09]} castShadow />
+          <mesh geometry={GEM} material={gemMat} scale={[0.09, 0.15, 0.09]} castShadow raycast={noRaycast} />
         </group>
         {showTag && (
           <SceneHtml position={[0, 0.34, 0]} center zIndexRange={[0, 0]} pointerEvents="none">

@@ -61,6 +61,18 @@ public class AppUser {
         return new AppUser(AccountType.REVIEW, null, null, displayName, null);
     }
 
+    /**
+     * 동기화 — 콜라보레이터 목록의 로그인 이름 · 사진으로 맞춘다. 콜라보레이터 목록에는 프로필 이름이 없으므로 표시 이름은
+     * 로그인 때 맞춘 값을 그대로 둔다.
+     */
+    public void syncGithubIdentity(String githubLogin, String avatarUrl) {
+        if (accountType != AccountType.GITHUB) {
+            throw new IllegalStateException("GitHub 계정만 GitHub 표시 값을 가진다");
+        }
+        this.githubLogin = githubLogin;
+        this.avatarUrl = avatarUrl;
+    }
+
     /** 로그인 · 동기화 때 GitHub의 표시 값으로 맞춘다. */
     public void updateGithubProfile(String githubLogin, String displayName, String avatarUrl) {
         if (accountType != AccountType.GITHUB) {
