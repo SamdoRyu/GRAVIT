@@ -1,11 +1,14 @@
 package com.samdoryu.backend.auth.service;
 
+import com.samdoryu.backend.auth.domain.AccountType;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.common.security.AppProperties;
 import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
+import com.samdoryu.backend.workspace.domain.WorkspaceKind;
+import com.samdoryu.backend.workspace.service.WorkspaceService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -13,6 +16,7 @@ import org.springframework.stereotype.Service;
 /**
  * 인가 검사의 한 곳(CONTRACTS.md 「6」 검사 순서). Controller가 부른다.
  * 1 로그인 → 2 사무실 접근 → (3 대상 존재는 각 Service) → 4 동작 권한({@link WorkspaceAccess}).
+ * 사무실 경로의 모든 API가 이 검사를 거치는지는 {@code WorkspaceEndpointGuardTest}가 지킨다(FR-AUTH-04).
  * 요청 본문 · 헤더의 사용자 값은 믿지 않고 세션의 사용자만 쓴다.
  */
 @Service
@@ -20,10 +24,13 @@ public class AuthorizationService {
 
     private final AppProperties appProperties;
     private final InstructorAssignmentService instructorAssignmentService;
+    private final WorkspaceService workspaceService;
 
-    public AuthorizationService(AppProperties appProperties, InstructorAssignmentService instructorAssignmentService) {
+    public AuthorizationService(AppProperties appProperties, InstructorAssignmentService instructorAssignmentService,
+            WorkspaceService workspaceService) {
         this.appProperties = appProperties;
         this.instructorAssignmentService = instructorAssignmentService;
+        this.workspaceService = workspaceService;
     }
 
     /** 검사 순서 1 — 세션의 로그인 사용자. 없으면 {@code unauthorized}. */
@@ -43,6 +50,12 @@ public class AuthorizationService {
     public WorkspaceAccess requireWorkspaceAccess(String workspaceId) {
         AppPrincipal principal = currentPrincipal();
         Long id = Ids.fromPath(workspaceId);
+
+        // 심사용 계정은 시연 사무실에만 들어간다(P15). 세션에 무엇이 들어 있든 실제 사무실은 존재를 숨긴다 — 요청마다 DB 확인.
+        if (principal.accountType() == AccountType.REVIEW
+                && workspaceService.requireWorkspace(id).getKind() != WorkspaceKind.DEMO) {
+            throw new ApiException(ErrorCode.NOT_FOUND);
+        }
 
         // 허용 목록의 강사 계정은 콜라보레이터여도 어느 사무실에서도 팀원 역할로 판정하지 않는다(P1 — 권한 상승 방지).
         if (isAllowlistedInstructor(principal)) {

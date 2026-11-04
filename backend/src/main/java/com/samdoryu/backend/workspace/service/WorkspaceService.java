@@ -6,6 +6,7 @@ import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,5 +33,17 @@ public class WorkspaceService {
     @Transactional(readOnly = true)
     public List<Member> currentMembers(Long workspaceId) {
         return memberRepository.findByWorkspaceIdAndRemovedAtIsNull(workspaceId);
+    }
+
+    /**
+     * 이 사용자가 지금 팀원인 실제 사무실의 팀원 행 — 그 레포들({@code githubRepoIds}) 중 사무실이 열린 것만.
+     * 팀원 행은 동기화가 만든다. 아직 없으면 그 사무실은 결과에 없다.
+     */
+    @Transactional(readOnly = true)
+    public List<Member> currentMembershipsInRepos(Long userId, Collection<Long> githubRepoIds) {
+        if (githubRepoIds.isEmpty()) {
+            return List.of();
+        }
+        return memberRepository.findByUserIdAndRemovedAtIsNullAndWorkspaceGithubRepoIdIn(userId, githubRepoIds);
     }
 }

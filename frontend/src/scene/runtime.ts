@@ -9,6 +9,8 @@ export type ControlsImpl = ComponentRef<typeof OrbitControls>
 /** Live avatar position (updated every frame by each Avatar). */
 export interface AvatarLive {
   x: number
+  /** Floor height under the avatar (station decks differ). */
+  y: number
   z: number
   visible: boolean
 }

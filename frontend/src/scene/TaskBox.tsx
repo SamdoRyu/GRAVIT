@@ -9,11 +9,10 @@ import type { Id } from '../data/types'
 import type { Overlay } from '../store'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
-import { DESK_TOP_Y } from './Desks'
 import { resetDropTracking, updateDropTarget } from './dropTarget'
 import { boxLive, cameraGesture, cameraLock, clickSlop, DRAG_THRESHOLD_PX, dragPoint, LONG_PRESS_MS, LONG_PRESS_SLOP_PX, releaseCanvasPointer, noRaycast, setCursor, type BoxLive } from './runtime'
 import { clamp, UNIT_BOX, useDynamicLayer } from './shared'
-import { BOX_D, BOX_W, boxHeight, type Slot } from './slots'
+import { BOX_D, BOX_H, BOX_W, type Slot } from './slots'
 
 const ROUNDED = new RoundedBoxGeometry(1, 1, 1, 3, 0.1)
 const meshRaycast = Mesh.prototype.raycast
@@ -133,7 +132,7 @@ export const TaskBox = memo(function TaskBox({ id, slot, dimmed, overlay, pop, t
       strip = strip.clone().lerp(GRAY, 0.75)
       opacity = 0.22
     }
-    return { main, strip, opacity, overdue: isOverdue(task, today), h: boxHeight(task.estimate) }
+    return { main, strip, opacity, overdue: isOverdue(task, today), h: BOX_H }
   }, [task, projectColor, overlay, dimmed, today])
 
   const group = useRef<Group>(null)
@@ -238,7 +237,7 @@ export const TaskBox = memo(function TaskBox({ id, slot, dimmed, overlay, pop, t
       }
     }
 
-    // ---- hover lift, pop-in, wobble ----
+    // ---- hover lift, pop-in ----
     const liftGoal = hovered && !isDragged ? 0.1 : 0
     a.lift += (liftGoal - a.lift) * (1 - Math.exp(-14 * dt))
     if (a.pop < 1) a.pop = Math.min(1, a.pop + dt / 0.45)
@@ -249,11 +248,7 @@ export const TaskBox = memo(function TaskBox({ id, slot, dimmed, overlay, pop, t
 
     a.ry = lerpAngle(a.ry, slot.rot, 1 - Math.exp(-8 * dt))
     g.position.set(a.px, a.py + a.lift, a.pz)
-    if (slot.wobble > 0 && !a.flying && !isDragged) {
-      // overloaded stack: a slight static tilt plus a very slow sway
-      const tilt = 0.015 + (a.py - DESK_TOP_Y) * 0.022
-      g.rotation.set(tilt * Math.sin(phase) + Math.sin(t * 0.5 + phase) * 0.007, a.ry, tilt * Math.cos(phase) + Math.cos(t * 0.4 + phase) * 0.007)
-    } else if (isDragged) {
+    if (isDragged) {
       g.rotation.set(0.05, a.ry, -0.05)
     } else {
       g.rotation.set(0, a.ry, 0)

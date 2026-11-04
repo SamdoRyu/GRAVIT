@@ -1,0 +1,1 @@
+{ "content": "application.yaml의 server.servlet.session.cookie.same-site를 lax로 두면 돼요" }

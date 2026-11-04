@@ -49,7 +49,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #47 도움 요청 만들기 · 읽기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
+ * #47 도움 요청 만들기 · 읽기, #48 코멘트, #49 닫기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「11」, CONTRACTS.md 「6」 검사 순서).
  * 세션은 {@link TestLogin}, 쓰기는 화면과 같은 CSRF 쿠키 → 헤더 + Origin. 테스트마다 트랜잭션을 되돌린다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/help}.
  */
@@ -79,6 +79,7 @@ class HelpRequestIntegrationTest {
 
     private Workspace ws;
     private Workspace otherWs;
+    private AppUser aliceUser;
     private AppUser bobUser;
     private AppUser instructorUser;
     private Member alice;
@@ -88,11 +89,12 @@ class HelpRequestIntegrationTest {
     private Standup bobStandup;
     private Standup otherWsStandup;
     private MockHttpSession aliceSession;
+    private MockHttpSession bobSession;
     private MockHttpSession instructorSession;
 
     @BeforeEach
     void setUp() {
-        AppUser aliceUser = users.saveAndFlush(AppUser.github(1001L, "alice", "앨리스", null));
+        aliceUser = users.saveAndFlush(AppUser.github(1001L, "alice", "앨리스", null));
         bobUser = users.saveAndFlush(AppUser.github(1002L, "bob", "밥", null));
         instructorUser = users.saveAndFlush(AppUser.github(INSTRUCTOR_GITHUB_ID, "instructor", "강사", null));
         ws = workspaces.saveAndFlush(Workspace.github(5001L, "samdoryu", "a", null, aliceUser, T0));
@@ -108,6 +110,8 @@ class HelpRequestIntegrationTest {
         // 앨리스는 ws에서만 팀원으로 로그인한 세션 — otherWs 역할은 세션에 없다.
         aliceSession = TestLogin.githubUser(aliceUser.getId(), 1001L)
                 .member(ws.getId(), alice.getId(), WorkspaceRole.REPO_ADMIN).session();
+        bobSession = TestLogin.githubUser(bobUser.getId(), 1002L)
+                .member(ws.getId(), bob.getId(), WorkspaceRole.PARTICIPANT).session();
         instructorSession = TestLogin.githubUser(instructorUser.getId(), INSTRUCTOR_GITHUB_ID).session();
     }
 
@@ -131,6 +135,28 @@ class HelpRequestIntegrationTest {
     private static String body(String content, Standup fromStandup) {
         String standupId = fromStandup == null ? "null" : "\"" + Ids.toApi(fromStandup.getId()) + "\"";
         return "{\"content\":\"" + content + "\",\"fromStandupId\":" + standupId + "}";
+    }
+
+    private ResultActions comment(Workspace workspace, HelpRequest helpRequest, MockHttpSession session, String content)
+            throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post(base(workspace) + "/" + Ids.toApi(helpRequest.getId()) + "/comments").session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"" + content + "\"}"));
+    }
+
+    private HelpRequestStatus statusOf(HelpRequest helpRequest) {
+        flushAndClear();
+        return helpRequests.findById(helpRequest.getId()).orElseThrow().getStatus();
+    }
+
+    /** 상태 · 강사 요청을 바꾸는 API는 다른 Issue(#49 · #51 · #56) 몫이라 테스트 준비는 DB로 한다. */
+    private void setColumn(HelpRequest helpRequest, String assignment) {
+        em.flush();
+        em.createNativeQuery("update help_request set " + assignment + " where id = ?1")
+                .setParameter(1, helpRequest.getId()).executeUpdate();
+        em.clear();
     }
 
     /** 영속성 컨텍스트를 비워 다음 읽기가 DB(계산 열 포함)에서 오게 한다. */
@@ -269,5 +295,200 @@ class HelpRequestIntegrationTest {
                 .containsExactly(Ids.toApi(earlier.getId()), Ids.toApi(later.getId()));
         assertThat(summaries).extracting(HelpRequestSummary::isAgendaCandidate).containsExactly(true, false);
         assertThat(helpRequestService.listSummaries(otherWs.getId(), T0)).isEmpty();
+    }
+
+    // ---- #48 코멘트 ----------------------------------------------------------------------------
+
+    @Test
+    void otherMembersFirstCommentStartsDiscussion() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "세션이 끊겨요", null, T0));
+
+        String response = comment(ws, helpRequest, bobSession, "same-site 확인해 보세요")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.authorMemberId").value(Ids.toApi(bob.getId())))
+                .andExpect(jsonPath("$.author.displayName").value("밥"))
+                .andExpect(jsonPath("$.isInstructorAnswer").value(false))
+                .andExpect(jsonPath("$.content").value("same-site 확인해 보세요"))
+                .andReturn().getResponse().getContentAsString();
+
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(
+                ContractShape.readExample("help", "help-request-detail.json").get("comments").get(0), actual);
+        ContractShape.assertCommonRules(actual);
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+        assertThat(helpComments.findByHelpRequestIdOrderByCreatedAtAscIdAsc(helpRequest.getId())).hasSize(1);
+    }
+
+    @Test
+    void requesterOwnCommentKeepsOpen() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, aliceSession, "추가 정보예요").andExpect(status().isCreated());
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    @Test
+    void resolvedOrEndedIs409() throws Exception {
+        HelpRequest resolved = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "해결됨", null, T0));
+        HelpRequest ended = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "종료됨", null, T0));
+        setColumn(resolved, "status = 'RESOLVED'");
+        setColumn(ended, "status = 'ENDED'");
+
+        comment(ws, resolved, bobSession, "늦었지만").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        comment(ws, ended, bobSession, "늦었지만").andExpect(status().isConflict());
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void instructorOnUnrequestedHelpIs403() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, instructorSession, "답변").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void instructorAnswerOnRequestedHelpKeepsStatus() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        setColumn(helpRequest, "instructor_requested_at = '2026-11-05 02:00:00'");
+
+        comment(ws, helpRequest, instructorSession, "쿠키 설정을 보세요")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isInstructorAnswer").value(true))
+                .andExpect(jsonPath("$.authorMemberId").value(nullValue()))
+                .andExpect(jsonPath("$.author.displayName").value("강사"));
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    /** IDOR — 다른 사무실의 도움 요청에 내 사무실 경로로 코멘트하면 404. */
+    @Test
+    void commentOnHelpRequestOfAnotherWorkspaceIs404() throws Exception {
+        HelpRequest elsewhere = helpRequests.saveAndFlush(new HelpRequest(otherWs, aliceElsewhere, "질문", null, T0));
+
+        comment(ws, elsewhere, aliceSession, "코멘트").andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        assertThat(helpComments.count()).isZero();
+    }
+
+    @Test
+    void emptyCommentIs400() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        comment(ws, helpRequest, bobSession, "").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+    }
+
+    // ---- #49 닫기 ------------------------------------------------------------------------------
+
+    /** 닫는 시각은 서버의 지금이라 닫을 글은 과거에 만든다 — DB CHECK {@code closed_at >= created_at}. */
+    private static final Instant OPENED = Instant.now().minus(Duration.ofHours(1));
+
+    private ResultActions close(Workspace workspace, HelpRequest helpRequest, MockHttpSession session, String body)
+            throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post(base(workspace) + "/" + Ids.toApi(helpRequest.getId()) + "/close").session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    private static String closeBody(HelpComment helpful, String learning) {
+        String helpfulId = helpful == null ? "null" : "\"" + Ids.toApi(helpful.getId()) + "\"";
+        return "{\"helpfulCommentId\":" + helpfulId + ",\"learning\":\"" + learning + "\"}";
+    }
+
+    @Test
+    void requesterClosesWithHelpfulComment() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "세션이 끊겨요", null, OPENED));
+        HelpComment bobs = helpComments.saveAndFlush(new HelpComment(helpRequest, bobUser, bob, "same-site 확인",
+                T0.plusSeconds(60)));
+        setColumn(helpRequest, "status = 'DISCUSSING'");
+
+        String response = close(ws, helpRequest, aliceSession, closeBody(bobs, "SameSite는 쿠키마다 정한다"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("resolved"))
+                .andExpect(jsonPath("$.helpfulCommentId").value(Ids.toApi(bobs.getId())))
+                .andExpect(jsonPath("$.learning").value("SameSite는 쿠키마다 정한다"))
+                .andExpect(jsonPath("$.closedAt").isString())
+                .andExpect(jsonPath("$.comments.length()").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("help", "help-request-detail.json"), actual);
+        ContractShape.assertCommonRules(actual);
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.RESOLVED);
+    }
+
+    @Test
+    void closeWithoutHelpfulCommentIsAllowed() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, OPENED));
+
+        close(ws, helpRequest, aliceSession, closeBody(null, "혼자 해결함"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("resolved"))
+                .andExpect(jsonPath("$.helpfulCommentId").value(nullValue()));
+    }
+
+    @Test
+    void onlyRequesterCanClose() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, OPENED));
+
+        close(ws, helpRequest, bobSession, closeBody(null, "배움")).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        close(ws, helpRequest, instructorSession, closeBody(null, "배움")).andExpect(status().isForbidden());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    @Test
+    void closingOutsideOpenOrDiscussingIs409() throws Exception {
+        HelpRequest resolved = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "해결됨", null, OPENED));
+        HelpRequest onAgenda = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "안건으로 감", null, OPENED));
+        setColumn(resolved, "status = 'RESOLVED'");
+        setColumn(onAgenda, "status = 'ON_AGENDA'");
+
+        close(ws, resolved, aliceSession, closeBody(null, "배움")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        close(ws, onAgenda, aliceSession, closeBody(null, "배움")).andExpect(status().isConflict());
+    }
+
+    @Test
+    void helpfulCommentMustBeAnotherMembersCommentOnThisHelpRequest() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, OPENED));
+        HelpRequest otherHelp = helpRequests.saveAndFlush(new HelpRequest(ws, bob, "다른 글", null, OPENED));
+        HelpComment onOtherHelp = helpComments.saveAndFlush(new HelpComment(otherHelp, bobUser, bob, "다른 글 답",
+                T0.plusSeconds(10)));
+        HelpComment instructorAnswer = helpComments.saveAndFlush(new HelpComment(helpRequest, instructorUser, null,
+                "강사 답", T0.plusSeconds(20)));
+        HelpComment own = helpComments.saveAndFlush(new HelpComment(helpRequest, aliceUser, alice, "내 보충",
+                T0.plusSeconds(30)));
+
+        for (HelpComment notAllowed : List.of(onOtherHelp, instructorAnswer, own)) {
+            close(ws, helpRequest, aliceSession, closeBody(notAllowed, "배움")).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("invalid"));
+        }
+        close(ws, helpRequest, aliceSession, "{\"helpfulCommentId\":\"abc\",\"learning\":\"배움\"}")
+                .andExpect(status().isBadRequest());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    /** IDOR — 다른 사무실의 도움 요청을 내 사무실 경로로 닫으면 404. */
+    @Test
+    void closingHelpRequestOfAnotherWorkspaceIs404() throws Exception {
+        HelpRequest elsewhere = helpRequests.saveAndFlush(new HelpRequest(otherWs, aliceElsewhere, "질문", null, OPENED));
+
+        close(ws, elsewhere, aliceSession, closeBody(null, "배움")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+    }
+
+    @Test
+    void emptyLearningIs400() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, OPENED));
+
+        close(ws, helpRequest, aliceSession, closeBody(null, "")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
     }
 }

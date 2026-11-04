@@ -202,9 +202,9 @@ export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null
   return page.evaluate(async (s) => {
     const rtPath = '/src/scene/runtime.ts'
     const storePath = '/src/store.ts'
-    const layoutPath = '/src/office/layout.ts'
-    const pathsPath = '/src/scene/paths.ts'
-    const furniturePath = '/src/scene/Furniture.tsx'
+    const seatsPath = '/src/scene/stationSeats.ts'
+    const spotsPath = '/src/theme/station/spots.ts'
+    const geometryPath = '/src/theme/station/geometry.ts'
     const rt = await import(/* @vite-ignore */ rtPath)
     const { useOffice } = await import(/* @vite-ignore */ storePath)
     const api = rt.sceneApi.get?.()
@@ -212,22 +212,23 @@ export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null
     let w: [number, number, number] | null = null
     if (s.kind === 'point') w = [s.x, s.y, s.z]
     else if (s.kind === 'box') {
+      // Every box has the same height now (scene/slots.ts BOX_H): aim at its middle.
       const b = rt.boxLive.get(s.id)
-      const t = useOffice.getState().tasks[s.id]
-      if (b && t) w = [b.x, b.y + (0.14 + t.estimate * 0.06) / 2, b.z]
+      if (b) w = [b.x, b.y + 0.18, b.z]
     } else if (s.kind === 'member') {
       const live = rt.avatarLive.get(s.id)
-      if (live?.visible) w = [live.x, 0.8, live.z]
+      if (live?.visible) w = [live.x, live.y + 0.5, live.z]
       else {
-        const { deskById } = await import(/* @vite-ignore */ layoutPath)
-        const m = useOffice.getState().members[s.id]
-        const d = m && deskById(m.deskId)
-        if (d) w = [d.x, 0.8, d.z]
+        const { stationFor } = await import(/* @vite-ignore */ seatsPath)
+        const { crewSpot } = await import(/* @vite-ignore */ spotsPath)
+        const seat = stationFor(useOffice.getState().members).seats.get(s.id)
+        const spot = seat === undefined ? null : crewSpot(seat, true)
+        if (spot) w = [spot.x, spot.y + 0.5, spot.z]
       }
     } else if (s.kind === 'agenda') {
-      const { ROOMS } = await import(/* @vite-ignore */ pathsPath)
-      const { TABLE_TOP_Y } = await import(/* @vite-ignore */ furniturePath)
-      w = [ROOMS.meeting.cx, TABLE_TOP_Y, ROOMS.meeting.cz]
+      // The bridge's meeting table (theme/station/geometry.ts, drawn at WORLD_SCALE).
+      const { BRIDGE, WORLD_SCALE } = await import(/* @vite-ignore */ geometryPath)
+      w = [BRIDGE.x * WORLD_SCALE, BRIDGE.tableTopY * WORLD_SCALE, BRIDGE.z * WORLD_SCALE]
     }
     if (!w) return null
     const cam = api.camera
