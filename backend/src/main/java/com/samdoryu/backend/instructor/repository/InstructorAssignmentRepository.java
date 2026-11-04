@@ -1,6 +1,7 @@
 package com.samdoryu.backend.instructor.repository;
 
 import com.samdoryu.backend.instructor.domain.InstructorAssignment;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface InstructorAssignmentRepository extends JpaRepository<InstructorAssignment, Long> {
@@ -11,4 +12,7 @@ public interface InstructorAssignmentRepository extends JpaRepository<Instructor
 
     /** 어느 사무실이든 현재 지정이 있는가. */
     boolean existsByInstructorGithubUserIdAndUnassignedAtIsNull(Long instructorGithubUserId);
+
+    /** 이 강사의 현재 지정 전부. */
+    List<InstructorAssignment> findByInstructorGithubUserIdAndUnassignedAtIsNull(Long instructorGithubUserId);
 }

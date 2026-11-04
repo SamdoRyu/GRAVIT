@@ -3,6 +3,7 @@ package com.samdoryu.backend.auth.service;
 import com.samdoryu.backend.auth.domain.AccountType;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,6 +32,13 @@ public record AppPrincipal(Long userId, AccountType accountType, Long githubUser
 
     public AppPrincipal {
         memberships = Map.copyOf(memberships);
+    }
+
+    /** 사무실 하나의 역할을 더한(또는 바꾼) 새 로그인 사용자 — 로그인 뒤 사무실을 연 레포 관리자(#68). */
+    public AppPrincipal withMembership(Long workspaceId, Membership membership) {
+        Map<Long, Membership> next = new HashMap<>(memberships);
+        next.put(workspaceId, membership);
+        return new AppPrincipal(userId, accountType, githubUserId, next);
     }
 
     /** 세션의 SecurityContext에 넣을 인증. 로그인 성공 처리와 테스트 로그인이 같은 모양을 쓴다. */

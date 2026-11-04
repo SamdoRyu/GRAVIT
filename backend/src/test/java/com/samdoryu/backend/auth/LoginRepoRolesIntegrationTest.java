@@ -15,6 +15,7 @@ import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.github.GithubUserClient;
+import com.samdoryu.backend.github.GithubUserToken;
 import com.samdoryu.backend.github.dto.GithubRepoPermission;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
@@ -173,6 +174,8 @@ class LoginRepoRolesIntegrationTest {
         mvc.perform(get(path(adminRepo, "/test-team-only")).session(session))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/me").session(session)).andExpect(status().isOk());
+        // 강사는 레포 선택을 쓰지 않으므로 GitHub 토큰도 세션에 두지 않는다
+        assertThat(GithubUserToken.from(session)).isEmpty();
     }
 
     @Test
@@ -185,11 +188,13 @@ class LoginRepoRolesIntegrationTest {
         mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
     }
 
+    /** 학생의 토큰은 서버 세션에만, {@link GithubUserToken}으로 감싸 값이 드러나지 않게 둔다(#68 — 레포 선택 · 사무실 열기). */
     @Test
-    void theUserTokenIsUsedOnceAndNotKeptInTheSession() throws Exception {
+    void theUserTokenIsKeptOnlyInTheServerSessionWithItsValueHidden() throws Exception {
         MockHttpSession session = login(MY_ID, "octo-kim");
 
         then(githubUserClient).should().repositoryPermissions("gho_user");
+        assertThat(GithubUserToken.from(session)).contains("gho_user");
         for (String name : Collections.list(session.getAttributeNames())) {
             assertThat(String.valueOf(session.getAttribute(name))).doesNotContain("gho_user");
         }

@@ -49,3 +49,5 @@ app:
   instructor-github-user-ids: ${INSTRUCTOR_GITHUB_USER_IDS:}
   # Security-review ID/PW login (P15). Off by default; when off the route does not exist (404). Route: #63.
   review-login-enabled: ${REVIEW_LOGIN_ENABLED:false}
+  # GitHub App name (URL slug) for the "install / request approval" link on the repository screen (P2). Empty = no link.
+  github-app-slug: ${GITHUB_APP_SLUG:}

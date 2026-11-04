@@ -1,5 +1,7 @@
 package com.samdoryu.backend.auth.domain;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /** 한 사무실에서 한 사람의 역할(CONTRACTS.md 「6」 역할 판정). 한 사무실에서 역할은 하나다. */
 public enum WorkspaceRole {
 
@@ -14,6 +16,7 @@ public enum WorkspaceRole {
     }
 
     /** JSON 값(CONTRACTS_API.md 「1」 WorkspaceRole). */
+    @JsonValue
     public String value() {
         return value;
     }

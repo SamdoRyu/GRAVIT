@@ -177,12 +177,14 @@ class GithubLoginIntegrationTest {
         }
 
         @Test
-        void sessionHoldsOnlyTheAppPrincipalNotTheGithubToken() throws Exception {
+        /** 세션에는 앱 사용자와, 값이 가려진 GitHub 토큰(서버 세션 전용 — #68)만 있다. GitHub 사용자 정보 원본은 없다. */
+        void sessionHoldsTheAppPrincipalAndAHiddenGithubToken() throws Exception {
             MockHttpSession session = loggedIn(1001L, "octo-kim", "김옥토");
 
             SecurityContext context = (SecurityContext) session.getAttribute(
                     HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
             assertThat(context.getAuthentication().getPrincipal()).isInstanceOf(AppPrincipal.class);
+            assertThat(com.samdoryu.backend.github.GithubUserToken.from(session)).contains("gho_fake");
             for (String name : Collections.list(session.getAttributeNames())) {
                 assertThat(String.valueOf(session.getAttribute(name))).doesNotContain("gho_fake");
             }
