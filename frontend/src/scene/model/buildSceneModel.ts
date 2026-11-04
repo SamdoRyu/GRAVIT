@@ -1,7 +1,18 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
-// 지금은 팀원 아바타(#10)만 만든다. 이슈 · PR(#11), 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
-import type { MemberDto, WorkspaceSnapshot } from '../../data/types'
+// 지금은 팀원 아바타(#10)와 이슈 · PR의 상태별 자리(#11)를 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
+// 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
+import type { MemberDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
 import type { PlaceRole, SceneEntity } from './types'
+
+/** 화면 배지 값 — 그리는 쪽이 모양을 정한다 */
+export const BADGE = {
+  /** Draft PR (구현 기본값 — 검토 공간 + Draft 배지) */
+  draft: 'draft',
+  /** 머지되지 않고 닫힌 PR (구현 기본값 — 완료 공간 + 미병합 종료 표시) */
+  unmergedClosed: 'unmerged_closed',
+  /** "계획 안 함"으로 닫힌 이슈 (구현 기본값 — 닫힘 사유로 완료 · 종료 구분) */
+  notPlanned: 'not_planned',
+} as const
 
 const deskRole = (memberId: string): PlaceRole => `desk:${memberId}`
 
@@ -19,6 +30,41 @@ function avatarEntity(m: MemberDto): SceneEntity {
   return { key: `member:${m.id}`, kind: 'avatar', refId: m.id, placeRole: deskRole(m.id), badges: [] }
 }
 
+/**
+ * 이슈의 자리(CONTRACTS.md 「3」): 닫힘 → done, 열림 · 담당자 없음 → backlog, 열림 · 담당자 있음 → 대표 담당자의 책상.
+ * 대표 담당자 = assigneeMemberIds[0](서버가 정렬해 보낸다 — 화면은 GitHub ID를 비교하지 않는다).
+ * 대표 담당자에게 책상 자리가 없으면 backlog(2026-11-04 결정).
+ */
+export function taskPlaceRole(task: TaskDto, seated: ReadonlySet<string>): PlaceRole {
+  if (task.state === 'closed') return 'done'
+  const lead = task.assigneeMemberIds[0]
+  return lead !== undefined && seated.has(lead) ? deskRole(lead) : 'backlog'
+}
+
+/** PR의 자리(CONTRACTS.md 「3」): 열림 · Draft → review, 머지 · 닫힘 → done */
+export function submissionPlaceRole(submission: SubmissionDto): PlaceRole {
+  return submission.state === 'open' || submission.state === 'draft' ? 'review' : 'done'
+}
+
+function taskEntity(t: TaskDto, seated: ReadonlySet<string>): SceneEntity {
+  const badges: string[] = []
+  if (t.state === 'closed' && t.closedReason === 'not_planned') badges.push(BADGE.notPlanned)
+  return { key: `task:${t.id}`, kind: 'issue', refId: t.id, placeRole: taskPlaceRole(t, seated), badges }
+}
+
+function submissionEntity(s: SubmissionDto): SceneEntity {
+  const badges: string[] = []
+  if (s.state === 'draft') badges.push(BADGE.draft)
+  if (s.state === 'closed') badges.push(BADGE.unmergedClosed)
+  return { key: `submission:${s.id}`, kind: 'pr', refId: s.id, placeRole: submissionPlaceRole(s), badges }
+}
+
 export function buildSceneModel(snapshot: WorkspaceSnapshot): SceneEntity[] {
-  return snapshot.members.filter(isSeated).map(avatarEntity)
+  const seatedMembers = snapshot.members.filter(isSeated)
+  const seated = new Set(seatedMembers.map((m) => m.id))
+  return [
+    ...seatedMembers.map(avatarEntity),
+    ...snapshot.tasks.map((t) => taskEntity(t, seated)),
+    ...snapshot.submissions.map(submissionEntity),
+  ]
 }
