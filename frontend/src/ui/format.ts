@@ -102,6 +102,16 @@ export function formatDuration(startIso: string, endIso?: string | null, now = D
   return min % 60 === 0 ? `${h}시간` : `${h}시간 ${min % 60}분`
 }
 
+/** 화면에 보일 수 있는 숫자만 — 없거나(null · undefined) 숫자가 아니거나 NaN · 무한대면 null (외부 데이터 방어) */
+export function finiteOrNull(v: number | null | undefined): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+/** "6.5시간" — 서버가 소수 첫째 자리로 준 시간 길이(예: 평균 리뷰 대기, FR-FLOW-05) */
+export function formatHours(hours: number): string {
+  return `${hours.toFixed(1)}시간`
+}
+
 /** "오후 2:30" */
 export function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })

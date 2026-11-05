@@ -7,15 +7,11 @@ import com.samdoryu.backend.github.dto.GithubAccount;
 import com.samdoryu.backend.github.dto.GithubInstalledRepository;
 import com.samdoryu.backend.github.dto.GithubRepoPermission;
 import java.io.IOException;
-import java.net.http.HttpClient;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -31,12 +27,9 @@ import org.springframework.web.util.UriBuilder;
 @Component
 public class GithubUserClient {
 
-    static final String API_BASE = "https://api.github.com";
-    static final int PAGE_SIZE = 100;
+    static final int PAGE_SIZE = GithubHttp.PAGE_SIZE;
     /** 페이지 상한 — 목록 하나에 1,000개까지. 무한 반복을 막는다. */
     static final int MAX_PAGES = 10;
-    /** GitHub가 응답하지 않을 때 요청을 붙잡지 않는다. */
-    static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record AccountJson(Long id, String login) {
@@ -68,23 +61,12 @@ public class GithubUserClient {
     private final RestClient restClient;
 
     public GithubUserClient() {
-        this(RestClient.builder().requestFactory(timeoutRequestFactory()));
+        this(GithubHttp.defaultBuilder());
     }
 
-    /** 테스트가 가짜 HTTP 서버를 붙인 빌더를 넘긴다. */
+    /** 테스트가 가짜 HTTP 서버를 붙인 빌더를 넘긴다. 읽기 전용 가드는 그때도 걸린다. */
     GithubUserClient(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.clone()
-                .baseUrl(API_BASE)
-                .defaultHeader(HttpHeaders.ACCEPT, "application/vnd.github+json")
-                .defaultHeader("X-GitHub-Api-Version", "2022-11-28")
-                .build();
-    }
-
-    private static JdkClientHttpRequestFactory timeoutRequestFactory() {
-        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(TIMEOUT);
-        return factory;
+        this.restClient = GithubHttp.build(restClientBuilder);
     }
 
     /** {@code GET /user/repos} — 사용자가 접근할 수 있는 레포와 admin 여부(앱이 설치된 레포만 보인다). 로그인 때 역할 판정(#65). */
@@ -202,18 +184,10 @@ public class GithubUserClient {
     }
 
     private static boolean outOfQuota(ClientHttpResponse response) {
-        return "0".equals(response.getHeaders().getFirst("X-RateLimit-Remaining"));
+        return GithubHttp.outOfQuota(response);
     }
 
     private static ErrorCode errorCodeFor(ClientHttpResponse response) throws IOException {
-        int status = response.getStatusCode().value();
-        if (status == HttpStatus.UNAUTHORIZED.value()) {
-            return ErrorCode.GITHUB_UNAUTHORIZED;
-        }
-        if (status == HttpStatus.TOO_MANY_REQUESTS.value()
-                || (status == HttpStatus.FORBIDDEN.value() && outOfQuota(response))) {
-            return ErrorCode.GITHUB_RATE_LIMITED;
-        }
-        return ErrorCode.UNAVAILABLE;
+        return GithubHttp.errorCodeFor(response);
     }
 }

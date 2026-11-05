@@ -90,6 +90,20 @@ class MeetingContractTest {
         assertThat(VALIDATOR.validate(new MeetingEndRequest("a".repeat(5001)))).hasSize(1);
     }
 
+    @Test
+    void decisionNeedsConclusion1To2000AndLearningAtMost2000() {
+        assertThat(VALIDATOR.validate(decision(null, null))).hasSize(1);
+        assertThat(VALIDATOR.validate(decision("", null))).hasSize(1);
+        assertThat(VALIDATOR.validate(decision("a".repeat(2001), null))).hasSize(1);
+        assertThat(VALIDATOR.validate(decision("a", "a".repeat(2001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(decision("a", null))).isEmpty();
+        assertThat(VALIDATOR.validate(decision("a".repeat(2000), "a".repeat(2000)))).isEmpty();
+    }
+
+    private static DecisionRequest decision(String conclusion, String learning) {
+        return new DecisionRequest(conclusion, learning, null, null, null, null);
+    }
+
     private static AgendaItemCreateRequest create(String title, String background) {
         return new AgendaItemCreateRequest(AgendaKind.OTHER, null, title, background, null, null);
     }
