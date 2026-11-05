@@ -54,37 +54,43 @@ public class SyncService {
 
     /**
      * {@code POST W/sync} — 실행 중 표시를 하고 바로 {@code running}을 돌려준다. 동기화는 백그라운드에서 돈다.
-     * 수동 동기화는 전체를 다시 읽는다(빠진 변경분을 메운다).
+     * 수동 동기화(사무실 열기 직후 첫 동기화 포함)는 전체를 다시 읽고(빠진 변경분을 메운다) 명세 문서도 다시 읽는다.
      */
     public SyncStatus requestSync(Long workspaceId) {
         if (!recorder.tryStart(workspaceId)) {
             throw new ApiException(ErrorCode.CONFLICT);
         }
         SyncStatus running = recorder.status(workspaceId);
-        syncExecutor.execute(() -> run(workspaceId, null));
+        syncExecutor.execute(() -> run(workspaceId, null, true));
         return running;
     }
 
-    /** 자동 폴링 — 실제 사무실 전부를 마지막 성공 이후 변경분으로. 실행 중인 사무실은 건너뛴다. */
+    /**
+     * 자동 폴링 — 실제 사무실 전부를 마지막 성공 이후 변경분으로. 실행 중인 사무실은 건너뛴다. 명세 문서는 읽지 않는다
+     * (CONTRACTS_API 「4」 — 2026-10-28 결정).
+     */
     public void pollAll() {
         for (Long workspaceId : workspaceService.githubWorkspaceIds()) {
             if (!recorder.tryStart(workspaceId)) {
                 continue;
             }
             Instant lastSucceededAt = recorder.lastSucceededAt(workspaceId);
-            run(workspaceId, lastSucceededAt == null ? null : lastSucceededAt.minus(POLL_OVERLAP));
+            run(workspaceId, lastSucceededAt == null ? null : lastSucceededAt.minus(POLL_OVERLAP), false);
         }
     }
 
-    /** 이미 실행 중으로 표시된 사무실을 동기화하고 결과를 기록 · 알린다. 예외를 밖으로 던지지 않는다 — 기록으로 남긴다. */
-    void run(Long workspaceId, Instant since) {
+    /**
+     * 이미 실행 중으로 표시된 사무실을 동기화하고 결과를 기록 · 알린다. 예외를 밖으로 던지지 않는다 — 기록으로 남긴다.
+     *
+     * @param readSpec 명세 문서를 다시 읽나 — 수동 동기화만
+     */
+    void run(Long workspaceId, Instant since, boolean readSpec) {
         Instant now = now();
         SyncStatus result;
-        boolean succeeded = false;
+        WorkspaceSyncService.Outcome outcome = null;
         try {
-            workspaceSyncService.sync(workspaceId, since, now);
-            result = recorder.succeed(workspaceId, now);
-            succeeded = true;
+            outcome = workspaceSyncService.sync(workspaceId, since, readSpec, now);
+            result = recorder.succeed(workspaceId, now, outcome.specWarnings());
         } catch (ApiException e) {
             log.warn("동기화 실패: workspace={}, code={}", workspaceId, e.getErrorCode().code());
             result = recorder.fail(workspaceId, now(), failureCode(e.getErrorCode()));
@@ -93,9 +99,14 @@ public class SyncService {
             result = recorder.fail(workspaceId, now(), ErrorCode.UNAVAILABLE);
         }
         eventHub.publishSync(workspaceId, result);
-        if (succeeded) {
-            eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.MEMBERS, SnapshotResource.TASKS,
-                    SnapshotResource.SUBMISSIONS);
+        if (outcome != null) {
+            if (outcome.specRead()) {
+                eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.MEMBERS, SnapshotResource.TASKS,
+                        SnapshotResource.SUBMISSIONS, SnapshotResource.REQUIREMENTS);
+            } else {
+                eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.MEMBERS, SnapshotResource.TASKS,
+                        SnapshotResource.SUBMISSIONS);
+            }
         }
     }
 

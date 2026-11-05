@@ -266,4 +266,47 @@ class GithubAppReaderTest {
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.UNAVAILABLE));
         silent.verify();
     }
+
+    // ===== 명세 문서 읽기(#14) =====
+
+    private static final MediaType RAW = MediaType.parseMediaType("application/vnd.github.raw");
+
+    @Test
+    void readsTheSpecFileAsRawTextWithEachPathSegmentEncoded() {
+        expectInstallationToken();
+        server.expect(requestTo(API + "/repos/team-samdo/gitvillage/contents/docs/%EC%9A%94%EA%B5%AC%20%EC%82%AC%ED%95%AD.md"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer ghs_install"))
+                .andExpect(header("Accept", GithubAppReader.RAW_CONTENT))
+                .andRespond(withSuccess("# 명세\n\n## FR-AUTH-01 로그인\n", RAW));
+
+        assertThat(reader.readFile(REPO, "/docs/요구 사항.md")).contains("# 명세\n\n## FR-AUTH-01 로그인\n");
+        server.verify();
+    }
+
+    @Test
+    void missingFileDirectoryAndOversizedFileAreUnreadable() {
+        expectInstallationToken();
+        expectGet("/repos/team-samdo/gitvillage/contents/docs/none.md").andRespond(withStatus(HttpStatus.NOT_FOUND));
+        expectGet("/repos/team-samdo/gitvillage/contents/docs")
+                .andRespond(withSuccess("[{\"name\":\"requirements.md\",\"type\":\"file\"}]", MediaType.APPLICATION_JSON));
+        expectGet("/repos/team-samdo/gitvillage/contents/big.md")
+                .andRespond(withSuccess("가".repeat(GithubAppReader.MAX_FILE_BYTES / 3 + 1), RAW));
+
+        assertThat(reader.readFile(REPO, "docs/none.md")).isEmpty();
+        assertThat(reader.readFile(REPO, "docs")).isEmpty();
+        assertThat(reader.readFile(REPO, "big.md")).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void otherGithubErrorsFailTheSync() {
+        expectInstallationToken();
+        expectGet("/repos/team-samdo/gitvillage/contents/docs/requirements.md")
+                .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+
+        assertThatThrownBy(() -> reader.readFile(REPO, "docs/requirements.md"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.GITHUB_UNAUTHORIZED));
+    }
 }

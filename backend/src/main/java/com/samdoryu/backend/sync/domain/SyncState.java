@@ -86,6 +86,11 @@ public class SyncState {
         this.lastFailureMessage = message;
     }
 
+    /** 명세 문서를 읽은 동기화가 성공했을 때 — 그 읽기의 경고로 바꾼다(SpecWarning 배열 JSON, 빈 배열 포함 — #14). */
+    public void replaceSpecWarnings(String specWarningsJson) {
+        this.specWarningsJson = Objects.requireNonNull(specWarningsJson);
+    }
+
     /** 마지막 실패가 마지막 성공보다 나중인가 — 상단 바 실패 표시(FR-GH-05). */
     public boolean isFailing() {
         return lastFailedAt != null && (lastSucceededAt == null || lastFailedAt.isAfter(lastSucceededAt));

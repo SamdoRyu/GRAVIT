@@ -111,4 +111,12 @@ class SeedGithubReaderTest {
         assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 10)).isEmpty();
         assertThat(reader.linkedIssues(GithubRepoRef.DEMO, 999)).isEmpty();
     }
+
+    /** #14 — 시연 명세 문서는 정해진 경로 하나뿐이다. */
+    @Test
+    void demoSpecDocumentIsServedOnlyAtItsPath() {
+        assertThat(reader.readFile(GithubRepoRef.DEMO, SeedGithubReader.SPEC_PATH))
+                .hasValueSatisfying(markdown -> assertThat(markdown).contains("## FR-AUTH-01 로그인", "## 문서 정리"));
+        assertThat(reader.readFile(GithubRepoRef.DEMO, "docs/other.md")).isEmpty();
+    }
 }
