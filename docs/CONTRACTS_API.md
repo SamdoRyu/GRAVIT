@@ -7,7 +7,7 @@
 
 # API 계약 — 오피스 v1
 
-> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-03
+> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-05
 > [CONTRACTS.md](CONTRACTS.md)의 상세편이다. 공통 규칙(ID · 시각 · 상태 코드 · 페이지 · 에러 · 검사 순서 · 익명성 · Snapshot 경계)은 CONTRACTS.md에 있고 여기서 다시 적지 않는다. 엔드포인트 · DTO는 **이 문서 한 곳**이 기준이다. 바꿀 때는 CONTRACTS.md 「9. 계약 변경 절차」(문서 담당자가 고치고 커밋을 공유).
 > 근거: 2026-11-03 결정(Q1~Q6), 03 · 05 · 06 · 07. 이 문서는 새 기능 · 새 정책을 만들지 않는다 — 정책에서 바로 나오지 않는 인터페이스 선택에는 `[구현 기본값]`을 붙였다.
 
@@ -352,7 +352,7 @@ interface FlowSummary {               // 팀 단위 계산 값 — 사람별 합
   reviewConcentratedMemberIds: Id[];  // 리뷰 편중 — 몰렸다는 표시만 (FR-FLOW-03 — Should)
   assignmentConcentratedMemberIds: Id[]; // 담당 편중 (FR-FLOW-07 — Should)
   openSubmissionCount: number;        // 열린 PR 수 (FR-FLOW-05)
-  averageReviewWaitHours: number | null; // 평균 리뷰 대기, 소수 첫째 자리 (FR-FLOW-05)
+  averageReviewWaitHours: number | null; // 평균 리뷰 대기, 소수 첫째 자리 (FR-FLOW-05) — 계산 규칙은 CONTRACTS.md 「3」 막힘 신호 · 평균 리뷰 대기. 열린 PR이 없으면 null
   latestStandupDate: LocalDate | null;   // 최근 변화 뷰의 기준 (FR-FLOW-08 — Should)
 }
 
@@ -456,7 +456,7 @@ interface InstructorCandidateDto {
 
 | 메서드 · 경로 | 요청 | 성공 | 역할 · 조건 | 실패 |
 | --- | --- | --- | --- | --- |
-| `POST W/requirement-links` | `{ requirementId: Id; taskId: Id }` | `201 RequirementLinkDto`. 같은 연결이 이미 있으면 `200`과 기존 연결 | R2. 요구사항 · 이슈 모두 이 사무실 것 | 없거나 다른 사무실 것 `404`, 요구사항이 `active`가 아님 `409 conflict`, R2 아님 `403` |
+| `POST W/requirement-links` | `{ requirementId: Id; taskId: Id }` | `201 RequirementLinkDto`. 같은 연결이 이미 있으면 요구사항 상태와 상관없이 `200`과 기존 연결(새 연결이 아니므로 아래 `409`에 해당하지 않음 — 2026-11-05) | R2. 요구사항 · 이슈 모두 이 사무실 것 | 없거나 다른 사무실 것 `404`, 요구사항이 `active`가 아님 `409 conflict`, R2 아님 `403` |
 | `DELETE W/requirement-links/{linkId}` | — | `204` | R2 | R2 아님 `403` |
 
 - 연결은 GitHub 이슈를 바꾸지 않고, 이슈의 위치도 바꾸지 않는다(FR-REQ-07 · 2026-11-01 결정).
@@ -503,7 +503,7 @@ interface MyEvaluation { verdict: Verdict; reason: string; updatedAt: Instant }
 | --- | --- | --- | --- | --- |
 | `POST W/agenda-items` | `AgendaItemCreateRequest` | `201 AgendaItemDto`(`confirmed`). PR 안건은 그때의 현재 회차를 `evaluationRoundId`로 기억한다 | 팀원. 개수 제한 없음 (FR-LRN-14) | 종류와 원본이 맞지 않음 · `help_request` 종류 `400 invalid`(도움 요청은 「11」 전환으로만), 원본이 없거나 다른 사무실 것 `404`, 강사 `403` |
 | `POST W/agenda-items/{agendaItemId}/withdraw` | — | `200 AgendaItemDto`(`withdrawn`) | 팀원 — 올린 사람 | 올린 사람이 아님 · 강사 `403`, `confirmed`가 아님 `409` |
-| `POST W/agenda-items/{agendaItemId}/decision` | `DecisionRequest` | `200 AgendaItemDto`(`discussed`). 같은 트랜잭션에서: `revise_and_reevaluate`면 새 평가 회차(`meeting_reevaluate`), `help_request` 안건이면 그 도움 요청을 `ended`로 | 팀원 (올린 사람이 아니어도 됨) | `prDecision`이 PR 안건에 없거나 다른 종류에 있음 · 후속 담당자가 팀원이 아님 `400`, 강사 `403`, `confirmed`가 아님 `409` |
+| `POST W/agenda-items/{agendaItemId}/decision` | `DecisionRequest` | `200 AgendaItemDto`(`discussed`). 같은 트랜잭션에서: `revise_and_reevaluate`면 새 평가 회차(`meeting_reevaluate`), `help_request` 안건이면 그 도움 요청을 `ended`로 | 팀원 (올린 사람이 아니어도 됨) | `prDecision`이 PR 안건에 없거나 다른 종류에 있음 · 후속 담당자가 팀원이 아님 `400`, 강사 `403`, `confirmed`가 아님 · 머지 · 닫힌 PR 안건에 `revise_and_reevaluate`(CONTRACTS.md 「3」 평가 회차 — 2026-11-05) `409` |
 | `POST W/agenda-items/{agendaItemId}/feedback-request` | — | `200 AgendaItemDto`(`feedbackRequested: true`). 이미 켜져 있으면 그대로 | 팀원 | 결정 기록 전(`discussed`가 아님) `409`, 강사 `403` |
 | `POST W/agenda-items/{agendaItemId}/instructor-feedback` | `{ body: string }` (1~2000자) | `201 InstructorFeedbackDto`. 안건 · 결정 상태는 바뀌지 않는다 | R4. 피드백 요청이 켜진 결정 기록 | 요청 안 됨 · 학생 `403 forbidden_role` |
 | `POST W/meetings` | `{ attendeeMemberIds: Id[] }` (FR-MTG-05 — 비어도 됨) | `201 MeetingDto`(`ongoing`) | 팀원 | 진행 중 회의가 이미 있음 `409`, 참석자가 팀원이 아님 `400`, 강사 `403` |
