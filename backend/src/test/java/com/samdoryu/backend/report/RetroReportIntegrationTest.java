@@ -41,6 +41,7 @@ import com.samdoryu.backend.workspace.repository.MemberRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -333,5 +334,55 @@ class RetroReportIntegrationTest {
 
         assertThat(learningOf(report)).isNull();
         assertThat(learningOf(bobs)).isNull();
+    }
+
+    // ---- #42 마크다운 내보내기 · 팀원 이름 익명화 ------------------------------------------------------
+
+    /**
+     * 계산 칸이 마크다운으로 나오고, 팀원(빠진 캐럴 포함) 이름 · 로그인은 처음 나온 순서대로 "팀원 A"…, 강사는 "강사"로만.
+     * 영문에 붙은 {@code alicebot}은 다른 단어라 그대로 둔다.
+     */
+    @Test
+    void markdownHasComputedFieldsWithMemberNamesAnonymized() throws Exception {
+        AgendaItem decided = agenda(alice, "@bob 질문과 앨리스 답", "밥과 Carol이 맞춘다 — alicebot은 그대로",
+                T0.plusSeconds(600));
+        instructorFeedbacks.saveAndFlush(new InstructorFeedback(decided, instructorUser, "앨리스에게 한 줄",
+                T0.plusSeconds(900)));
+        assign(1, "[\"area:auth\"]", true, alice);
+        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        em.clear();
+
+        var response = mvc.perform(get(base(alice) + "/" + report.getId() + "/markdown").session(aliceSession))
+                .andExpect(status().isOk())
+                .andReturn().getResponse();
+        assertThat(response.getContentType()).isEqualTo("text/markdown;charset=UTF-8");
+        assertThat(response.getContentAsString(StandardCharsets.UTF_8))
+                .contains("# 최종 회고 리포트", "- 만든 시각: 2026-11-01T00:00:00Z",
+                        "맡은 이슈 1개(닫힘 1) · 작성한 PR 0개(머지 0) · 올린 안건 1건(결론 1)", "- area:auth",
+                        "## 내가 배운 점\n\n- 없음",
+                        "### @팀원 A 질문과 팀원 B 답",
+                        "- 결론: 팀원 A과 팀원 C이 맞춘다 — alicebot은 그대로",
+                        "- 배운 점: 배운 점 @팀원 A 질문과 팀원 B 답",
+                        "- 2026-11-01T00:15:00Z 강사: 팀원 B에게 한 줄")
+                .doesNotContain("앨리스", "밥", "캐럴", "@bob", "Carol", "instructor");
+    }
+
+    /** 읽기 규칙은 리포트 읽기와 같다 — 강사 200, 다른 학생 403, 다른 팀원의 리포트 · 다른 사무실 팀원 404(JSON 에러). */
+    @Test
+    void markdownFollowsReportReadRules() throws Exception {
+        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.MIDTERM, T0));
+        RetroReport bobs = reports.saveAndFlush(new RetroReport(bob, ReportKind.FINAL, T0));
+
+        mvc.perform(get(base(alice) + "/" + report.getId() + "/markdown").session(instructorSession))
+                .andExpect(status().isOk());
+        mvc.perform(get(base(alice) + "/" + report.getId() + "/markdown").session(bobSession))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        mvc.perform(get(base(alice) + "/" + bobs.getId() + "/markdown").session(aliceSession))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        mvc.perform(get("/api/workspaces/" + Ids.toApi(ws.getId()) + "/members/" + Ids.toApi(aliceElsewhere.getId())
+                        + "/reports/" + report.getId() + "/markdown").session(aliceSession))
+                .andExpect(status().isNotFound());
     }
 }
