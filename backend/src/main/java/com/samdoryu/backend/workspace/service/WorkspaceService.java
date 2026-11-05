@@ -3,12 +3,15 @@ package com.samdoryu.backend.workspace.service;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.workspace.domain.Member;
+import com.samdoryu.backend.workspace.domain.TeamSettings;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
+import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +21,22 @@ public class WorkspaceService {
 
     private final WorkspaceRepository workspaceRepository;
     private final MemberRepository memberRepository;
+    private final TeamSettingsRepository teamSettingsRepository;
 
-    public WorkspaceService(WorkspaceRepository workspaceRepository, MemberRepository memberRepository) {
+    public WorkspaceService(WorkspaceRepository workspaceRepository, MemberRepository memberRepository,
+            TeamSettingsRepository teamSettingsRepository) {
         this.workspaceRepository = workspaceRepository;
         this.memberRepository = memberRepository;
+        this.teamSettingsRepository = teamSettingsRepository;
+    }
+
+    /** 팀 설정의 명세 문서 경로(FR-REQ-01). 팀 설정이 없거나 경로가 비어 있으면 빈 값. */
+    @Transactional(readOnly = true)
+    public Optional<String> specDocumentPath(Long workspaceId) {
+        return teamSettingsRepository.findByWorkspaceId(workspaceId)
+                .map(TeamSettings::getSpecDocumentPath)
+                .map(String::strip)
+                .filter(path -> !path.isEmpty());
     }
 
     /** 사무실이 없으면 {@code not_found}. 접근 권한 검사는 하지 않는다 — Controller가 인가 서비스로 먼저 한다. */

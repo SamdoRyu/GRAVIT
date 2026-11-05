@@ -12,4 +12,7 @@ public interface RequirementRepository extends JpaRepository<Requirement, Long> 
 
     /** 재동기화의 매칭 대상 — 상태 무관 전부. */
     List<Requirement> findByWorkspaceIdOrderByPositionAsc(Long workspaceId);
+
+    /** Snapshot {@code requirements} — 상태 무관 전부. 사라진 요구사항은 옛 순서를 지녀 position이 겹칠 수 있어 id로 이어 정렬한다. */
+    List<Requirement> findByWorkspaceIdOrderByPositionAscIdAsc(Long workspaceId);
 }

@@ -1,6 +1,7 @@
 package com.samdoryu.backend.sync.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -23,14 +24,18 @@ import com.samdoryu.backend.github.dto.GithubUser;
 import com.samdoryu.backend.github.seed.SeedGithubReader;
 import com.samdoryu.backend.instructor.domain.InstructorAssignment;
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
+import com.samdoryu.backend.requirement.repository.RequirementRepository;
 import com.samdoryu.backend.sync.domain.SyncState;
 import com.samdoryu.backend.sync.repository.SyncStateRepository;
 import com.samdoryu.backend.sync.repository.TaskRepository;
+import com.samdoryu.backend.workspace.domain.TeamSettings;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
+import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -69,6 +74,8 @@ class SyncApiIntegrationTest {
     @Autowired SyncStateRepository syncStates;
     @Autowired TaskRepository tasks;
     @Autowired InstructorAssignmentRepository instructorAssignments;
+    @Autowired TeamSettingsRepository teamSettings;
+    @Autowired RequirementRepository requirements;
 
     @MockitoBean GithubReaderSelector readerSelector;
     @TestBean(name = SyncConfig.SYNC_EXECUTOR) TaskExecutor syncExecutor;
@@ -234,6 +241,43 @@ class SyncApiIntegrationTest {
             syncService.pollAll();
 
             assertThat(fake.sinceSeen).isEmpty();
+        }
+
+        /** #14 — 수동 동기화는 명세 문서를 읽고 그 경고를 상태에 남긴다. 폴링은 읽지 않고 마지막 경고를 둔다. */
+        @Test
+        void manualSyncReadsTheSpecAndPollingDoesNot() throws Exception {
+            teamSettings.saveAndFlush(new TeamSettings(ws, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 17),
+                    "docs/requirements.md"));
+            fake.files.put("docs/requirements.md", "## FR-AUTH-01 로그인\n## FR-AUTH-01 로그아웃\n## 문서 정리\n");
+
+            mvc.perform(postSync(ws).session(member)).andExpect(status().isAccepted());
+
+            mvc.perform(getStatus(ws).session(member))
+                    .andExpect(jsonPath("$.specWarnings[*].code")
+                            .value(contains("duplicate_source_key", "duplicate_source_key")))
+                    .andExpect(jsonPath("$.specWarnings[0].heading").value("FR-AUTH-01 로그인"));
+            assertThat(fake.filesRead).containsExactly("docs/requirements.md");
+            assertThat(requirements.findByWorkspaceIdOrderByPositionAsc(ws.getId()))
+                    .extracting(r -> r.getTitle()).containsExactly("문서 정리");
+
+            syncService.pollAll();
+
+            assertThat(fake.filesRead).hasSize(1);
+            mvc.perform(getStatus(ws).session(member)).andExpect(jsonPath("$.specWarnings.length()").value(2));
+        }
+
+        /** 경로에 파일이 없으면 요구사항을 바꾸지 않고 spec_not_found. */
+        @Test
+        void missingSpecFileIsAWarningNotAFailure() throws Exception {
+            teamSettings.saveAndFlush(new TeamSettings(ws, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 17),
+                    "docs/none.md"));
+
+            mvc.perform(postSync(ws).session(member)).andExpect(status().isAccepted());
+
+            mvc.perform(getStatus(ws).session(member))
+                    .andExpect(jsonPath("$.isFailing").value(false))
+                    .andExpect(jsonPath("$.specWarnings[0].code").value("spec_not_found"))
+                    .andExpect(jsonPath("$.specWarnings[0].heading").value(nullValue()));
         }
     }
 }

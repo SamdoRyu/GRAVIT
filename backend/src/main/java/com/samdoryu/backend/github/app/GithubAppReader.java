@@ -14,8 +14,10 @@ import com.samdoryu.backend.github.dto.GithubReview;
 import com.samdoryu.backend.github.dto.GithubUser;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +25,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -39,6 +43,10 @@ public class GithubAppReader implements GithubReader {
     static final int MAX_PAGES = 50;
     /** PR 하나가 닫을 이슈를 몇 개까지 읽나 — GitHub 공식 연결(closingIssuesReferences). */
     static final int MAX_LINKED_ISSUES = 50;
+    /** 명세 문서 크기 상한(1 MiB) — 넘으면 읽지 못한 것으로 본다. */
+    static final int MAX_FILE_BYTES = 1024 * 1024;
+    /** 파일 원문을 받는 미디어 타입 — 디렉터리는 이 요청에도 JSON 목록이 온다. */
+    static final String RAW_CONTENT = "application/vnd.github.raw+json";
 
     static final String CLOSING_ISSUES_QUERY = "query($owner:String!,$name:String!,$number:Int!){"
             + "repository(owner:$owner,name:$name){pullRequest(number:$number){"
@@ -316,6 +324,52 @@ public class GithubAppReader implements GithubReader {
                     }
                 });
         return result;
+    }
+
+    /**
+     * 기본 브랜치의 파일을 원문(raw)으로 읽는다 — {@code GET /repos/{o}/{r}/contents/{path}}. 경로는 조각마다 인코딩한다.
+     * 없음(404) · 디렉터리(JSON 목록이 옴) · {@link #MAX_FILE_BYTES}를 넘는 파일은 "읽지 못함"으로 빈 값을 돌려준다.
+     */
+    @Override
+    public Optional<String> readFile(GithubRepoRef repo, String path) {
+        List<String> segments = Arrays.stream(path.split("/")).filter(segment -> !segment.isBlank()).toList();
+        if (segments.isEmpty()) {
+            return Optional.empty();
+        }
+        StringBuilder template = new StringBuilder("/repos/{owner}/{repo}/contents");
+        List<Object> variables = new ArrayList<>(List.of(repo.owner(), repo.repo()));
+        for (int i = 0; i < segments.size(); i++) {
+            template.append("/{s").append(i).append('}');
+            variables.add(segments.get(i));
+        }
+        String token = tokens.token(repo.installationId());
+        try {
+            return restClient.get()
+                    .uri(template.toString(), variables.toArray())
+                    .headers(headers -> {
+                        headers.setBearerAuth(token);
+                        headers.set(HttpHeaders.ACCEPT, RAW_CONTENT);
+                    })
+                    .exchange((request, response) -> {
+                        if (response.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
+                            return Optional.<String>empty();
+                        }
+                        if (response.getStatusCode().isError()) {
+                            throw new ApiException(GithubHttp.errorCodeFor(response));
+                        }
+                        MediaType type = response.getHeaders().getContentType();
+                        if (type != null && type.equalsTypeAndSubtype(MediaType.APPLICATION_JSON)) {
+                            return Optional.<String>empty();
+                        }
+                        byte[] body = response.getBody().readNBytes(MAX_FILE_BYTES + 1);
+                        if (body.length > MAX_FILE_BYTES) {
+                            return Optional.<String>empty();
+                        }
+                        return Optional.of(new String(body, StandardCharsets.UTF_8));
+                    });
+        } catch (ResourceAccessException e) {
+            throw new ApiException(ErrorCode.UNAVAILABLE);
+        }
     }
 
     private static List<String> labelNames(List<LabelJson> labels) {

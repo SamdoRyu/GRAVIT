@@ -2,6 +2,7 @@ package com.samdoryu.backend.sync.service;
 
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.sync.domain.SyncState;
+import com.samdoryu.backend.sync.dto.SpecWarning;
 import com.samdoryu.backend.sync.dto.SyncStatus;
 import com.samdoryu.backend.sync.repository.SyncStateRepository;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * {@code SyncState} 기록 — 메서드 하나가 트랜잭션 하나다. 동기화 본체(데이터)와 다른 트랜잭션이라, 동기화가 실패해 데이터가
@@ -16,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Component
 class SyncStateRecorder {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final SyncStateRepository syncStateRepository;
     private final WorkspaceService workspaceService;
@@ -43,10 +47,16 @@ class SyncStateRecorder {
         return syncStateRepository.markRunningIfIdle(workspaceId) == 1;
     }
 
+    /**
+     * @param specWarnings 이번 동기화가 명세 문서를 읽었으면 그 경고(빈 목록 포함)로 바꾼다. null이면(폴링) 마지막 경고를 둔다
+     */
     @Transactional
-    public SyncStatus succeed(Long workspaceId, Instant at) {
+    public SyncStatus succeed(Long workspaceId, Instant at, List<SpecWarning> specWarnings) {
         SyncState state = stateOf(workspaceId);
         state.succeed(at);
+        if (specWarnings != null) {
+            state.replaceSpecWarnings(JSON.writeValueAsString(specWarnings));
+        }
         return SyncStatus.of(state);
     }
 

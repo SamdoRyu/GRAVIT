@@ -75,7 +75,7 @@ class WorkspaceSyncIntegrationTest {
     }
 
     private void syncAndClear(Workspace ws, Instant now) {
-        syncService.sync(ws.getId(), null, now);
+        syncService.sync(ws.getId(), null, false, now);
         em.flush();
         em.clear();
     }

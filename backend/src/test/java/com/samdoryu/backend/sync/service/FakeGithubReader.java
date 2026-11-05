@@ -30,6 +30,12 @@ class FakeGithubReader implements GithubReader {
     RuntimeException failWith;
     /** 이슈 변경분을 읽을 때 받은 기준 시각(null = 전부). */
     final List<Instant> sinceSeen = new ArrayList<>();
+    /** 레포의 파일(경로 → 내용). 없는 경로는 "파일 없음". */
+    Map<String, String> files = new HashMap<>();
+    /** 넣으면 파일을 읽을 때 이 예외를 던진다 — GitHub 오류 흉내. */
+    RuntimeException fileFailWith;
+    /** 읽은 파일 경로. */
+    final List<String> filesRead = new ArrayList<>();
 
     private void check(GithubRepoRef repo) {
         if (expectedRepo != null) {
@@ -77,5 +83,15 @@ class FakeGithubReader implements GithubReader {
     @Override
     public List<GithubIssueLink> linkedIssues(GithubRepoRef repo, int pullRequestNumber) {
         return links.getOrDefault(pullRequestNumber, List.of());
+    }
+
+    @Override
+    public Optional<String> readFile(GithubRepoRef repo, String path) {
+        check(repo);
+        filesRead.add(path);
+        if (fileFailWith != null) {
+            throw fileFailWith;
+        }
+        return Optional.ofNullable(files.get(path));
     }
 }

@@ -10,6 +10,7 @@ import com.samdoryu.backend.github.dto.GithubReview;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -33,6 +34,9 @@ import tools.jackson.databind.json.JsonMapper;
 public class SeedGithubReader implements GithubReader {
 
     static final String RESOURCE = "seed/demo-workspace.json";
+    static final String SPEC_RESOURCE = "seed/demo-requirements.md";
+    /** 시연 사무실 팀 설정의 명세 문서 경로 — 계약 예시와 같은 값. */
+    public static final String SPEC_PATH = "docs/requirements.md";
 
     /** @param linkedIssueNumbers GitHub 공식 연결을 흉내 낸 이슈 번호(PR 본문은 Seed에 없다) */
     record SeedPullRequest(GithubPullRequest pullRequest, List<GithubReview> reviews, Instant lastCommitAt,
@@ -55,6 +59,7 @@ public class SeedGithubReader implements GithubReader {
     private final List<GithubCollaborator> collaborators;
     private final List<GithubIssue> issues;
     private final Map<Integer, SeedPullRequest> pullRequests;
+    private final String specDocument;
 
     public SeedGithubReader() {
         this(RESOURCE);
@@ -66,6 +71,15 @@ public class SeedGithubReader implements GithubReader {
         this.issues = data.issues();
         this.pullRequests = data.pullRequests().stream()
                 .collect(Collectors.toUnmodifiableMap(p -> p.pullRequest().number(), Function.identity()));
+        this.specDocument = readText(SPEC_RESOURCE);
+    }
+
+    private static String readText(String resource) {
+        try (InputStream in = new ClassPathResource(resource).getInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("시연 명세 문서를 읽지 못함: " + resource, e);
+        }
     }
 
     private static SeedData load(String resource) {
@@ -126,5 +140,11 @@ public class SeedGithubReader implements GithubReader {
         return pr.linkedIssueNumbers().stream()
                 .map(number -> new GithubIssueLink(number, GithubIssueLink.Source.CLOSING_REFERENCE))
                 .toList();
+    }
+
+    /** 시연 명세 문서는 {@link #SPEC_PATH} 하나뿐이다. 다른 경로는 "파일 없음". */
+    @Override
+    public Optional<String> readFile(GithubRepoRef repo, String path) {
+        return SPEC_PATH.equals(path) ? Optional.of(specDocument) : Optional.empty();
     }
 }

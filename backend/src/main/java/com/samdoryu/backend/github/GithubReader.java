@@ -16,7 +16,7 @@ import java.util.Optional;
  * 만들지 않는다(CON-02 · P3). 구현은 둘: GitHub 어댑터(실제 사무실) · Seed 어댑터(시연 사무실, 같은 결과 모양).
  * 서버는 사무실 종류로 고른다({@link GithubReaderSelector}).
  * <p>
- * 동기화가 쓰는 메서드만 있다(#69 · #71). 명세 문서(#14), 권한 · 설치 목록(#64 · #68)은
+ * 동기화가 쓰는 메서드만 있다(#69 · #71 · 명세 문서 #14). 권한 · 설치 목록(#64 · #68)은
  * 각 Issue에서 더한다. 실패는 {@code ApiException}({@code github_unauthorized} · {@code github_rate_limited} ·
  * {@code unavailable})로 던진다.
  */
@@ -50,4 +50,12 @@ public interface GithubReader {
 
     /** PR이 GitHub에서 공식으로 연결한 이슈(#71). 본문 · 제목의 {@code #N}은 읽지 않는다. */
     List<GithubIssueLink> linkedIssues(GithubRepoRef repo, int pullRequestNumber);
+
+    /**
+     * 레포 기본 브랜치의 파일 내용(명세 문서 — #14 · FR-REQ-01 · 02).
+     *
+     * @param path 레포 안 경로(예: {@code docs/requirements.md})
+     * @return 파일이 없거나 파일이 아니면(디렉터리 등) 빈 값. 그 밖의 GitHub 오류는 {@code ApiException}
+     */
+    Optional<String> readFile(GithubRepoRef repo, String path);
 }
