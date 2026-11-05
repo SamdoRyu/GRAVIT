@@ -45,6 +45,13 @@ public class WorkspaceService {
         return workspaceRepository.findById(workspaceId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
     }
 
+    /** 경로의 팀원 — 그 사무실의 팀원(빠진 팀원 포함)이 아니면 {@code not_found}(개인 API 「15」 2). */
+    @Transactional(readOnly = true)
+    public Member requireMember(Long workspaceId, Long memberId) {
+        return memberRepository.findByIdAndWorkspaceId(memberId, workspaceId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+    }
+
     /** 실제(GitHub) 사무실 전부의 ID — 자동 폴링 대상(시연 사무실은 GitHub를 부르지 않으므로 뺀다). */
     @Transactional(readOnly = true)
     public List<Long> githubWorkspaceIds() {

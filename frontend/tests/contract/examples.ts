@@ -17,6 +17,7 @@ import type {
   MeResponse,
   MeetingDto,
   PageResponse,
+  RetroReportDto,
   StandupDto,
   StandupPrefill,
   TimelineEntry,
@@ -147,6 +148,61 @@ export const timelinePageExample = {
   totalItems: 1,
   totalPages: 1,
 } satisfies PageResponse<TimelineEntry>
+
+// contract/examples/report/retro-report.json — CONTRACTS_API.md 「15」
+export const retroReportExample = {
+  id: '3',
+  kind: 'final',
+  createdAt: '2026-11-17T09:00:00Z',
+  memberId: '2',
+  summary: '맡은 이슈 4개(닫힘 3) · 작성한 PR 5개(머지 4) · 올린 안건 2건(결론 1)',
+  areaLabels: ['area:auth', 'area:sync'],
+  learning: '에러 응답 모양은 처음부터 한 곳에서 정하는 게 덜 고친다',
+  agendaResults: [
+    {
+      agendaItemId: '21',
+      title: '실패 응답 모양을 계약대로 바꿀까?',
+      conclusion: '에러 응답을 계약 모양으로 맞추고 다시 평가받는다',
+      learning: '에러 응답 모양은 전역 예외 처리 한 곳에서 바꾼다',
+      prDecision: 'revise_and_reevaluate',
+      decidedAt: '2026-11-05T05:30:00Z',
+    },
+  ],
+  instructorFeedbacks: [
+    {
+      agendaItemId: '21',
+      instructor: { userId: '40', githubLogin: 'instructor-kim', displayName: '김강사', avatarUrl: null },
+      body: '401과 403을 나누는 기준을 결정 기록에 한 줄 남겨 두면 좋겠어요',
+      createdAt: '2026-11-05T06:00:00Z',
+    },
+  ],
+  activityDistribution: [{ kind: 'research', totalMinutes: 90 }],
+  decisionCards: [
+    {
+      id: '8',
+      memberId: '2',
+      submissionId: '9',
+      cells: {
+        goal: '로그인 실패를 계약 모양으로 돌려주기',
+        initialApproach: '컨트롤러마다 try-catch',
+        feedbackReceived: '실패 응답 모양이 계약과 달라요',
+        meetingDecision: '에러 응답을 계약 모양으로 맞추고 다시 평가받는다',
+        finalChange: '전역 예외 처리 한 곳으로 옮김',
+        rationale: null,
+        blockedMoment: null,
+        learning: '에러 응답 모양은 한 곳에서 정한다',
+        source: 'https://github.com/team-samdo/gitvillage/pull/15',
+      },
+      confirmed: true,
+      confirmedAt: '2026-11-06T01:00:00Z',
+      followUpRequested: false,
+      followUpRequestedAt: null,
+      followUpQuestions: [],
+      createdAt: '2026-11-06T00:30:00Z',
+      updatedAt: '2026-11-06T01:00:00Z',
+    },
+  ],
+} satisfies RetroReportDto
 
 // contract/examples/workspace/workspace-snapshot.json — CONTRACTS_API.md 「5」
 export const workspaceSnapshotExample = {
@@ -336,6 +392,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/meeting.json': meetingExample,
   'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,
+  'report/retro-report.json': retroReportExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
 }
