@@ -168,6 +168,14 @@ public class AgendaItem {
         return status == AgendaStatus.CONFIRMED;
     }
 
+    /** 회의 전 거두기(FR-LRN-14) → {@link AgendaStatus#WITHDRAWN}. 올린 사람인지는 부르는 쪽이 먼저 본다. */
+    public void withdraw() {
+        if (!isConfirmed()) {
+            throw new IllegalStateException("confirmed 안건만 거둔다");
+        }
+        this.status = AgendaStatus.WITHDRAWN;
+    }
+
     /**
      * 결정 기록(FR-MTG-04) → {@link AgendaStatus#DISCUSSED}. 상태 · 짝 · 같은 사무실 검사는 부르는 쪽이 먼저 한다.
      *

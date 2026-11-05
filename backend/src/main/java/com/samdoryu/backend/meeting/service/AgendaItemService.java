@@ -1,5 +1,6 @@
 package com.samdoryu.backend.meeting.service;
 
+import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
@@ -97,6 +98,25 @@ public class AgendaItemService {
         };
         agendaItemRepository.save(item);
         eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
+        return AgendaItemDto.of(item, List.of());
+    }
+
+    /**
+     * 회의 전 거두기(FR-LRN-14) → {@code withdrawn}. 검사 순서는 대상(404 — 같은 사무실 것만) → 올린 사람(403) →
+     * {@code confirmed}가 아님(409). 행은 지우지 않는다.
+     */
+    @Transactional
+    public AgendaItemDto withdraw(WorkspaceAccess access, Long agendaItemId) {
+        AgendaItem item = agendaItemRepository.findByIdAndWorkspaceId(agendaItemId, access.workspaceId())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        if (!access.isSelf(item.getRaisedBy().getId())) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        if (!item.isConfirmed()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        item.withdraw();
+        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.AGENDA_ITEMS);
         return AgendaItemDto.of(item, List.of());
     }
 
