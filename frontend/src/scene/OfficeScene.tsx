@@ -1,25 +1,41 @@
-// OWNER: scene-builder. Root of everything rendered inside <Canvas>: the space station (confirmed theme) and the
-// workspace's boxes and crew placed by the station ThemeLayout.
-import { Suspense, useMemo } from 'react'
+// OWNER: scene-builder. Root of everything rendered inside <Canvas>: the space station (confirmed theme) and the open v1
+// office's crew and issue / PR boxes, placed by the SceneModel and the station ThemeLayout (useStationScene).
+// The 3D view is read-only: clicks open the v1 detail drawer; nothing is dragged (#102 T5-c-2).
+import { useThree } from '@react-three/fiber'
+import { Suspense, useEffect } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
-import { DragLayer } from './DragLayer'
 import { MeetingRoomState } from './MeetingRoomState'
+import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
 import { TaskTooltip } from './TaskTooltip'
-import { clickSlop } from './runtime'
+import { clickSlop, sceneApi } from './runtime'
 import { NoPick } from './shared'
-import { podsShown, stationFor } from './stationSeats'
+import { useStationScene } from './useStationScene'
 import { useOffice } from '../store'
 
+const NO_PODS = podsShown(new Map())
+
+/** Lets code outside the Canvas (camera insets, e2e projection) reach the live R3F state. */
+function SceneApiBridge() {
+  const get = useThree((s) => s.get)
+  useEffect(() => {
+    sceneApi.get = get
+    return () => {
+      if (sceneApi.get === get) sceneApi.get = null
+    }
+  }, [get])
+  return null
+}
+
 export function OfficeScene() {
-  const members = useOffice((s) => s.members)
-  const pods = useMemo(() => podsShown(stationFor(members).seats), [members])
+  const scene = useStationScene()
   return (
     <>
+      <SceneApiBridge />
       <StationSky />
       <CameraRig />
       {/* Anything that doesn't stop propagation lands here: a click on empty space / the hull clears the selection. */}
@@ -27,7 +43,7 @@ export function OfficeScene() {
         onClick={(e) => {
           if (e.delta > clickSlop(e)) return
           const s = useOffice.getState()
-          if (s.drag) return
+          if (s.officeSelection) s.selectInOffice(null)
           if (s.selection) s.select(null)
         }}
       >
@@ -37,7 +53,7 @@ export function OfficeScene() {
           <meshBasicMaterial visible={false} />
         </mesh>
         <NoPick>
-          <StationEnvironment podsShown={pods} />
+          <StationEnvironment podsShown={scene?.pods ?? NO_PODS} />
         </NoPick>
         {/* The crew glTF loads after the station: nothing waits for it. */}
         <Suspense fallback={null}>
@@ -48,7 +64,6 @@ export function OfficeScene() {
         <ArchiveTag />
       </group>
       <TaskTooltip />
-      <DragLayer />
     </>
   )
 }

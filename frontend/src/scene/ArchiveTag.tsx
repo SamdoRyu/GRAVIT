@@ -1,12 +1,15 @@
-// Archive (done) count tag: the archive shows only the most recent done boxes, so older ones are counted here ("+N").
+// Archive (done) count tag: the archive shows only the most recent done issues / PRs, so older ones are counted here ("+N").
 // The docking bay and scanner stack every box instead — those are the ones to act on now.
-import { ARCHIVE, HULL_Y, WORLD_SCALE } from '../theme/station/geometry'
 import { useOffice } from '../store'
+import { ARCHIVE, HULL_Y, WORLD_SCALE } from '../theme/station/geometry'
 import { SceneHtml } from './shared'
 import { DONE_VISIBLE, recentDone } from './slots'
+import { useStationScene } from './useStationScene'
 
 export function ArchiveTag() {
-  const hidden = useOffice((s) => Math.max(0, recentDone(s.tasks).length - DONE_VISIBLE))
+  const scene = useStationScene()
+  const snapshot = useOffice((s) => s.office?.snapshot ?? null)
+  const hidden = scene && snapshot ? Math.max(0, recentDone(scene.entities, snapshot).length - DONE_VISIBLE) : 0
   if (hidden === 0) return null
   return (
     <group position={[ARCHIVE.x * WORLD_SCALE, (HULL_Y + ARCHIVE.radius + 1) * WORLD_SCALE, ARCHIVE.z * WORLD_SCALE]}>

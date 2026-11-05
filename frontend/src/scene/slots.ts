@@ -1,19 +1,14 @@
-// Where every task box wants to be: a crew pod, the docking bay (backlog), the archive (done) or the bridge table.
-// Positions come from the station ThemeLayout; this file only decides the role and the order inside it.
-import { PRIORITY_META } from '../data/meta'
-import { backlogTasks, isOpen, tasksOf } from '../data/selectors'
-import type { Id, Member, Task } from '../data/types'
-import type { PlaceRole } from './model/types'
-import { stationFor } from './stationSeats'
+// Where every issue box / PR wants to be. The role comes from the SceneModel (placeRole), the position from the station
+// ThemeLayout; this file only decides the order inside a role and which done items the archive shows.
+import type { Instant, WorkspaceSnapshot } from '../data/types'
+import type { PlaceRole, SceneEntity, ThemeLayout } from './model/types'
 
 export const BOX_W = 0.42
 export const BOX_D = 0.34
-/** One height for every box: the stacks in the station ThemeLayout use a fixed layer pitch (v1 tasks have no estimate). */
+/** One height for every box: the stacks in the station ThemeLayout use a fixed layer pitch. */
 export const BOX_H = 0.36
 
-/** Agenda boxes shown on the bridge table (two rings of six); the rest wait hidden and are counted by the room tag. */
-export const AGENDA_VISIBLE = 12
-/** Done boxes shown in the archive: the most recent ones, one layer. Older ones are counted by the archive tag. */
+/** Done items shown in the archive: the most recent ones, one layer. Older ones are counted by the archive tag. */
 export const DONE_VISIBLE = 14
 
 export interface Slot {
@@ -22,7 +17,7 @@ export interface Slot {
   z: number
   rot: number
   scale: number
-  home: 'desk' | 'backlog' | 'done' | 'agenda'
+  home: 'desk' | 'backlog' | 'review' | 'done'
 }
 
 function hash01(s: string): number {
@@ -42,65 +37,81 @@ function sameSlot(a: Slot, b: Slot) {
   )
 }
 
-/** Done tasks the archive shows, newest first. */
-export function recentDone(tasks: Record<Id, Task>): Task[] {
-  return Object.values(tasks)
-    .filter((t) => t.status === 'done' && t.completedAt)
-    .sort((a, b) => (b.completedAt! < a.completedAt! ? -1 : b.completedAt! > a.completedAt! ? 1 : 0))
+/** Issues and PRs — the things placed as cargo. */
+export const isCargo = (e: SceneEntity) => e.kind === 'issue' || e.kind === 'pr'
+
+/** When a done item was finished: an issue's closedAt, a PR's mergedAt (or closedAt when closed unmerged). */
+function doneAtOf(snapshot: WorkspaceSnapshot): Map<string, Instant> {
+  const at = new Map<string, Instant>()
+  for (const t of snapshot.tasks) if (t.closedAt) at.set(`task:${t.id}`, t.closedAt)
+  for (const s of snapshot.submissions) {
+    const when = s.mergedAt ?? s.closedAt
+    if (when) at.set(`submission:${s.id}`, when)
+  }
+  return at
+}
+
+/** Done cargo, newest first (ties: by key, so the order is stable). */
+export function recentDone(entities: readonly SceneEntity[], snapshot: WorkspaceSnapshot): SceneEntity[] {
+  const at = doneAtOf(snapshot)
+  return entities
+    .filter((e) => isCargo(e) && e.placeRole === 'done')
+    .sort((a, b) => {
+      const x = at.get(a.key) ?? ''
+      const y = at.get(b.key) ?? ''
+      return x < y ? 1 : x > y ? -1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0
+    })
+}
+
+const HOME: Record<'desk' | 'backlog' | 'review', { jitter: number; scale: number }> = {
+  desk: { jitter: 0.3, scale: 1 },
+  backlog: { jitter: 0.12, scale: 0.92 },
+  review: { jitter: 0.12, scale: 0.92 },
 }
 
 /**
- * Compute a slot for every visible task. `doneAssign` persists which archive cell each completed task occupies so
- * older ones don't shuffle when a new one arrives. `prev` keeps slot object identity stable.
+ * A slot for every placed issue / PR, keyed by SceneEntity key. Desk, docking bay and scanner keep the SceneModel order
+ * (the Snapshot's: issue / PR number ascending) and stack upward when full. The archive shows the DONE_VISIBLE most recent;
+ * `doneAssign` keeps which archive cell each one occupies so older ones don't shuffle when a new one arrives. `prev`
+ * keeps slot object identity stable.
  */
 export function computeSlots(
-  tasks: Record<Id, Task>,
-  members: Record<Id, Member>,
-  doneAssign: Map<Id, number>,
-  prev: Map<Id, Slot>,
-): Map<Id, Slot> {
-  const { layout, seats } = stationFor(members)
-  const out = new Map<Id, Slot>()
-  const put = (id: Id, role: PlaceRole, index: number, home: Slot['home'], jitter: number, scale = 1) => {
+  entities: readonly SceneEntity[],
+  snapshot: WorkspaceSnapshot,
+  layout: ThemeLayout,
+  doneAssign: Map<string, number>,
+  prev: Map<string, Slot>,
+): Map<string, Slot> {
+  const out = new Map<string, Slot>()
+  const put = (key: string, role: PlaceRole, index: number, home: Slot['home'], jitter: number, scale: number) => {
     const [x, y, z] = layout.anchor(role, index)
-    const s: Slot = { x, y, z, rot: (hash01(id) - 0.5) * jitter, scale, home }
-    const old = prev.get(id)
-    out.set(id, old && sameSlot(old, s) ? old : s)
+    const s: Slot = { x, y, z, rot: (hash01(key) - 0.5) * jitter, scale, home }
+    const old = prev.get(key)
+    out.set(key, old && sameSlot(old, s) ? old : s)
   }
 
-  const onTable = (t: Task) => t.onAgenda === true && isOpen(t)
-
-  // ---- crew pods: the task in progress first, then the rest ----
-  for (const m of Object.values(members)) {
-    if (!seats.has(m.id)) continue
-    const list = tasksOf(tasks, m.id).filter((t) => !onTable(t))
-    const inProg = list.find((t) => t.status === 'in_progress')
-    const ordered = inProg ? [inProg, ...list.filter((t) => t !== inProg)] : list
-    ordered.forEach((t, i) => put(t.id, `desk:${m.id}`, i, 'desk', 0.3))
+  const counts = new Map<PlaceRole, number>()
+  for (const e of entities) {
+    if (!isCargo(e)) continue
+    const role = e.placeRole
+    const home = role.startsWith('desk:') ? 'desk' : role === 'backlog' || role === 'review' ? role : null
+    if (home === null) continue // done: below. Other roles (requirement zones, …) come with their issues.
+    const i = counts.get(role) ?? 0
+    counts.set(role, i + 1)
+    put(e.key, role, i, home, HOME[home].jitter, HOME[home].scale)
   }
 
-  // ---- docking bay: unassigned tasks, then open tasks whose owner has no pod (missing member or no seat) ----
-  const orphans = Object.values(tasks).filter((t) => isOpen(t) && t.assigneeId !== null && !onTable(t) && !seats.has(t.assigneeId))
-  ;[...backlogTasks(tasks).filter((t) => !onTable(t)), ...orphans].forEach((t, i) => put(t.id, 'backlog', i, 'backlog', 0.12, 0.92))
-
-  // ---- bridge table: any open task on the agenda. Most important first, then by number; beyond the table they wait hidden ----
-  Object.values(tasks)
-    .filter(onTable)
-    .sort((a, b) => PRIORITY_META[b.priority].weight - PRIORITY_META[a.priority].weight || a.number - b.number)
-    .forEach((t, k) => put(t.id, 'meeting', k < AGENDA_VISIBLE ? k : 0, 'agenda', 0.14, k < AGENDA_VISIBLE ? 0.95 : 0))
-
-  // ---- archive: the most recent done tasks, each keeping its cell ----
-  const recent = recentDone(tasks).slice(0, DONE_VISIBLE)
-  const keep = new Set(recent.map((t) => t.id))
-  for (const id of [...doneAssign.keys()]) if (!keep.has(id)) doneAssign.delete(id)
+  const recent = recentDone(entities, snapshot).slice(0, DONE_VISIBLE)
+  const keep = new Set(recent.map((e) => e.key))
+  for (const key of [...doneAssign.keys()]) if (!keep.has(key)) doneAssign.delete(key)
   const used = new Set(doneAssign.values())
-  for (const t of recent) {
-    if (doneAssign.has(t.id)) continue
+  for (const e of recent) {
+    if (doneAssign.has(e.key)) continue
     let k = 0
     while (used.has(k)) k++
-    doneAssign.set(t.id, k)
+    doneAssign.set(e.key, k)
     used.add(k)
   }
-  for (const t of recent) put(t.id, 'done', doneAssign.get(t.id) ?? 0, 'done', 0.5, 0.9)
+  for (const e of recent) put(e.key, 'done', doneAssign.get(e.key) ?? 0, 'done', 0.5, 0.9)
   return out
 }

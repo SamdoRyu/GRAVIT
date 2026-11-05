@@ -1,27 +1,45 @@
-// A small label that follows the hovered task box (not while dragging).
+// A small label that follows the hovered issue / PR box of the v1 office: number, state, title.
 import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group } from 'three'
-import { PRIORITY_META, STATUS_META } from '../data/meta'
-import { taskKey } from '../data/selectors'
 import { useOffice } from '../store'
 import { boxLive } from './runtime'
 import { SceneHtml } from './shared'
 
+const PR_STATE = { open: '열림', draft: 'Draft', merged: '머지됨', closed: '미병합 종료' } as const
+const ISSUE_STATE = { open: '열림', closed: '닫힘' } as const
+
+/** "#12 · 열림" and the title of the hovered box (hover id = SceneModel key, 'task:<id>' · 'submission:<id>') */
+function useHovered(): { key: string; head: string; title: string } | null {
+  const key = useOffice((s) => (s.hover?.kind === 'task' ? s.hover.id : null))
+  const head = useOffice((s) => {
+    const snap = s.office?.snapshot
+    if (!key || !snap) return null
+    const [kind, id] = key.split(':')
+    if (kind === 'task') {
+      const t = snap.tasks.find((x) => x.id === id)
+      return t ? `${t.githubIssueNumber}|${ISSUE_STATE[t.state]}|${t.title}` : null
+    }
+    const p = kind === 'submission' ? snap.submissions.find((x) => x.id === id) : undefined
+    return p ? `${p.githubPrNumber}|PR · ${PR_STATE[p.state]}|${p.title}` : null
+  })
+  if (!key || !head) return null
+  const [n, state, ...title] = head.split('|')
+  return { key, head: `#${n} · ${state}`, title: title.join('|') }
+}
+
 export function TaskTooltip() {
-  const id = useOffice((s) => (s.hover?.kind === 'task' && !s.drag ? s.hover.id : null))
-  const task = useOffice((s) => (id ? s.tasks[id] : undefined))
-  const project = useOffice((s) => (task ? s.projects[task.projectId] : undefined))
+  const hovered = useHovered()
   const ref = useRef<Group>(null)
 
   useFrame(() => {
     const g = ref.current
-    if (!g || !id) return
-    const b = boxLive.get(id)
+    if (!g || !hovered) return
+    const b = boxLive.get(hovered.key)
     if (b) g.position.set(b.x, b.y + 0.85, b.z)
   })
 
-  if (!id || !task) return null
+  if (!hovered) return null
   return (
     <group ref={ref}>
       <SceneHtml center zIndexRange={[0, 0]} pointerEvents="none">
@@ -38,13 +56,8 @@ export function TaskTooltip() {
             userSelect: 'none',
           }}
         >
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: project?.color ?? '#9aa3b5' }} />
-            <span style={{ color: '#6b7487', fontWeight: 700 }}>{taskKey(task, project?.key)}</span>
-            <span style={{ color: PRIORITY_META[task.priority].color }}>{PRIORITY_META[task.priority].label}</span>
-            <span style={{ color: STATUS_META[task.status].color }}>{STATUS_META[task.status].label}</span>
-          </div>
-          <div style={{ marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
+          <div style={{ color: '#6b7487', fontWeight: 700, whiteSpace: 'nowrap' }}>{hovered.head}</div>
+          <div style={{ marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hovered.title}</div>
         </div>
       </SceneHtml>
     </group>

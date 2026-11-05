@@ -1,22 +1,19 @@
-// Command-bridge (meeting room) status layer: calm "in session" glow + sign, "안건 N" tag when idle, and the agenda drop highlight.
+// Command-bridge (meeting room) status layer of the v1 office: calm "in session" glow + sign while a meeting runs,
+// "안건 N" (confirmed agenda items) when idle. The agenda shapes on the table come with #26 · #30 · #31.
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MeshBasicMaterial, type Group } from 'three'
-import { isOpen } from '../data/selectors'
-import { ongoingMeeting, useOffice } from '../store'
+import { useOffice } from '../store'
 import { PALETTE } from '../theme'
 import { BRIDGE, WORLD_SCALE } from '../theme/station/geometry'
 import { noRaycast } from './runtime'
 import { SceneHtml } from './shared'
-import { AGENDA_VISIBLE } from './slots'
 
 // The bridge in world units: centre, deck and table-top heights, and the deck radius.
 const CX = BRIDGE.x * WORLD_SCALE
 const CZ = BRIDGE.z * WORLD_SCALE
 const FLOOR_Y = BRIDGE.floorY * WORLD_SCALE
-const TABLE_Y = BRIDGE.tableTopY * WORLD_SCALE
 const DECK_R = (BRIDGE.radius - 0.3) * WORLD_SCALE
-const TABLE_R = 3.0 * WORLD_SCALE
 const EDGE = 0.07
 
 const pill = {
@@ -48,21 +45,18 @@ function useElapsedMinutes(startedAt: string): number {
  * One label for the room, mounted for the whole session (drei's Html misbehaves when mounted/unmounted often):
  * the "in session" sign while a meeting runs, the "안건 N" tag when idle with agenda items, nothing otherwise.
  */
-function RoomLabel({ title, startedAt, agendaCount }: { title: string | null; startedAt: string; agendaCount: number }) {
+function RoomLabel({ live, startedAt, agendaCount }: { live: boolean; startedAt: string; agendaCount: number }) {
   const minutes = useElapsedMinutes(startedAt)
-  const live = title !== null
   return (
     <group position={[CX, live ? 3.4 : 2.2, CZ]}>
       <SceneHtml center zIndexRange={[0, 0]} pointerEvents="none">
         {live ? (
           <div style={{ ...pill, padding: '4px 11px' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: PALETTE.accent, flex: 'none' }} />
-            {title} · {minutes}분
+            회의 중 · {minutes}분
           </div>
         ) : agendaCount > 0 ? (
-          <div style={{ ...pill, padding: '2px 8px', font: '600 11px var(--font, sans-serif)' }}>안건 {agendaCount}
-            {agendaCount > AGENDA_VISIBLE ? ` · +${agendaCount - AGENDA_VISIBLE}` : ''}
-          </div>
+          <div style={{ ...pill, padding: '2px 8px', font: '600 11px var(--font, sans-serif)' }}>안건 {agendaCount}</div>
         ) : (
           <div />
         )}
@@ -111,39 +105,13 @@ function SessionGlow({ on }: { on: boolean }) {
   )
 }
 
-/** Drop-target highlight while a drag would put the task on the agenda (same style as desk drops). */
-function AgendaDrop() {
-  const hot = useOffice((s) => s.dropTarget?.kind === 'agenda')
-  if (!hot) return null
-  return (
-    <group>
-      <mesh position={[CX, TABLE_Y + 0.012, CZ]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
-        <circleGeometry args={[TABLE_R, 48]} />
-        <meshBasicMaterial color={PALETTE.dropOk} transparent opacity={0.5} depthWrite={false} />
-      </mesh>
-      <mesh position={[CX, FLOOR_Y + 0.03, CZ]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={3} raycast={noRaycast}>
-        <circleGeometry args={[DECK_R, 48]} />
-        <meshBasicMaterial color={PALETTE.dropOk} transparent opacity={0.16} depthWrite={false} />
-      </mesh>
-    </group>
-  )
-}
-
 export function MeetingRoomState() {
-  const meeting = useOffice((s) => ongoingMeeting(s.meetings))
-  const agendaCount = useOffice((s) => {
-    let n = 0
-    for (const id in s.tasks) {
-      const t = s.tasks[id]
-      if (t.onAgenda === true && isOpen(t)) n++
-    }
-    return n
-  })
+  const startedAt = useOffice((s) => s.office?.snapshot?.meetings.find((m) => m.status === 'ongoing')?.startedAt ?? null)
+  const agendaCount = useOffice((s) => s.office?.snapshot?.agendaItems.filter((a) => a.status === 'confirmed').length ?? 0)
   return (
     <>
-      <SessionGlow on={!!meeting} />
-      <RoomLabel title={meeting ? meeting.title : null} startedAt={meeting?.startedAt ?? ''} agendaCount={agendaCount} />
-      <AgendaDrop />
+      <SessionGlow on={startedAt !== null} />
+      <RoomLabel live={startedAt !== null} startedAt={startedAt ?? ''} agendaCount={agendaCount} />
     </>
   )
 }

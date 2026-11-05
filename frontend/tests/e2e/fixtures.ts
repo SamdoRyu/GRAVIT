@@ -148,7 +148,7 @@ export async function openApp(page: Page, source: Source, opts: { scene?: boolea
   if (opts.scene !== false) await waitForScene(page)
 }
 
-/** The canvas exists, every open task box registered, and the camera stopped easing. */
+/** The canvas exists, every placed issue / PR box of the v1 office registered, and the camera stopped easing. */
 export async function waitForScene(page: Page): Promise<void> {
   await expect(page.locator('canvas')).toBeVisible()
   await expect
@@ -157,12 +157,18 @@ export async function waitForScene(page: Page): Promise<void> {
         page.evaluate(async () => {
           const rtPath = '/src/scene/runtime.ts'
           const storePath = '/src/store.ts'
+          const scenePath = '/src/scene/stationScene.ts'
+          const slotsPath = '/src/scene/slots.ts'
           const rt = await import(/* @vite-ignore */ rtPath)
           const { useOffice } = await import(/* @vite-ignore */ storePath)
-          const tasks = Object.keys(useOffice.getState().tasks).length
-          return rt.sceneApi.get?.() != null && rt.boxLive.size >= tasks
+          const { stationSceneFor } = await import(/* @vite-ignore */ scenePath)
+          const { computeSlots } = await import(/* @vite-ignore */ slotsPath)
+          const snapshot = useOffice.getState().office?.snapshot
+          if (!snapshot || rt.sceneApi.get?.() == null) return false
+          const scene = stationSceneFor(snapshot)
+          return rt.boxLive.size >= computeSlots(scene.entities, snapshot, scene.layout, new Map(), new Map()).size
         }),
-      { message: 'scene mounted with all task boxes' },
+      { message: 'scene mounted with all issue / PR boxes' },
     )
     .toBe(true)
   // Camera easing finished: the projection of a fixed floor point stops changing.
@@ -197,12 +203,15 @@ export interface ScreenPoint {
   free: boolean
 }
 
-/** World position of a box / member / the meeting table, projected with the live camera to client pixels. */
+/**
+ * World position of a box (id = SceneModel key, e.g. 'task:t_1') / a v1 member / the meeting table, projected with the
+ * live camera to client pixels.
+ */
 export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null> {
   return page.evaluate(async (s) => {
     const rtPath = '/src/scene/runtime.ts'
     const storePath = '/src/store.ts'
-    const seatsPath = '/src/scene/stationSeats.ts'
+    const scenePath = '/src/scene/stationScene.ts'
     const spotsPath = '/src/theme/station/spots.ts'
     const geometryPath = '/src/theme/station/geometry.ts'
     const rt = await import(/* @vite-ignore */ rtPath)
@@ -219,9 +228,10 @@ export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null
       const live = rt.avatarLive.get(s.id)
       if (live?.visible) w = [live.x, live.y + 0.5, live.z]
       else {
-        const { stationFor } = await import(/* @vite-ignore */ seatsPath)
+        const { stationSceneFor } = await import(/* @vite-ignore */ scenePath)
         const { crewSpot } = await import(/* @vite-ignore */ spotsPath)
-        const seat = stationFor(useOffice.getState().members).seats.get(s.id)
+        const snapshot = useOffice.getState().office?.snapshot
+        const seat = snapshot ? stationSceneFor(snapshot).seats.get(s.id) : undefined
         const spot = seat === undefined ? null : crewSpot(seat, true)
         if (spot) w = [spot.x, spot.y + 0.5, spot.z]
       }
@@ -324,69 +334,28 @@ async function canvasOnTop(page: Page, x: number, y: number, need = 8): Promise<
 }
 
 /**
- * Move the real mouse onto a task box in the 3D view: the point is accepted when store.hover reports the box right
- * after the move and the pointer is then free of overlays, so the following press goes to the box.
+ * Move the real mouse onto an issue / PR box in the 3D view (key = SceneModel key): the point is accepted when store.hover
+ * reports the box right after the move and the pointer is then free of overlays, so the following press goes to the box.
  */
-export async function hoverBox(page: Page, taskId: string): Promise<{ x: number; y: number }> {
-  const base = await settled(page, { kind: 'box', id: taskId })
+export async function hoverBox(page: Page, key: string): Promise<{ x: number; y: number }> {
+  const base = await settled(page, { kind: 'box', id: key })
   for (const [dx, dy] of PROBE) {
     const x = base.x + dx
     const y = base.y + dy
     await page.mouse.move(x, y)
     const hover = await readStore(page, (s) => s.hover)
-    if (hover?.kind !== 'task' || hover.id !== taskId) continue
+    if (hover?.kind !== 'task' || hover.id !== key) continue
     if (await canvasOnTop(page, x, y)) return { x, y }
   }
-  throw new Error(`could not hover box ${taskId} near (${Math.round(base.x)}, ${Math.round(base.y)})`)
+  throw new Error(`could not hover box ${key} near (${Math.round(base.x)}, ${Math.round(base.y)})`)
 }
 
+/** Panel drop targets (the 3D view is read-only — #102 T5-c-2). */
 export type DropWant =
   | { kind: 'member'; id: string }
-  | { kind: 'agenda' }
   | { kind: 'backlog' }
   | { kind: 'status'; status: string }
   | { kind: 'day'; date: string; memberId?: string | null }
-
-/** Move the pressed mouse over a 3D target until the store's dropTarget is `want`. */
-export async function moveToDropTarget(page: Page, spec: WorldSpec, want: DropWant): Promise<{ x: number; y: number }> {
-  const base = await settled(page, spec)
-  const wantJson = JSON.stringify(want)
-  for (const [dx, dy] of PROBE) {
-    const x = base.x + dx
-    const y = base.y + dy
-    await page.mouse.move(x, y, { steps: 6 })
-    const got = await readStore(page, (s) => JSON.stringify(s.dropTarget))
-    if (got === wantJson) return { x, y }
-  }
-  throw new Error(`no drop target ${wantJson} near (${Math.round(base.x)}, ${Math.round(base.y)})`)
-}
-
-/** Press a 3D task box, pick it up and hold it over `target` (mouse stays down). Returns after the drop target is set. */
-export async function pickUpBoxOver(page: Page, taskId: string, spec: WorldSpec, want: DropWant): Promise<void> {
-  const from = await hoverBox(page, taskId)
-  await page.mouse.down()
-  await page.mouse.move(from.x + 12, from.y + 12)
-  await expect.poll(() => readStore(page, (s) => s.drag?.taskId ?? null), { message: 'drag started' }).toBe(taskId)
-  await moveToDropTarget(page, spec, want)
-}
-
-/** Pick up a 3D task box and hold it over a DOM element (panel card, member row...) until the drop target is `want`. */
-export async function pickUpBoxOverElement(page: Page, taskId: string, to: Locator, want: DropWant): Promise<void> {
-  const from = await hoverBox(page, taskId)
-  await page.mouse.down()
-  await page.mouse.move(from.x + 12, from.y + 12)
-  await expect.poll(() => readStore(page, (s) => s.drag?.taskId ?? null), { message: 'drag started' }).toBe(taskId)
-  const b = await centerOf(to)
-  await page.mouse.move(b.x, b.y, { steps: 12 })
-  await expect.poll(() => readStore(page, (s) => JSON.stringify(s.dropTarget))).toBe(JSON.stringify(want))
-}
-
-/** Drag a 3D task box and release it over `target`. */
-export async function dragBox(page: Page, taskId: string, spec: WorldSpec, want: DropWant): Promise<void> {
-  await pickUpBoxOver(page, taskId, spec, want)
-  await page.mouse.up()
-  await expect.poll(() => readStore(page, (s) => s.drag), { message: 'drag ended' }).toBeNull()
-}
 
 // ---- panel (DOM) drags ----------------------------------------------------------------------------------
 
