@@ -163,4 +163,32 @@ public class AgendaItem {
         }
         return new AgendaItem(workspace, kind, title, background, tried, unresolvedReason, raisedBy, raisedAt);
     }
+
+    public boolean isConfirmed() {
+        return status == AgendaStatus.CONFIRMED;
+    }
+
+    /**
+     * 결정 기록(FR-MTG-04) → {@link AgendaStatus#DISCUSSED}. 상태 · 짝 · 같은 사무실 검사는 부르는 쪽이 먼저 한다.
+     *
+     * @param prDecision PR 안건만, 그 밖에는 null
+     */
+    public void decide(String conclusion, String learning, PrDecision prDecision, Member followUpAssignee,
+            LocalDate followUpDueDate, Meeting meeting, Member decidedBy, Instant decidedAt) {
+        if (!isConfirmed()) {
+            throw new IllegalStateException("confirmed 안건만 결정한다");
+        }
+        if ((prDecision != null) != (kind == AgendaKind.PR)) {
+            throw new IllegalArgumentException("PR 결정은 PR 안건에만 있다");
+        }
+        this.status = AgendaStatus.DISCUSSED;
+        this.conclusion = Objects.requireNonNull(conclusion);
+        this.learning = learning;
+        this.prDecision = prDecision;
+        this.followUpAssignee = followUpAssignee;
+        this.followUpDueDate = followUpDueDate;
+        this.meeting = meeting;
+        this.decidedBy = Objects.requireNonNull(decidedBy);
+        this.decidedAt = Objects.requireNonNull(decidedAt);
+    }
 }
