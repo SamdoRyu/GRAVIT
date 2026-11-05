@@ -1,21 +1,19 @@
-// One crew member: the confirmed design's 스페이 (Spay) glTF avatar with a floating status diamond. Presence decides
-// where it is: its crew pod, the bridge, or gone. The station's tubes are smaller than the crew, so it never walks
-// between rooms: it fades out where it was and fades in at the new spot
-// (CONTRACTS.md 「10」 아바타 이동 연출 — the light trail between the two comes with the meeting issues).
+// One crew member of the open v1 office: the confirmed design's 스페이 (Spay) glTF avatar in its crew pod, with a floating
+// diamond that turns red while the member has a blocked shape (SceneModel highlight 'blocked' — FR-FLOW-02; the fact only,
+// no reason). A member who leaves fades out at the exit; the station's tubes are smaller than the crew, so it never walks
+// between rooms (CONTRACTS.md 「10」 아바타 이동 연출 — moving to the bridge for a meeting comes with the meeting issues).
 import { useAnimations, useGLTF } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Color, MeshStandardMaterial, NoColorSpace, OctahedronGeometry, type Group, type Material, type Mesh, type Texture } from 'three'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import type { Id, Member, Presence } from '../data/types'
-import { SIGNAL_META } from '../data/insights'
+import type { Id, MemberDto } from '../data/types'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
 import { crewEnvironment } from '../theme/station/crewEnvironment'
 import { applyCrewPalette, crewColor, setCrewColor } from '../theme/station/crewPalette'
-import { bridgeSeat, crewSpot, EXIT_SPOT, type Spot } from '../theme/station/spots'
+import { crewSpot, EXIT_SPOT, type Spot } from '../theme/station/spots'
 import { SceneHtml, useDynamicLayer } from './shared'
-import { parseSignalKey, signalKeyOf, useToday } from './signals'
 import { avatarLive, clickSlop, noRaycast, setCursor, type AvatarLive } from './runtime'
 
 /** Crew avatar from the confirmed design (public/station — read only). Model: height 1, feet at the origin, facing +z. */
@@ -26,6 +24,8 @@ const CHEER_S = 2
 const GEM = new OctahedronGeometry(1, 0)
 /** Seconds to fade out at the old spot, and again to fade in at the new one. */
 const FADE_S = 0.4
+/** Diamond colours: calm, or blocked (FR-FLOW-02). No per-person workload level (P6). */
+const GEM_COLOR = { calm: '#22b07d', blocked: '#e5484d' } as const
 
 useGLTF.preload(CREW_MODEL_URL)
 
@@ -36,18 +36,9 @@ function lerpAngle(a: number, b: number, k: number) {
   return a + d * k
 }
 
-/** Where a crew member is. `seat` = their pod number; members without a pod are not in 3D (the caller skips them). */
-function spotFor(seat: number, presence: Presence): Spot {
-  switch (presence) {
-    case 'working':
-      return crewSpot(seat, true) ?? EXIT_SPOT
-    case 'break':
-      return crewSpot(seat, false) ?? EXIT_SPOT
-    case 'meeting':
-      return bridgeSeat(seat)
-    default:
-      return EXIT_SPOT
-  }
+/** Where a crew member is: seated in their pod, or gone. Members without a pod are not in 3D (the caller skips them). */
+function spotFor(seat: number, leaving: boolean): Spot {
+  return leaving ? EXIT_SPOT : (crewSpot(seat, true) ?? EXIT_SPOT)
 }
 
 /**
@@ -93,31 +84,27 @@ function place(w: Walker, spot: Spot) {
 }
 
 interface AvatarProps {
-  member: Member
+  member: MemberDto
   /** The member's crew pod (deskIndex). */
   seat: number
+  /** SceneModel highlight 'blocked': the member has a blocked issue / PR. */
+  blocked: boolean
   /** 'target' = already there when the office loads; 'entrance' = fades in (a member who just joined). */
   spawn: 'target' | 'entrance'
   leaving: boolean
   onGone: (id: Id) => void
 }
 
-export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGone }: AvatarProps) {
+export const Avatar = memo(function Avatar({ member, seat, blocked, spawn, leaving, onGone }: AvatarProps) {
   const id = member.id
-  const presence: Presence = leaving ? 'away' : member.presence
-  // Only identity, seat and presence decide where the crew member is; other edits must not move them.
-  const spot = useMemo(() => spotFor(seat, presence), [seat, presence])
+  /** Hover key: the SceneModel key, so it never matches a demo panel's member id */
+  const hoverKey = `member:${id}`
+  // Only identity, seat and leaving decide where the crew member is; other edits must not move them.
+  const spot = useMemo(() => spotFor(seat, leaving), [seat, leaving])
+  const signalColor = blocked ? GEM_COLOR.blocked : GEM_COLOR.calm
 
-  // Signal is memoized on tasks/member changes; nothing is computed per frame.
-  const today = useToday()
-  const signalKey = useOffice((s) => signalKeyOf(member, s.tasks, today))
-  const signal = useMemo(() => parseSignalKey(signalKey), [signalKey])
-  const signalColor = SIGNAL_META[signal.level].color
-  const alert = signal.level === 'alert'
-
-  const selected = useOffice((s) => s.selection?.kind === 'member' && s.selection.id === id)
-  const hovered = useOffice((s) => s.hover?.kind === 'member' && s.hover.id === id)
-  const dropHot = useOffice((s) => s.dropTarget?.kind === 'member' && s.dropTarget.id === id)
+  const selected = useOffice((s) => s.officeSelection?.kind === 'member' && s.officeSelection.id === id)
+  const hovered = useOffice((s) => s.hover?.kind === 'member' && s.hover.id === hoverKey)
 
   // ---- the glTF crew: one skinned clone per member, with its own materials so each can fade on its own ----
   const gltf = useGLTF(CREW_MODEL_URL)
@@ -150,7 +137,7 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
     for (const m of crew.materials) setCrewColor(m as MeshStandardMaterial, crewColor(seat))
   }, [crew, seat])
   const gemMat = useMemo(
-    () => new MeshStandardMaterial({ color: new Color(SIGNAL_META.ok.color), roughness: 0.3, emissive: new Color(SIGNAL_META.ok.color), emissiveIntensity: 0.5 }),
+    () => new MeshStandardMaterial({ color: new Color(GEM_COLOR.calm), roughness: 0.3, emissive: new Color(GEM_COLOR.calm), emissiveIntensity: 0.5 }),
     [],
   )
   const fadeMats = useMemo(() => [...crew.materials, gemMat], [crew, gemMat])
@@ -203,9 +190,9 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
     return () => {
       if (avatarLive.get(id) === l) avatarLive.delete(id)
       const s = useOffice.getState()
-      if (s.hover?.kind === 'member' && s.hover.id === id) s.setHover(null)
+      if (s.hover?.kind === 'member' && s.hover.id === hoverKey) s.setHover(null)
     }
-  }, [id])
+  }, [id, hoverKey])
 
   useFrame((state, delta) => {
     const g = root.current
@@ -266,34 +253,34 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
     if (float.current) float.current.position.y = CREW_HEIGHT + 0.28 + Math.sin(t * 1.3 + seed * 5) * 0.04
     if (gem.current) {
       gem.current.rotation.y += dt * 0.9
-      if (alert) gemMat.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + seed * 4))
+      if (blocked) gemMat.emissiveIntensity = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + seed * 4))
       else if (gemMat.emissiveIntensity !== 0.5) gemMat.emissiveIntensity = 0.5
     }
   })
 
-  const ringColor = dropHot ? PALETTE.dropOk : selected ? PALETTE.selection : hovered ? PALETTE.hover : null
-  const showTag = selected || hovered || dropHot
-  const tagText = signal.reasons.length ? `${member.name} · ${signal.reasons.join(', ')}` : `${member.name} · ${SIGNAL_META.ok.label}`
+  const ringColor = selected ? PALETTE.selection : hovered ? PALETTE.hover : null
+  const showTag = selected || hovered
+  const tagText = blocked ? `${member.displayName} · 막힘` : member.displayName
 
   return (
     <group
       ref={root}
       onPointerOver={(e) => {
-        if (!live.current.visible || useOffice.getState().drag) return
+        if (!live.current.visible) return
         e.stopPropagation()
-        useOffice.getState().setHover({ kind: 'member', id })
+        useOffice.getState().setHover({ kind: 'member', id: hoverKey })
         setCursor('pointer')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
-        if (s.hover?.kind === 'member' && s.hover.id === id) s.setHover(null)
-        if (!s.drag) setCursor('')
+        if (s.hover?.kind === 'member' && s.hover.id === hoverKey) s.setHover(null)
+        setCursor('')
       }}
       onClick={(e) => {
         if (!live.current.visible) return
         e.stopPropagation()
         if (e.delta > clickSlop(e)) return
-        useOffice.getState().select({ kind: 'member', id })
+        useOffice.getState().selectInOffice({ kind: 'member', id })
         cheerUntil.current = performance.now() + CHEER_S * 1000
         play('Cheer')
       }}
@@ -301,21 +288,21 @@ export const Avatar = memo(function Avatar({ member, seat, spawn, leaving, onGon
       <group ref={body} scale={CREW_HEIGHT}>
         <primitive object={crew.root} />
       </group>
-      {/* invisible hit volume: hover / click / drop on the crew member */}
+      {/* invisible hit volume: hover / click on the crew member */}
       <mesh position={[0, CREW_HEIGHT / 2, 0]}>
         <cylinderGeometry args={[0.32, 0.32, CREW_HEIGHT, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
 
-      {/* soft ring on the deck for selection / hover / drop */}
+      {/* soft ring on the deck for selection / hover */}
       {ringColor && (
-        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={dropHot ? 1.3 : 1} renderOrder={4} raycast={noRaycast}>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={4} raycast={noRaycast}>
           <ringGeometry args={[0.5, 0.62, 40]} />
           <meshBasicMaterial color={ringColor} transparent opacity={0.65} depthWrite={false} />
         </mesh>
       )}
 
-      {/* status diamond (plumbob): slow spin, gentle bob, color = signal */}
+      {/* status diamond (plumbob): slow spin, gentle bob, red while blocked */}
       <group ref={float}>
         <group ref={gem}>
           <mesh geometry={GEM} material={gemMat} scale={[0.09, 0.15, 0.09]} castShadow raycast={noRaycast} />

@@ -1,9 +1,10 @@
-// 6. Agenda + meeting: drop a box on the meeting table, start a meeting, end it with one assignment, one kept item
-// and notes -> store/server state and the 회의록 entry.
-import { dragBox, expect, openApp, serverWorkspace, seedTask, taskByTitle, test } from './fixtures'
+// 6. Agenda + meeting (demo data): put a task on the agenda, start a meeting, end it with one assignment, one kept item
+// and notes -> store/server state and the 회의록 entry. The 3D view now shows the v1 office and is read-only
+// (#102 T5-c-2), so the task goes on the agenda through the store, not by dropping a box on the meeting table.
+import { callStore, expect, openApp, serverWorkspace, seedTask, taskByTitle, test } from './fixtures'
 
 test('agenda, meeting start and end with outcomes and minutes', async ({ page, source, api }) => {
-  await openApp(page, source)
+  await openApp(page, source, { scene: false })
   const task = await seedTask(page, { title: 'E2E 안건 작업', status: 'todo', priority: 'urgent' })
 
   // The seed already has two agenda tasks; drop a third box on the meeting table.
@@ -12,7 +13,7 @@ test('agenda, meeting start and end with outcomes and minutes', async ({ page, s
     return (Object.values(useOffice.getState().tasks) as { id: string; title: string; onAgenda: boolean }[]).filter((t) => t.onAgenda).map((t) => t.title)
   })
   expect(seeded).toHaveLength(2)
-  await dragBox(page, task.id, { kind: 'agenda' }, { kind: 'agenda' })
+  await callStore(page, 'setAgenda', task.id, true)
   await expect.poll(async () => (await taskByTitle(page, 'E2E 안건 작업')).onAgenda).toBe(true)
   if (source === 'api') await expect.poll(async () => (await serverWorkspace(api)).tasks.find((t) => t.id === task.id)?.onAgenda).toBe(true)
   await expect(page.getByRole('button', { name: /^회의/ }).getByText('3')).toBeVisible()

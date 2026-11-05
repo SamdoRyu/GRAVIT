@@ -1,49 +1,51 @@
-// Computes every task's target slot and renders one persistent TaskBox per task (keyed by id).
+// Every issue / PR of the open v1 office as one persistent box (keyed by SceneEntity key), placed by its SceneModel role.
 import { useMemo, useRef, type ReactElement } from 'react'
-import { hasActiveFilters, matchesFilters } from '../data/selectors'
-import type { Id } from '../data/types'
+import type { Priority } from '../data/types'
 import { useOffice } from '../store'
 import { TaskBox } from './TaskBox'
 import { useToday } from './signals'
 import { computeSlots, type Slot } from './slots'
-
-const NONE = new Set<Id>()
+import { useStationScene } from './useStationScene'
 
 export function TaskBoxes() {
-  const tasks = useOffice((s) => s.tasks)
-  const members = useOffice((s) => s.members)
-  const filters = useOffice((s) => s.filters)
-  const overlay = useOffice((s) => s.overlay)
-  const status = useOffice((s) => s.status)
+  const scene = useStationScene()
+  const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   const today = useToday()
 
-  const doneAssign = useRef(new Map<Id, number>())
-  const prevSlots = useRef(new Map<Id, Slot>())
-  const popped = useRef(new Map<Id, boolean>())
+  const doneAssign = useRef(new Map<string, number>())
+  const prevSlots = useRef(new Map<string, Slot>())
+  const popped = useRef(new Map<string, boolean>())
   const firstBatch = useRef(true)
 
   const slots = useMemo(() => {
-    const next = computeSlots(tasks, members, doneAssign.current, prevSlots.current)
+    if (!scene || !snapshot) return new Map<string, Slot>()
+    const next = computeSlots(scene.entities, snapshot, scene.layout, doneAssign.current, prevSlots.current)
     prevSlots.current = next
     return next
-  }, [tasks, members])
+  }, [scene, snapshot])
 
-  const dimmed = useMemo(() => {
-    if (!hasActiveFilters(filters)) return NONE
-    const out = new Set<Id>()
-    for (const t of Object.values(tasks)) if (!matchesFilters(t, filters, today)) out.add(t.id)
-    return out
-  }, [tasks, filters, today])
+  /** key → what the box shows that the SceneModel doesn't carry (colour, overdue glow) */
+  const looks = useMemo(() => {
+    const m = new Map<string, { priority: Priority | null; overdue: boolean }>()
+    if (!snapshot) return m
+    for (const t of snapshot.tasks) m.set(`task:${t.id}`, { priority: t.priority, overdue: t.state === 'open' && t.dueDate !== null && t.dueDate < today })
+    for (const s of snapshot.submissions) m.set(`submission:${s.id}`, { priority: s.priority, overdue: false })
+    return m
+  }, [snapshot, today])
 
-  // Boxes present in the first loaded workspace are simply there; later ones pop in.
-  for (const id of slots.keys()) {
-    if (!popped.current.has(id)) popped.current.set(id, !firstBatch.current)
+  if (!scene) return null
+  // Boxes present in the first loaded snapshot are simply there; later ones pop in.
+  for (const key of slots.keys()) {
+    if (!popped.current.has(key)) popped.current.set(key, !firstBatch.current)
   }
-  if (status === 'ready') firstBatch.current = false
+  if (slots.size > 0) firstBatch.current = false
 
   const items: ReactElement[] = []
-  for (const [id, slot] of slots) {
-    items.push(<TaskBox key={id} id={id} slot={slot} dimmed={dimmed.has(id)} overlay={overlay} today={today} pop={popped.current.get(id) ?? false} />)
+  for (const e of scene.entities) {
+    const slot = slots.get(e.key)
+    if (!slot) continue
+    const look = looks.get(e.key)
+    items.push(<TaskBox key={e.key} entity={e} slot={slot} priority={look?.priority ?? null} overdue={look?.overdue ?? false} pop={popped.current.get(e.key) ?? false} />)
   }
   return <>{items}</>
 }

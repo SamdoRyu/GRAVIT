@@ -8,7 +8,7 @@ import { STATION_BOUNDS, WORLD_SCALE } from '../theme/station/geometry'
 import { crewSpot } from '../theme/station/spots'
 import type { Selection } from '../store'
 import { avatarLive, boxLive, cameraGesture, cameraLock, type ControlsImpl } from './runtime'
-import { stationFor } from './stationSeats'
+import { stationSceneFor } from './stationScene'
 
 // Station extent in world units (the station is drawn at WORLD_SCALE).
 const B = {
@@ -104,7 +104,8 @@ function resolve(sel: Selection, out: Fly): boolean {
       out.ty = live.y + 0.6
       return true
     }
-    const seat = stationFor(useOffice.getState().members).seats.get(sel.id)
+    const snapshot = useOffice.getState().office?.snapshot
+    const seat = snapshot ? stationSceneFor(snapshot).seats.get(sel.id) : undefined
     const spot = seat === undefined ? null : crewSpot(seat, true)
     if (spot) {
       out.tx = spot.x
