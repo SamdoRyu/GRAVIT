@@ -9,8 +9,11 @@ import com.samdoryu.backend.report.dto.RetroReportDto;
 import com.samdoryu.backend.report.dto.RetroReportSummary;
 import com.samdoryu.backend.report.service.RetroReportService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/workspaces/{workspaceId}/members/{memberId}/reports")
 public class RetroReportController {
+
+    private static final MediaType MARKDOWN = new MediaType("text", "markdown", StandardCharsets.UTF_8);
 
     private final AuthorizationService authorizationService;
     private final RetroReportService retroReportService;
@@ -55,6 +60,17 @@ public class RetroReportController {
             @PathVariable String reportId) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return retroReportService.get(access, Ids.fromPath(memberId), Ids.fromPath(reportId));
+    }
+
+    /**
+     * 본인 · 지정된 강사. {@code text/markdown} — {@code produces}를 걸지 않아 실패 응답은 다른 API처럼 JSON 에러로 나간다.
+     */
+    @GetMapping("/{reportId}/markdown")
+    public ResponseEntity<String> exportMarkdown(@PathVariable String workspaceId, @PathVariable String memberId,
+            @PathVariable String reportId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        String markdown = retroReportService.markdown(access, Ids.fromPath(memberId), Ids.fromPath(reportId));
+        return ResponseEntity.ok().contentType(MARKDOWN).body(markdown);
     }
 
     /** 본인만. */

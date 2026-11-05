@@ -20,7 +20,13 @@ import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RetroReportService {
 
     private static final String AREA_LABEL_PREFIX = "area:";
+    private static final String NONE = "- 없음";
 
     private final RetroReportRepository retroReportRepository;
     private final WorkspaceService workspaceService;
@@ -88,6 +95,78 @@ public class RetroReportService {
                 .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
         report.writeLearning(learning);
         return toDto(access.workspaceId(), report);
+    }
+
+    /**
+     * {@code GET W/members/{memberId}/reports/{reportId}/markdown}(FR-REP-03) — {@link #get}과 같은 검사 · 계산 칸을 마크다운으로.
+     * 사무실 팀원(빠진 팀원 포함)의 이름 · 로그인은 처음 나온 순서대로 "팀원 A" · "팀원 B"…로, 강사는 "강사"로만 적는다.
+     */
+    @Transactional(readOnly = true)
+    public String markdown(WorkspaceAccess access, Long memberId, Long reportId) {
+        RetroReportDto report = get(access, memberId, reportId);
+        return anonymize(toMarkdown(report), workspaceService.allMembers(access.workspaceId()));
+    }
+
+    // ponytail: 활동 분포 · 결정 카드는 아직 늘 빈 목록이라 싣지 않는다 — 활동 기록 · #62가 채울 때 여기에 칸을 더한다
+    private static String toMarkdown(RetroReportDto report) {
+        StringBuilder md = new StringBuilder();
+        md.append("# ").append(report.kind() == ReportKind.FINAL ? "최종" : "중간").append(" 회고 리포트\n\n")
+                .append("- 만든 시각: ").append(report.createdAt()).append("\n\n")
+                .append("## 요약\n\n").append(report.summary()).append("\n\n")
+                .append("## 담당 기능 영역\n\n");
+        report.areaLabels().forEach(label -> md.append("- ").append(label).append('\n'));
+        if (report.areaLabels().isEmpty()) {
+            md.append(NONE).append('\n');
+        }
+        md.append("\n## 내가 배운 점\n\n").append(report.learning() == null || report.learning().isBlank()
+                ? NONE : report.learning()).append("\n\n## 안건 결론\n\n");
+        for (RetroReportDto.AgendaResult result : report.agendaResults()) {
+            md.append("### ").append(result.title()).append("\n\n")
+                    .append("- 결론: ").append(result.conclusion()).append('\n');
+            if (result.learning() != null) {
+                md.append("- 배운 점: ").append(result.learning()).append('\n');
+            }
+            if (result.prDecision() != null) {
+                md.append("- PR 결정: ").append(result.prDecision().value()).append('\n');
+            }
+            md.append("- 결정 시각: ").append(result.decidedAt()).append("\n\n");
+        }
+        if (report.agendaResults().isEmpty()) {
+            md.append(NONE).append("\n\n");
+        }
+        md.append("## 강사 피드백\n\n");
+        report.instructorFeedbacks().forEach(feedback -> md.append("- ").append(feedback.createdAt())
+                .append(" 강사: ").append(feedback.body()).append('\n'));
+        if (report.instructorFeedbacks().isEmpty()) {
+            md.append(NONE).append('\n');
+        }
+        return md.toString();
+    }
+
+    /**
+     * 팀원 이름 · 로그인({@code @bob}은 {@code @팀원 A})을 한 번에 훑어 처음 나온 순서대로 "팀원 A"…로 바꾼다. 긴 이름을 먼저 맞춰
+     * {@code kim}이 {@code kimchi} 안에서 바뀌지 않게 하고, 영문 · 숫자에 붙은 곳은 다른 단어로 보고 건너뛴다(한글 조사는 붙어도 바꾼다).
+     * ponytail: 별명 · 이름 일부는 못 잡고, 26명을 넘으면 글자가 A~Z 밖으로 나간다 — 팀 규모(최대 8 포드)면 충분
+     */
+    private static String anonymize(String text, List<Member> members) {
+        Map<String, Long> memberIdByAlias = new HashMap<>();
+        for (Member member : members) {
+            Stream.of(member.getDisplayName(), member.getGithubLogin())
+                    .filter(alias -> alias != null && !alias.isBlank())
+                    .forEach(alias -> memberIdByAlias.putIfAbsent(alias.toLowerCase(Locale.ROOT), member.getId()));
+        }
+        if (memberIdByAlias.isEmpty()) {
+            return text;
+        }
+        String alternatives = memberIdByAlias.keySet().stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .map(Pattern::quote).collect(Collectors.joining("|"));
+        Matcher matcher = Pattern.compile("(?<![A-Za-z0-9_-])(?:" + alternatives + ")(?![A-Za-z0-9_-])",
+                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE).matcher(text);
+        Map<Long, String> labelByMemberId = new HashMap<>();
+        return matcher.replaceAll(match -> labelByMemberId.computeIfAbsent(
+                memberIdByAlias.get(match.group().toLowerCase(Locale.ROOT)),
+                id -> "팀원 " + (char) ('A' + labelByMemberId.size())));
     }
 
     /** 계산 칸 — 활동 분포(활동 기록 기능 전)와 결정 카드(#62 전)는 아직 빈 목록이다. */

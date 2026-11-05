@@ -58,6 +58,12 @@ public class WorkspaceService {
         return workspaceRepository.findByKind(WorkspaceKind.GITHUB).stream().map(ws -> ws.getId()).toList();
     }
 
+    /** 팀원 전부(빠진 팀원 포함). */
+    @Transactional(readOnly = true)
+    public List<Member> allMembers(Long workspaceId) {
+        return memberRepository.findByWorkspaceId(workspaceId);
+    }
+
     /** 지금 팀원(빠진 팀원 제외). */
     @Transactional(readOnly = true)
     public List<Member> currentMembers(Long workspaceId) {
