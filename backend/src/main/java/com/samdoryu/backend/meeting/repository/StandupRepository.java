@@ -13,4 +13,7 @@ public interface StandupRepository extends JpaRepository<Standup, Long> {
 
     /** {@code GET W/standups?date=} — 그날 쓴 팀원 것, memberId 순. */
     List<Standup> findByWorkspaceIdAndDateOrderByMemberIdAsc(Long workspaceId, LocalDate date);
+
+    /** 기술 결정 카드의 "막혔던 순간" 재료(#62) — 한 팀원의 스탠드업 전부, 날짜 순. */
+    List<Standup> findByWorkspaceIdAndMemberIdOrderByDateAsc(Long workspaceId, Long memberId);
 }

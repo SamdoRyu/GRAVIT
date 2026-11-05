@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -90,6 +91,17 @@ public class MeetingService {
         eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.MEETINGS);
         return MeetingDto.of(meeting, agendaItemRepository.findByMeetingIdInOrderByIdAsc(List.of(meetingId)).stream()
                 .map(AgendaItem::getId).toList());
+    }
+
+    /**
+     * 그 사무실 회의 하나의 메모 원문 — 기술 결정 카드의 "왜 그렇게 결정했나" 재료(#62 · FR-REP-07). 읽기 전용.
+     * 다른 사무실 회의이거나 없거나 메모가 비었으면 빈 값. Snapshot의 최근 {@value #RECENT_ENDED_MEETINGS}개 밖의 회의도 읽는다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> notes(Long workspaceId, Long meetingId) {
+        return meetingRepository.findByIdAndWorkspaceId(meetingId, workspaceId)
+                .map(Meeting::getNotes)
+                .filter(notes -> !notes.isBlank());
     }
 
     /** Snapshot {@code meetings} 조각 — 진행 중 + 최근 끝난 것 {@value #RECENT_ENDED_MEETINGS}개, startedAt 오름차순. */
