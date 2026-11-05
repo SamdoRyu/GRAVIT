@@ -6,7 +6,7 @@ import { DataError, type DataSource } from '../../src/data/DataSource'
 import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import type { Change, SyncStatus, WorkspaceListItem, WorkspaceSnapshot } from '../../src/data/types'
-import { OFFICE_RELOAD_DELAY_MS, pickWorkspace, useOffice } from '../../src/store'
+import { OFFICE_RELOAD_DELAY_MS, aliveInOffice, pickWorkspace, useOffice } from '../../src/store'
 import { finiteOrNull, formatHours } from '../../src/ui/format'
 import { describeSync, failureReason } from '../../src/ui/syncText'
 import { workspaceSnapshotExample } from './examples'
@@ -436,5 +436,67 @@ describe('store — 첫 사무실 열기 (#102 T5-c-1)', () => {
     await useOffice.getState().openOffice(h.source, other.id)
     await useOffice.getState().openDefaultOffice(h.source)
     assert.equal(office()?.workspaceId, other.id)
+  })
+})
+
+describe('store — v1 상세 선택 (#102 T5-c-2)', () => {
+  const flush = () => new Promise<void>((r) => setImmediate(r))
+
+  it('selectInOffice는 데모 선택을 비우고, 데모 select는 v1 선택을 비운다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    useOffice.getState().select({ kind: 'task', id: 'demo_t' })
+    useOffice.getState().selectInOffice({ kind: 'task', id: 't_1' })
+    assert.deepEqual(useOffice.getState().officeSelection, { kind: 'task', id: 't_1' })
+    assert.equal(useOffice.getState().selection, null)
+    useOffice.getState().select({ kind: 'member', id: 'demo_m' })
+    assert.equal(useOffice.getState().officeSelection, null)
+    useOffice.getState().select(null)
+  })
+
+  it('aliveInOffice — 이슈 · PR · 팀원이 Snapshot에 있으면 그대로, 없으면 null', async () => {
+    const h = harness()
+    const snap = await h.source.load(TEAM_WS)
+    assert.deepEqual(aliveInOffice(snap, { kind: 'task', id: snap.tasks[0].id }), { kind: 'task', id: snap.tasks[0].id })
+    assert.deepEqual(aliveInOffice(snap, { kind: 'submission', id: snap.submissions[0].id }), { kind: 'submission', id: snap.submissions[0].id })
+    assert.deepEqual(aliveInOffice(snap, { kind: 'member', id: snap.members[0].id }), { kind: 'member', id: snap.members[0].id })
+    assert.equal(aliveInOffice(snap, { kind: 'task', id: snap.submissions[0].id + '_nope' }), null)
+    assert.equal(aliveInOffice(snap, null), null)
+  })
+
+  it('다시 읽은 Snapshot에서 고른 이슈가 사라지면 상세를 닫는다. 남아 있으면 그대로', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    let drop: string | null = null
+    const source: DataSource = {
+      ...h.source,
+      async load(id) {
+        const s = await h.source.load(id)
+        return drop ? { ...s, tasks: s.tasks.filter((t) => t.id !== drop) } : s
+      },
+    }
+    await useOffice.getState().openOffice(source, TEAM_WS)
+    const [kept, gone] = office()!.snapshot!.tasks
+    useOffice.getState().selectInOffice({ kind: 'task', id: kept.id })
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    for (let i = 0; i < 5; i++) await flush()
+    assert.deepEqual(useOffice.getState().officeSelection, { kind: 'task', id: kept.id })
+
+    useOffice.getState().selectInOffice({ kind: 'task', id: gone.id })
+    drop = gone.id
+    h.push({ type: 'changed', resources: ['tasks'] })
+    mock.timers.tick(OFFICE_RELOAD_DELAY_MS)
+    for (let i = 0; i < 5; i++) await flush()
+    assert.equal(office()!.snapshot!.tasks.some((t) => t.id === gone.id), false)
+    assert.equal(useOffice.getState().officeSelection, null)
+  })
+
+  it('사무실을 닫으면 v1 선택도 비운다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    useOffice.getState().selectInOffice({ kind: 'member', id: 'm_1' })
+    useOffice.getState().closeOffice()
+    assert.equal(useOffice.getState().officeSelection, null)
   })
 })

@@ -15,6 +15,8 @@ export const BOARD_COLUMN_META: Record<BoardColumn, { label: string; color: stri
 }
 
 export const PRIORITY_LABEL: Record<Priority, string> = { high: '높음', medium: '보통', low: '낮음' }
+export const PRIORITY_COLOR: Record<Priority, string> = { high: '#f08a24', medium: '#e8c33a', low: '#9fb0c8' }
+export const KIND_LABEL: Record<'task' | 'submission', string> = { task: '이슈', submission: 'PR' }
 const PRIORITY_WEIGHT: Record<Priority, number> = { high: 3, medium: 2, low: 1 }
 
 /** 이슈의 표시 상태: 닫힘 → 완료, 열림 · 팀원 담당자 있음 → 작업 중, 없음 → 대기 */
@@ -60,7 +62,7 @@ export interface BoardItem {
   order: number
 }
 
-function taskItem(t: TaskDto): BoardItem {
+export function taskItem(t: TaskDto): BoardItem {
   const flags: BoardFlag[] = []
   if (t.isBlocked) flags.push('blocked')
   if (t.state === 'closed' && t.closedReason === 'not_planned') flags.push('not_planned')
@@ -81,7 +83,7 @@ function taskItem(t: TaskDto): BoardItem {
   }
 }
 
-function submissionItem(s: SubmissionDto): BoardItem {
+export function submissionItem(s: SubmissionDto): BoardItem {
   const flags: BoardFlag[] = []
   if (s.isBlocked) flags.push('blocked')
   if (s.state === 'draft') flags.push('draft')
@@ -130,16 +132,19 @@ export function dueLabel(item: Pick<BoardItem, 'dueDate' | 'column'>, today: Loc
   if (item.dueDate === null) return null
   const days = Math.round((Date.parse(`${item.dueDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000)
   if (Number.isNaN(days)) return null
-  if (item.column === 'done') {
-    const [, m, d] = item.dueDate.split('-').map(Number)
-    return { text: `${m}월 ${d}일`, tone: 'dim' }
-  }
+  if (item.column === 'done') return { text: monthDay(item.dueDate), tone: 'dim' }
   if (days < 0) return { text: `${-days}일 지남`, tone: 'bad' }
   if (days === 0) return { text: '오늘 마감', tone: 'warn' }
   return { text: `${days}일 남음`, tone: days <= 2 ? 'warn' : 'dim' }
 }
 
-export type BoardSortKey ='number' | 'title' | 'column' | 'priority' | 'member' | 'due'
+/** "2026-11-07" → "11월 7일" (시간대와 상관없이 글자 그대로) */
+export function monthDay(date: LocalDate): string {
+  const [, m, d] = date.split('-').map(Number)
+  return `${m}월 ${d}일`
+}
+
+export type BoardSortKey = 'number' | 'title' | 'column' | 'priority' | 'member' | 'due'
 
 /** 목록 정렬 — 값이 같으면 번호 순. 값이 없는 것(우선순위 · 담당 · 마감 없음)은 오름차순에서 뒤로 */
 export function sortItems(

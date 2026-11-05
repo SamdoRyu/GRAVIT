@@ -76,3 +76,50 @@ test('the kanban and list tabs show the office issues and PRs, read-only, with s
   })
   if (firstPriority) await expect(rows.first().locator('.prio')).toHaveAttribute('title', '우선순위 높음')
 })
+
+test('a card opens the read-only detail: issue → linked PR → person, with GitHub links and no edit inputs', async ({ page, source }) => {
+  await openApp(page, source, { scene: false })
+  await expect.poll(() => readStore(page, (s) => s.office?.status)).toBe('ready')
+  // 연결된 PR이 있는 이슈 하나와 그 PR — 페이지 안 Snapshot에서 고른다
+  const pair = await page.evaluate(async () => {
+    const storePath = '/src/store.ts'
+    const { useOffice } = await import(/* @vite-ignore */ storePath)
+    const snap = useOffice.getState().office.snapshot
+    const t = snap.tasks.find((x: { state: string; linkedSubmissionIds: string[] }) => x.state === 'open' && x.linkedSubmissionIds.length > 0)
+    if (!t) return null
+    const s = snap.submissions.find((x: { id: string }) => x.id === t.linkedSubmissionIds[0])
+    const lead = snap.members.find((m: { id: string }) => m.id === t.assigneeMemberIds[0])
+    return { issue: { number: t.githubIssueNumber, title: t.title }, pr: { number: s.githubPrNumber, title: s.title, htmlUrl: s.htmlUrl }, lead: lead?.displayName ?? null }
+  })
+  test.skip(pair === null, 'mock seed에 PR이 연결된 열린 이슈가 없다')
+  const { issue, pr, lead } = pair!
+
+  await panel(page).getByRole('article', { name: new RegExp(`^이슈 #${issue.number} `) }).click()
+  const issueDetail = page.getByRole('complementary', { name: '이슈 상세' })
+  await expect(issueDetail).toBeVisible()
+  await expect(issueDetail.getByRole('heading', { name: issue.title })).toBeVisible()
+  await expect(issueDetail.locator('input, select, textarea')).toHaveCount(0)
+  await expect(panel(page).getByRole('article', { name: new RegExp(`^이슈 #${issue.number} `) })).toHaveAttribute('aria-current', 'true')
+
+  // 연결된 PR → PR 상세, GitHub PR 화면 링크(FR-LRN-07)
+  await issueDetail.getByRole('button', { name: new RegExp(`PR #${pr.number}`) }).click()
+  const prDetail = page.getByRole('complementary', { name: 'PR 상세' })
+  await expect(prDetail.getByRole('heading', { name: pr.title })).toBeVisible()
+  await expect(issueDetail).toBeHidden()
+  if (pr.htmlUrl) await expect(prDetail.getByRole('link', { name: `GitHub에서 PR #${pr.number} 열기` })).toHaveAttribute('href', pr.htmlUrl)
+
+  // 이슈로 돌아가 대표 담당자 → 팀원 상세(업무량 게이지 없음)
+  if (lead) {
+    await prDetail.getByRole('button', { name: new RegExp(`이슈 #${issue.number}`) }).click()
+    await page.getByRole('complementary', { name: '이슈 상세' }).getByRole('button', { name: new RegExp(lead) }).first().click()
+    const memberDetail = page.getByRole('complementary', { name: '팀원 상세' })
+    await expect(memberDetail.getByText(lead, { exact: true })).toBeVisible()
+    await expect(memberDetail.getByRole('region', { name: /^맡은 열린 이슈 \d+개$/ })).toContainText(`#${issue.number}`)
+    await expect(memberDetail.getByText(/업무량/)).toHaveCount(0)
+  }
+
+  // Esc로 닫는다
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.detail-v1')).toHaveCount(0)
+  expect(await readStore(page, (s) => s.officeSelection)).toBeNull()
+})

@@ -1,12 +1,11 @@
 // v1 사무실의 관리 패널 칸반 · 목록 (#102 T5-c-2). 소유: D.
 // 이슈 · PR은 GitHub 원본이라 읽기 전용 — 끌어서 상태 · 담당을 바꾸지 않고, 바꾸려면 GitHub 화면으로 간다(2026-10-28 결정).
-import { memo, useMemo } from 'react'
+import { memo, useMemo, type KeyboardEvent } from 'react'
 import { kstToday } from '../data/rules/period'
 import {
   BOARD_COLUMNS,
   BOARD_COLUMN_META,
-  BOARD_FLAG_LABEL,
-  PRIORITY_LABEL,
+  KIND_LABEL,
   boardItems,
   dueLabel,
   matchesQuery,
@@ -15,16 +14,14 @@ import {
   type BoardItem,
   type BoardSortKey,
 } from '../data/rules/board'
-import type { Id, MemberDto, Priority } from '../data/types'
+import type { Id, MemberDto } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
-import { cssVars, initialOf } from './format'
+import { cssVars } from './format'
 import { useNow } from './hooks'
 import { Icon } from './icons'
+import { FlagTags, GithubLink, MemberAvatar, NoMemberAvatar, PriorityMark } from './officeParts'
 import { useUi } from './uiState'
-
-const PRIORITY_COLOR: Record<Priority, string> = { high: '#f08a24', medium: '#e8c33a', low: '#9fb0c8' }
-const KIND_LABEL: Record<BoardItem['kind'], string> = { task: '이슈', submission: 'PR' }
 
 type Members = ReadonlyMap<Id, MemberDto>
 
@@ -75,24 +72,13 @@ export function OfficeBoardSearch() {
   )
 }
 
-function MemberAvatar({ member, size = 20 }: { member: MemberDto | undefined; size?: number }) {
-  const name = member?.displayName ?? '알 수 없는 팀원'
-  return (
-    <span className="avatar avatar-v1" style={cssVars({ '--sz': `${size}px` })} title={name}>
-      {initialOf(name)}
-    </span>
-  )
-}
-
 /** 담당자 전원(이슈) 또는 작성자(PR). 첫 번째가 대표 담당자 */
 function People({ item, members, showName = true }: { item: BoardItem; members: Members; showName?: boolean }) {
   if (item.memberIds.length === 0) {
     const none = item.kind === 'task' ? '담당 없음' : '팀원 아닌 작성자'
     return (
       <span className="assignee assignee-none" title={none}>
-        <span className="avatar avatar-none" style={cssVars({ '--sz': '20px' })} aria-hidden="true">
-          <Icon name="user" size={12} />
-        </span>
+        <NoMemberAvatar />
         {showName && <span>{none}</span>}
       </span>
     )
@@ -117,52 +103,46 @@ function People({ item, members, showName = true }: { item: BoardItem; members: 
   )
 }
 
-function PriorityMark({ priority }: { priority: Priority | null }) {
-  if (priority === null) return <span className="prio prio-none" title="우선순위 없음" />
-  return (
-    <span className="prio" title={`우선순위 ${PRIORITY_LABEL[priority]}`}>
-      <i className="dot" style={cssVars({ '--c': PRIORITY_COLOR[priority] })} />
-    </span>
-  )
-}
-
-function Flags({ item }: { item: BoardItem }) {
-  return (
-    <>
-      {item.flags.map((f) => (
-        <span key={f} className={`flag flag-${f}`}>
-          {BOARD_FLAG_LABEL[f]}
-        </span>
-      ))}
-    </>
-  )
-}
-
-function GithubLink({ item }: { item: BoardItem }) {
+function ItemLink({ item }: { item: BoardItem }) {
   if (!item.htmlUrl) return null
-  const label = `GitHub에서 ${KIND_LABEL[item.kind]} #${item.number} 열기`
-  return (
-    <a className="gh-link" href={item.htmlUrl} target="_blank" rel="noopener noreferrer" title={label} aria-label={label} onClick={(e) => e.stopPropagation()}>
-      GitHub
-    </a>
-  )
+  return <GithubLink href={item.htmlUrl} label={`GitHub에서 ${KIND_LABEL[item.kind]} #${item.number} 열기`} />
+}
+
+/** 카드 · 행을 누르면(또는 Enter · Space) 상세를 연다. 안쪽 링크에서 온 키는 링크가 처리한다 */
+function useOpenDetail(item: BoardItem) {
+  const selected = useOffice((s) => s.officeSelection?.kind === item.kind && s.officeSelection.id === item.id)
+  const open = () => useOffice.getState().selectInOffice({ kind: item.kind, id: item.id })
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+    e.preventDefault()
+    open()
+  }
+  return { selected, open, onKeyDown }
 }
 
 const BoardCard = memo(function BoardCard({ item, members, today }: { item: BoardItem; members: Members; today: string }) {
   const due = dueLabel(item, today)
+  const { selected, open, onKeyDown } = useOpenDetail(item)
   return (
-    <article className={`card card-v1${item.flags.includes('blocked') ? ' is-blocked' : ''}`} aria-label={`${KIND_LABEL[item.kind]} #${item.number} ${item.title}`}>
+    <article
+      tabIndex={0}
+      className={`card card-v1${item.flags.includes('blocked') ? ' is-blocked' : ''}${selected ? ' is-selected' : ''}`}
+      aria-label={`${KIND_LABEL[item.kind]} #${item.number} ${item.title}`}
+      aria-current={selected || undefined}
+      onClick={open}
+      onKeyDown={onKeyDown}
+    >
       <div className="card-top">
         <PriorityMark priority={item.priority} />
         <span className={`kind kind-${item.kind}`}>{KIND_LABEL[item.kind]}</span>
         <span className="card-key">#{item.number}</span>
-        <Flags item={item} />
+        <FlagTags flags={item.flags} />
         {due && <span className={`due due-${due.tone}`}>{due.text}</span>}
       </div>
       <div className="card-title">{item.title}</div>
       <div className="card-foot">
         <People item={item} members={members} />
-        <GithubLink item={item} />
+        <ItemLink item={item} />
       </div>
     </article>
   )
@@ -227,8 +207,17 @@ const Row = memo(function Row({ item, members, today }: { item: BoardItem; membe
   const due = dueLabel(item, today)
   const col = BOARD_COLUMN_META[item.column]
   const key = `${KIND_LABEL[item.kind]} #${item.number}`
+  const { selected, open, onKeyDown } = useOpenDetail(item)
   return (
-    <div role="row" className="lrow lrow-v1" aria-label={`${key} ${item.title}`}>
+    <div
+      role="row"
+      tabIndex={0}
+      className={`lrow lrow-v1${selected ? ' is-selected' : ''}`}
+      aria-label={`${key} ${item.title}`}
+      aria-current={selected || undefined}
+      onClick={open}
+      onKeyDown={onKeyDown}
+    >
       <span className="c-key" role="cell">
         {key}
       </span>
@@ -236,8 +225,8 @@ const Row = memo(function Row({ item, members, today }: { item: BoardItem; membe
         <span className="l-title">{item.title}</span>
         <span className="l-sub">
           <span className="l-key">{key}</span>
-          <Flags item={item} />
-          <GithubLink item={item} />
+          <FlagTags flags={item.flags} />
+          <ItemLink item={item} />
         </span>
       </span>
       <span className="c-status" role="cell">
