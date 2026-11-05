@@ -3,6 +3,7 @@ package com.samdoryu.backend.workspace.service;
 import com.samdoryu.backend.auth.domain.AccountType;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.service.AppPrincipal;
+import com.samdoryu.backend.auth.service.ReviewAccountService;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
@@ -48,15 +49,20 @@ public class WorkspaceOpeningService {
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceCreator workspaceCreator;
     private final InstructorAssignmentService instructorAssignmentService;
+    private final ReviewAccountService reviewAccountService;
+    private final DemoWorkspaceService demoWorkspaceService;
     private final AppProperties appProperties;
 
     public WorkspaceOpeningService(GithubUserClient githubUserClient, WorkspaceRepository workspaceRepository,
             WorkspaceCreator workspaceCreator, InstructorAssignmentService instructorAssignmentService,
+            ReviewAccountService reviewAccountService, DemoWorkspaceService demoWorkspaceService,
             AppProperties appProperties) {
         this.githubUserClient = githubUserClient;
         this.workspaceRepository = workspaceRepository;
         this.workspaceCreator = workspaceCreator;
         this.instructorAssignmentService = instructorAssignmentService;
+        this.reviewAccountService = reviewAccountService;
+        this.demoWorkspaceService = demoWorkspaceService;
         this.appProperties = appProperties;
     }
 
@@ -122,7 +128,7 @@ public class WorkspaceOpeningService {
 
     /**
      * {@code GET /api/workspaces} — 내가 들어갈 수 있는 열린 사무실, {@code displayName} 오름차순. 학생은 세션의 역할(로그인 때
-     * 정함), 강사는 지금 지정된 사무실 전부(DB), 심사용 계정은 시연 사무실만.
+     * 정함), 강사는 지금 지정된 사무실 전부(DB), 심사용 계정은 시연 사무실만(심사용 강사는 요청마다 확인).
      */
     @Transactional(readOnly = true)
     public List<WorkspaceListItem> myWorkspaces(AppPrincipal principal) {
@@ -130,6 +136,9 @@ public class WorkspaceOpeningService {
         if (appProperties.isAllowlistedInstructor(principal.githubUserId())) {
             instructorAssignmentService.currentWorkspaceIds(principal.githubUserId())
                     .forEach(id -> roles.put(id, WorkspaceRole.INSTRUCTOR));
+        } else if (principal.accountType() == AccountType.REVIEW
+                && reviewAccountService.isReviewInstructor(principal.userId())) {
+            demoWorkspaceService.findDemoWorkspaceId().ifPresent(id -> roles.put(id, WorkspaceRole.INSTRUCTOR));
         } else {
             principal.memberships().forEach((id, membership) -> roles.put(id, membership.role()));
         }

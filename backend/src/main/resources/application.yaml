@@ -47,8 +47,13 @@ app:
   origin: ${APP_ORIGIN:http://localhost:5173}
   # Approved instructor accounts: comma-separated GitHub user IDs (not login names). Empty = no instructors.
   instructor-github-user-ids: ${INSTRUCTOR_GITHUB_USER_IDS:}
-  # Security-review ID/PW login (P15). Off by default; when off the route does not exist (404). Route: #63.
+  # Security-review ID/PW login (P15). Off by default; when off the route does not exist (404). Route: POST /api/review-login.
   review-login-enabled: ${REVIEW_LOGIN_ENABLED:false}
+  review-login:
+    # Review accounts, read only when review login is on: "username:role:seedLogin:bcryptHash" joined by ";".
+    # role = participant | repo_admin | instructor. seedLogin = the demo Seed member the account acts as (empty for
+    # instructor). bcrypt hash only — never a plain password, and never commit hashes. Invalid value = server won't start.
+    accounts: ${REVIEW_ACCOUNTS:}
   # GitHub App name (URL slug) for the "install / request approval" link on the repository screen (P2). Empty = no link.
   github-app-slug: ${GITHUB_APP_SLUG:}
   # Master admin (ROLE-03, FR-AUTH-03): GitHub login name. v1 grants it no screen, API or extra data access. Empty = none.

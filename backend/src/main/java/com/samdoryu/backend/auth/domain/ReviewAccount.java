@@ -58,6 +58,11 @@ public class ReviewAccount {
         this.enabled = false;
     }
 
+    /** 서버 설정({@code REVIEW_ACCOUNTS})의 해시로 맞춘다 — 운영자가 비밀번호를 바꾸면 다음 로그인 때 반영된다. */
+    public void replacePasswordHash(String passwordHash) {
+        this.passwordHash = Objects.requireNonNull(passwordHash);
+    }
+
     /** toString에 해시가 실리지 않도록 직접 쓴다. */
     @Override
     public String toString() {

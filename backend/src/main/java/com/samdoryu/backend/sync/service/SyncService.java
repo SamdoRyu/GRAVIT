@@ -66,6 +66,17 @@ public class SyncService {
     }
 
     /**
+     * 이 스레드에서 바로 전체 동기화(명세 문서 포함) — 시연 사무실을 막 만들었을 때 Seed로 채운다(#63). 결과는 수동 동기화와
+     * 같이 기록 · 알린다. 이미 실행 중이면 건너뛴다.
+     */
+    public SyncStatus syncNow(Long workspaceId) {
+        if (recorder.tryStart(workspaceId)) {
+            run(workspaceId, null, true);
+        }
+        return recorder.status(workspaceId);
+    }
+
+    /**
      * 자동 폴링 — 실제 사무실 전부를 마지막 성공 이후 변경분으로. 실행 중인 사무실은 건너뛴다. 명세 문서는 읽지 않는다
      * (CONTRACTS_API 「4」 — 2026-10-28 결정).
      */

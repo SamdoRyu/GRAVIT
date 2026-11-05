@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ReviewAccountRepository extends JpaRepository<ReviewAccount, Long> {
 
     Optional<ReviewAccount> findByUsername(String username);
+
+    Optional<ReviewAccount> findByUserId(Long userId);
 }
