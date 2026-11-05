@@ -2,8 +2,12 @@ package com.samdoryu.backend.common.security;
 
 import com.samdoryu.backend.auth.security.GithubLoginFailureHandler;
 import com.samdoryu.backend.auth.security.GithubLoginSuccessHandler;
+import com.samdoryu.backend.auth.security.ReviewLoginAuthenticationProvider;
+import com.samdoryu.backend.auth.security.ReviewLoginProperties;
 import com.samdoryu.backend.auth.service.AccountService;
 import com.samdoryu.backend.auth.service.GithubLoginService;
+import com.samdoryu.backend.auth.service.ReviewAccountService;
+import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.error.ErrorResponseWriter;
 import com.samdoryu.backend.github.GithubUserClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -12,6 +16,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
 import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -30,7 +36,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
  * 기본은 거부다 — 공개 경로는 이 파일에 하나씩 적는다.
  */
 @Configuration
-@EnableConfigurationProperties(AppProperties.class)
+@EnableConfigurationProperties({AppProperties.class, ReviewLoginProperties.class})
 public class SecurityConfig {
 
     /** 세션 쿠키 이름 — 로그아웃 때 지운다(Spring 기본값). */
@@ -53,13 +59,15 @@ public class SecurityConfig {
             GithubLoginService githubLoginService, GithubUserClient githubUserClient,
             OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> githubAccessTokenResponseClient,
             OAuth2UserService<OAuth2UserRequest, OAuth2User> githubUserService,
-            OAuth2AuthorizedClientRepository githubAuthorizedClientRepository) throws Exception {
+            OAuth2AuthorizedClientRepository githubAuthorizedClientRepository,
+            ReviewAccountService reviewAccountService) throws Exception {
         JsonAccessDeniedHandler accessDeniedHandler = new JsonAccessDeniedHandler(errorResponseWriter);
         // 로그인이 끝나면(성공 · 실패 모두) 화면 주소로 돌려보낸다 — 도착 화면은 PRD 「열린 질문」
         String appHome = appProperties.origin() + "/";
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/health", "/api/login-options").permitAll()
+                        .requestMatchers(HttpMethod.POST, AccountService.REVIEW_LOGIN_URL).permitAll()
                         .anyRequest().authenticated())
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 // 쿠키 XSRF-TOKEN(화면이 읽음) → 헤더 X-XSRF-TOKEN. 로그인 · 로그아웃을 포함한 모든 쓰기에 요구한다.
@@ -83,9 +91,32 @@ public class SecurityConfig {
                         .logoutUrl("/api/logout")
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                         .deleteCookies(SESSION_COOKIE))
-                .formLogin(formLogin -> formLogin.disable())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .requestCache(requestCache -> requestCache.disable());
+
+        // 보안 심사용 ID/PW 로그인(P15) — 같은 세션 · CSRF · Origin 검사를 거치는 Spring Security 폼 로그인.
+        // 성공하면 세션 ID를 새로 발급하고(기본 changeSessionId) CSRF 토큰도 바꾼다 — 화면은 GET /api/me로 새 쿠키를 받는다.
+        // 꺼진 환경에는 처리기가 없다 — 위의 permitAll 덕에 401이 아니라 "없는 경로" 404 not_found가 된다.
+        if (appProperties.reviewLoginEnabled()) {
+            http.authenticationProvider(new ReviewLoginAuthenticationProvider(reviewAccountService))
+                    .formLogin(form -> form
+                            // 로그인 페이지를 따로 두지 않는다(기본 로그인 페이지를 만들지 않게) — 화면은 SPA다
+                            .loginPage(AccountService.REVIEW_LOGIN_URL)
+                            .loginProcessingUrl(AccountService.REVIEW_LOGIN_URL)
+                            .successHandler((request, response, authentication) ->
+                                    response.setStatus(HttpStatus.NO_CONTENT.value()))
+                            // 어느 값이 틀렸는지 말하지 않는다
+                            .failureHandler((request, response, exception) ->
+                                    errorResponseWriter.write(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED)));
+        } else {
+            http.formLogin(formLogin -> formLogin.disable());
+        }
         return http.build();
+    }
+
+    /** 심사용 계정 비밀번호 해시 — bcrypt(서버 설정 {@code REVIEW_ACCOUNTS}의 해시와 같은 방식). */
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }

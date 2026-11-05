@@ -25,12 +25,14 @@ public class AuthorizationService {
     private final AppProperties appProperties;
     private final InstructorAssignmentService instructorAssignmentService;
     private final WorkspaceService workspaceService;
+    private final ReviewAccountService reviewAccountService;
 
     public AuthorizationService(AppProperties appProperties, InstructorAssignmentService instructorAssignmentService,
-            WorkspaceService workspaceService) {
+            WorkspaceService workspaceService, ReviewAccountService reviewAccountService) {
         this.appProperties = appProperties;
         this.instructorAssignmentService = instructorAssignmentService;
         this.workspaceService = workspaceService;
+        this.reviewAccountService = reviewAccountService;
     }
 
     /** 검사 순서 1 — 세션의 로그인 사용자. 없으면 {@code unauthorized}. */
@@ -67,6 +69,11 @@ public class AuthorizationService {
 
         AppPrincipal.Membership membership = principal.memberships().get(id);
         if (membership == null) {
+            // 심사용 강사(ROLE-04)는 세션에 역할을 두지 않고 요청마다 확인한다(「6」 역할 판정). 실제 사무실은 위에서 이미 404.
+            if (principal.accountType() == AccountType.REVIEW
+                    && reviewAccountService.isReviewInstructor(principal.userId())) {
+                return new WorkspaceAccess(id, principal.userId(), WorkspaceRole.INSTRUCTOR, null);
+            }
             throw new ApiException(ErrorCode.NOT_FOUND);
         }
         return new WorkspaceAccess(id, principal.userId(), membership.role(), membership.memberId());

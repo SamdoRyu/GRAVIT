@@ -29,7 +29,7 @@ class ConventionLibraryEditorAuthorizationTest {
     private final InstructorAssignmentService assignments = mock(InstructorAssignmentService.class);
     private final AuthorizationService authorizationService = new AuthorizationService(
             new AppProperties("http://localhost:5173", Set.of(INSTRUCTOR_GITHUB_ID), true, null, null),
-            assignments, mock(WorkspaceService.class));
+            assignments, mock(WorkspaceService.class), mock(ReviewAccountService.class));
 
     @AfterEach
     void clearSession() {

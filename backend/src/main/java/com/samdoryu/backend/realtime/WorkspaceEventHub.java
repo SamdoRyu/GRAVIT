@@ -1,5 +1,6 @@
 package com.samdoryu.backend.realtime;
 
+import com.samdoryu.backend.auth.domain.AccountType;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.service.AppPrincipal;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
@@ -114,6 +115,10 @@ public class WorkspaceEventHub {
 
     private boolean stillAllowed(Subscription subscription) {
         if (subscription.access().role() != WorkspaceRole.INSTRUCTOR) {
+            return true;
+        }
+        // 심사용 강사는 강사 지정이 아니라 서버 설정의 역할이다 — 실행 중에 바뀌지 않는다(#63)
+        if (subscription.principal().accountType() == AccountType.REVIEW) {
             return true;
         }
         return instructorAssignmentService.isCurrentlyAssigned(subscription.access().workspaceId(),
