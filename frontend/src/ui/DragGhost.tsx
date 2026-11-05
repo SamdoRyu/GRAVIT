@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react'
 import { STATUS_META } from '../data/meta'
 import { taskKey } from '../data/selectors'
 import { useOffice, type DropTarget } from '../store'
-import { formatDate } from './format'
 import { Icon } from './icons'
 
 /** Last known pointer position, kept outside React so the ghost can start in the right place. */
@@ -26,18 +25,11 @@ export function useTrackPointer() {
   }, [])
 }
 
-function hintFor(target: DropTarget | null, memberName: string | undefined, assigneeId: string | null): { text: string; ok: boolean } {
+function hintFor(target: DropTarget | null, memberName: string | undefined): { text: string; ok: boolean } {
   if (!target) return { text: '놓을 곳을 찾는 중', ok: false }
   if (target.kind === 'member') return { text: `${memberName ?? '팀원'} 님에게 배정`, ok: true }
   if (target.kind === 'backlog') return { text: '백로그로 이동', ok: true }
   if (target.kind === 'agenda') return { text: '안건으로 올리기', ok: true }
-  if (target.kind === 'day') {
-    let text = `${formatDate(target.date)} 마감으로`
-    if (target.memberId !== undefined && target.memberId !== assigneeId) {
-      text += target.memberId === null ? ' · 미배정' : ` · ${memberName ?? '팀원'} 님`
-    }
-    return { text, ok: true }
-  }
   const label = STATUS_META[target.status].label
   // Josa: a final consonant other than ㄹ takes "으로" ("진행 중으로"), otherwise "로".
   const code = label.charCodeAt(label.length - 1) - 0xac00
@@ -59,7 +51,6 @@ function Ghost({ taskId }: { taskId: string }) {
   const memberName = useOffice((s) => {
     const t = s.dropTarget
     if (t?.kind === 'member') return s.members[t.id]?.name
-    if (t?.kind === 'day' && t.memberId) return s.members[t.memberId]?.name
     return undefined
   })
 
@@ -83,7 +74,7 @@ function Ghost({ taskId }: { taskId: string }) {
   }, [])
 
   if (!task) return null
-  const hint = hintFor(target, memberName, task.assigneeId)
+  const hint = hintFor(target, memberName)
   return (
     <div ref={el} className={`ghost${hint.ok ? ' is-ok' : ''}`}>
       <div className="ghost-key">{taskKey(task, projectKey)}</div>

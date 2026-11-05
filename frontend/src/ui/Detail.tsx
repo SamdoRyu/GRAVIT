@@ -1,11 +1,10 @@
 // Detail drawer for the selected task or member. OWNER: ui-builder.
 import { useMemo, useState } from 'react'
-import type { Estimate, Id, Member, DemoPriority, TaskStatus } from '../data/types'
-import { memberSignal, memberVitals, SIGNAL_META } from '../data/insights'
+import type { Estimate, Id, DemoPriority, TaskStatus } from '../data/types'
 import { ESTIMATES, PRIORITIES, PRIORITY_META, STATUSES, STATUS_META } from '../data/meta'
-import { taskKey, tasksOf, workloadLevel } from '../data/selectors'
+import { taskKey, tasksOf } from '../data/selectors'
 import { useOffice } from '../store'
-import { Avatar, Diamond, PresencePill, PriorityDot, ProjectTag } from './common'
+import { Avatar, PresencePill, PriorityDot, ProjectTag } from './common'
 import { dueInfo, formatDate, relativeTime } from './format'
 import { useMemberList, useNow, useProjectList } from './hooks'
 import { Icon } from './icons'
@@ -225,57 +224,6 @@ function TaskDetail({ taskId }: { taskId: Id }) {
   )
 }
 
-const NEED_COLORS = { low: SIGNAL_META.ok.color, mid: SIGNAL_META.busy.color, high: SIGNAL_META.alert.color }
-
-function Need({ label, value, ratio, color, title }: { label: string; value: string; ratio: number; color: string; title?: string }) {
-  return (
-    <div className="need" title={title}>
-      <span className="need-label">{label}</span>
-      <div className="need-bar" role="img" aria-label={`${label} ${value}`}>
-        <i style={{ width: `${Math.max(0, Math.min(1, ratio)) * 100}%`, background: color }} />
-      </div>
-      <span className="need-value">{value}</span>
-    </div>
-  )
-}
-
-function pressureWord(p: number) {
-  if (p >= 1) return '지연'
-  if (p >= 0.6) return '높음'
-  if (p >= 0.3) return '보통'
-  return p > 0 ? '낮음' : '없음'
-}
-
-/** Sims-style status card: signal line + three needs gauges. */
-function Vitals({ member }: { member: Member }) {
-  const tasks = useOffice((s) => s.tasks)
-  const signal = useMemo(() => memberSignal(member, tasks), [member, tasks])
-  const v = useMemo(() => memberVitals(member, tasks), [member, tasks])
-  const level = workloadLevel(v.workload)
-  const pressureColor = v.deadlinePressure >= 0.6 ? NEED_COLORS.high : v.deadlinePressure >= 0.3 ? NEED_COLORS.mid : NEED_COLORS.low
-  const focusColor = v.focus >= 0.7 ? NEED_COLORS.low : NEED_COLORS.mid
-  const focusHint = v.inProgress === 0 ? '진행 중 없음' : `진행 중 ${v.inProgress}개`
-
-  return (
-    <div className="vitals">
-      <div className="signal">
-        <Diamond level={signal.level} size={12} />
-        <strong style={{ color: SIGNAL_META[signal.level].color }}>{SIGNAL_META[signal.level].label}</strong>
-        <span className="dim">{signal.reasons.length ? signal.reasons.join(' · ') : '특이사항 없음'}</span>
-      </div>
-      <Need
-        label="업무량"
-        value={`${Math.round(v.workload * 100)}%`}
-        ratio={Math.min(v.workload, 1.5) / 1.5}
-        color={level.color}
-        title={`열린 작업 ${v.openPoints}/${member.capacity}pt · ${level.label}`}
-      />
-      <Need label="마감 압박" value={pressureWord(v.deadlinePressure)} ratio={v.deadlinePressure} color={pressureColor} />
-      <Need label="집중도" value={focusHint} ratio={v.focus} color={focusColor} title="진행 중인 작업이 1개일 때 가장 높아요" />
-    </div>
-  )
-}
-
 function MemberDetail({ memberId }: { memberId: Id }) {
   const member = useOffice((s) => s.members[memberId])
   const tasks = useOffice((s) => s.tasks)
@@ -297,7 +245,6 @@ function MemberDetail({ memberId }: { memberId: Id }) {
         <CloseButton />
       </div>
       <div className="detail-body">
-        <Vitals member={member} />
         <div className="fld">
           <span className="fld-label">열린 작업 {open.length}개</span>
           {open.length === 0 ? (

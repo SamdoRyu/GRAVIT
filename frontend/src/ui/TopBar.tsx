@@ -1,8 +1,8 @@
 // Top bar: wordmark, KPI chips, demo toggle, overlay switch, create buttons. OWNER: ui-builder.
+// 사람별 업무량 표현(업무량 오버레이 · 업무 재배정 추천)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { MAX_MEMBERS } from '../office/layout'
-import { WORKLOAD_LEVELS } from '../data/meta'
 import { computeKpis } from '../data/selectors'
 import { ongoingMeeting, useOffice, type Overlay } from '../store'
 import { AnimatedNumber } from './common'
@@ -13,21 +13,19 @@ import { useNow, useProjectList } from './hooks'
 import { Icon } from './icons'
 import { useUi } from './uiState'
 import { ConnectionBanner } from './Toasts'
-import { Suggestions } from './Suggestions'
 import { SyncStatus } from './SyncStatus'
 
 const OVERLAYS: { id: Overlay; label: string; key: string }[] = [
   { id: 'none', label: '기본', key: '1' },
-  { id: 'workload', label: '업무량', key: '2' },
-  { id: 'deadline', label: '마감 위험', key: '3' },
-  { id: 'project', label: '프로젝트', key: '4' },
+  { id: 'deadline', label: '마감 위험', key: '2' },
+  { id: 'project', label: '프로젝트', key: '3' },
 ]
 
 /** Make sure the task lists are visible after a KPI click. */
 function revealTasks() {
   const ui = useUi.getState()
   ui.setPanelOpen(true)
-  if (ui.tab === 'team' || ui.tab === 'week') ui.setTab('kanban')
+  if (ui.tab === 'week') ui.setTab('kanban')
 }
 
 function Kpi({
@@ -222,13 +220,6 @@ function OverlaySwitch() {
       </div>
       {overlay !== 'none' && (
       <div className="legend" key={overlay}>
-        {overlay === 'workload' &&
-          WORKLOAD_LEVELS.map((l) => (
-            <span key={l.label} className="legend-item">
-              <i className="dot" style={cssVars({ '--c': l.color })} />
-              {l.label}
-            </span>
-          ))}
         {overlay === 'deadline' && (
           <>
             <span className="legend-item">
@@ -459,7 +450,6 @@ export function TopBar() {
       <ConnectionBanner />
       <TapTip />
       </div>
-      <Suggestions />
     </div>
   )
 }

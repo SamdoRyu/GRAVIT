@@ -16,7 +16,8 @@ export function aliveInOffice(snapshot: WorkspaceSnapshot, sel: OfficeSelection 
   const list = sel.kind === 'task' ? snapshot.tasks : sel.kind === 'submission' ? snapshot.submissions : snapshot.members
   return list.some((x) => x.id === sel.id) ? sel : null
 }
-export type Overlay = 'none' | 'workload' | 'deadline' | 'project'
+/** 3D 오버레이. 사람별 업무량 오버레이는 v1에서 뺐다(FR-FLOW-06 — #102 T5-c-2) */
+export type Overlay = 'none' | 'deadline' | 'project'
 export type PanelView = 'kanban' | 'list'
 
 export type Dialog =
@@ -37,11 +38,6 @@ export type DropTarget =
   | { kind: 'status'; status: TaskStatus }
   /** The meeting-room table: put the task on the next meeting's agenda. */
   | { kind: 'agenda' }
-  /**
-   * A day cell in the weekly plan: set the due date. memberId: undefined = keep the assignee,
-   * an id = assign to them, null = unassign (the "미배정" row).
-   */
-  | { kind: 'day'; date: string; memberId?: Id | null }
 
 export interface Toast {
   id: number
@@ -493,12 +489,6 @@ export const useOffice = create<OfficeState>((set, get) => {
         case 'agenda':
           void get().setAgenda(drag.taskId, true)
           break
-        case 'day': {
-          const reassign = dropTarget.memberId !== undefined && t.assigneeId !== dropTarget.memberId
-          const patch: TaskPatch = { ...(reassign ? assignPatch(tasks, t, dropTarget.memberId ?? null) : {}), dueDate: dropTarget.date }
-          if (patch.dueDate !== t.dueDate || reassign) void get().updateTask(t.id, patch)
-          break
-        }
       }
     },
     cancelDrag: () => set({ drag: null, dropTarget: null }),

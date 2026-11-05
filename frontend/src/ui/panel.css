@@ -1,4 +1,4 @@
-/* OWNER: ui-builder. Right rail: detail drawer, panel header, filters, kanban, list, team.
+/* OWNER: ui-builder. Right rail: detail drawer, panel header, filters, kanban, list.
    Spacing on an 8px scale (4/8/12/16), type scale 12/13/15/20 (--fs-*), one accent. */
 .rail {
   position: absolute;
@@ -164,31 +164,6 @@ button.person:hover { border-color: rgba(20, 30, 60, 0.25); background: var(--so
 .detail-v1 .detail-foot .gh-open { text-decoration: none; color: var(--accent); font-weight: 600; }
 .detail-v1 .detail-foot { flex-wrap: wrap; row-gap: 4px; padding-left: 12px; }
 
-/* ---- team ---- */
-.team { display: grid; gap: 8px; }
-.backlog-drop { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px dashed rgba(20, 30, 60, 0.18); border-radius: 12px; color: var(--text-dim); font-size: var(--fs-s); transition: background 0.15s, border-color 0.15s; }
-.backlog-drop b { color: var(--text); font-weight: 600; }
-.backlog-drop .dim { margin-left: auto; }
-.backlog-drop.is-armed { background: var(--soft); }
-.backlog-drop.is-target { background: var(--good-soft); border-color: var(--good); color: var(--ink-good); }
-.mcard { display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s; }
-.mcard:hover, .mcard.is-hover { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.12), 0 6px 16px rgba(30, 45, 90, 0.1); }
-.mcard.is-selected { box-shadow: 0 0 0 1.5px var(--accent); }
-.mcard.is-armed { box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.2); }
-.mcard.is-target { background: var(--good-soft); box-shadow: 0 0 0 1.5px var(--good); }
-.mcard-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
-.mcard-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.mcard-name { font-size: var(--fs-m); font-weight: 600; }
-.mcard-role { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: var(--fs-s); }
-.mcard-sub { font-size: var(--fs-s); color: var(--text-dim); }
-.mcard-drop { color: var(--ink-good); }
-.wl { display: flex; align-items: center; gap: 8px; }
-.wl-bar { flex: 1; height: 4px; border-radius: 999px; background: rgba(20, 30, 60, 0.08); overflow: hidden; }
-.wl-bar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transition: width 0.5s ease, background 0.3s; }
-.wl-text { font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
-.wl-level { min-width: 32px; text-align: right; font-size: var(--fs-s); color: var(--c); }
-.hint-text { margin: 0; font-size: var(--fs-s); color: var(--text-dim); text-align: center; }
-
 /* ---- detail drawer ---- */
 .detail { flex: 0 1 auto; max-height: 58%; min-height: 150px; display: flex; flex-direction: column; overflow: hidden; animation: slide-in-right 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
 .detail-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 4px 16px; }
@@ -220,13 +195,3 @@ textarea.inline { min-height: 56px; margin-left: -8px; width: calc(100% + 16px);
 .stack i { display: block; border-radius: 2px; }
 .stack-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-s); color: var(--text-dim); }
 
-/* ---- member status card ---- */
-.vitals { display: grid; gap: 8px; }
-.signal { display: flex; align-items: center; gap: 8px; font-size: var(--fs-m); min-width: 0; }
-.signal strong { font-weight: 600; }
-.signal .dim { font-size: var(--fs-s); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.need { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 12px; }
-.need-label { font-size: var(--fs-s); color: var(--text-dim); }
-.need-bar { height: 4px; border-radius: 999px; background: rgba(20, 30, 60, 0.08); overflow: hidden; }
-.need-bar i { display: block; height: 100%; border-radius: inherit; transition: width 0.5s ease, background 0.3s; }
-.need-value { min-width: 56px; text-align: right; font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
