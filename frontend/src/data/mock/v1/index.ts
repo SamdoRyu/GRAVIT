@@ -5,18 +5,23 @@
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
+import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, SPEC_PATH_MAX_LENGTH, settingsError } from '../../rules/period'
 import type {
+  AgendaItemDto,
   Change,
   EvaluationRoundDto,
   Id,
   Instant,
   MeResponse,
+  MeetingDto,
   MemberDto,
   OpenWorkspaceRequest,
   RepositoryChoice,
+  SnapshotResource,
   SubmissionDto,
   SyncStatus,
+  TaskDto,
   TeamSettings,
   Viewer,
   WorkspaceSnapshot,
@@ -134,8 +139,11 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
    * 이유는 추천 먼저, 그 안에서 저장 순서. myEvaluation은 요청자 것만, canEvaluate는 열린 PR · 작성자 아님.
    */
   function roundFor(ws: MockWorkspace, sub: SubmissionDto, me: MemberDto): EvaluationRoundDto | null {
-    const round = sub.currentRound
-    if (!round) return null
+    return sub.currentRound ? viewRound(ws, sub, sub.currentRound, me, true) : null
+  }
+
+  /** 저장된 회차 하나를 요청자 기준으로 — 지난 회차는 평가할 수 없다 */
+  function viewRound(ws: MockWorkspace, sub: SubmissionDto, round: EvaluationRoundDto, me: MemberDto, isCurrent: boolean): EvaluationRoundDto {
     const given = (ws.evaluations ?? []).filter((e) => e.submissionId === sub.id && e.roundId === round.id)
     const reasons = orderReasons([...round.reasons, ...given.map((e) => ({ verdict: e.verdict, reason: e.reason }))])
     const mine = given.find((e) => e.memberId === me.id)
@@ -145,7 +153,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       notRecommendCount: reasons.filter((r) => r.verdict === 'not_recommend').length,
       reasons,
       myEvaluation: mine ? { verdict: mine.verdict, reason: mine.reason, updatedAt: mine.updatedAt } : null,
-      canEvaluate: (sub.state === 'open' || sub.state === 'draft') && sub.authorMemberId !== me.id,
+      canEvaluate: isCurrent && (sub.state === 'open' || sub.state === 'draft') && sub.authorMemberId !== me.id,
     }
   }
 
@@ -326,14 +334,16 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       return structuredClone(ws.snapshot.settings)
     },
 
-    // mock은 현재 회차 하나만 갖는다(새 회차는 동기화 · 회의 결정에서 열리는데 mock에는 없다)
+    // 현재 회차 + 회의 결정(revise_and_reevaluate)으로 닫힌 지난 회차 — 회차 번호 내림차순
     async listRounds(workspaceId, submissionId) {
       await wait()
       const user = requireUser()
       const ws = accessible(workspaceId, user)
       const sub = findSubmission(ws, submissionId)
-      const round = roundFor(ws, sub, currentMember(ws, user)!)
-      return round ? [round] : []
+      const me = currentMember(ws, user)!
+      const current = roundFor(ws, sub, me)
+      const past = (ws.pastRounds ?? []).filter((p) => p.submissionId === sub.id).map((p) => viewRound(ws, sub, p.round, me, false))
+      return [...(current ? [current] : []), ...past].sort((a, b) => b.roundNumber - a.roundNumber)
     },
 
     // 검사 순서: 로그인 → 사무실 · PR(404) → 요청(400) → 작성자(403) → PR 상태 · 회차(409)
@@ -357,7 +367,194 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       emit(workspaceId, { type: 'changed', resources: ['submissions'] })
       return structuredClone(roundFor(ws, sub, me)!)
     },
+
+    // ---- 「10」 회의 · 안건 — 검사 순서: 로그인 → 사무실 · 대상(404) → 요청(400) → 권한(403) → 상태(409) ----
+
+    async startMeeting(workspaceId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const ids = Array.isArray(request?.attendeeMemberIds) ? request.attendeeMemberIds : null
+      if (!ids || !ids.every((id) => isCurrentMember(ws, id))) throw new DataError(MEETING_MSG.attendeeNotMember, 'invalid')
+      if (ws.snapshot.meetings.some((m) => m.status === 'ongoing')) throw new DataError(MEETING_MSG.meetingOngoing, 'conflict')
+      const meeting: MeetingDto = { id: nextId('mt'), status: 'ongoing', startedAt: toInstant(now()), endedAt: null, attendeeMemberIds: [...new Set(ids)], notes: null, discussedAgendaItemIds: [] }
+      ws.snapshot.meetings.push(meeting)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['meetings'] })
+      return structuredClone(meeting)
+    },
+
+    async endMeeting(workspaceId, meetingId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const meeting = ws.snapshot.meetings.find((m) => m.id === meetingId)
+      if (!meeting) throw new DataError(MEETING_MSG.meetingNotFound, 'not_found')
+      const error = meetingEndError(request)
+      if (error) throw new DataError(error, 'invalid')
+      if (meeting.status === 'ended') throw new DataError(MEETING_MSG.meetingEnded, 'conflict')
+      meeting.status = 'ended'
+      meeting.endedAt = toInstant(now())
+      meeting.notes = request.notes
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['meetings'] })
+      return structuredClone(meeting)
+    },
+
+    async createAgendaItem(workspaceId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = agendaCreateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      let source: AgendaItemDto['source'] = null
+      let evaluationRoundId: Id | null = null
+      if (request.kind === 'issue') {
+        if (!ws.snapshot.tasks.some((t) => t.id === request.sourceId)) throw new DataError(MEETING_MSG.agendaSourceNotFound, 'not_found')
+        source = { type: 'task', id: request.sourceId! }
+      } else if (request.kind === 'pr') {
+        const sub = ws.snapshot.submissions.find((s) => s.id === request.sourceId)
+        if (!sub) throw new DataError(MEETING_MSG.agendaSourceNotFound, 'not_found')
+        source = { type: 'submission', id: sub.id }
+        evaluationRoundId = sub.currentRound?.id ?? null // 올린 때의 현재 회차를 기억한다
+      }
+      const item: AgendaItemDto = {
+        id: nextId('ag'),
+        kind: request.kind,
+        status: 'confirmed',
+        title: request.title.trim(),
+        background: blankToNull(request.background),
+        tried: blankToNull(request.tried),
+        unresolvedReason: blankToNull(request.unresolvedReason),
+        source,
+        evaluationRoundId,
+        raisedByMemberId: currentMember(ws, user)!.id,
+        raisedAt: toInstant(now()),
+        decision: null,
+        feedbackRequested: false,
+        feedbackRequestedAt: null,
+        instructorFeedbacks: [],
+      }
+      ws.snapshot.agendaItems.push(item)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['agenda_items'] })
+      return structuredClone(item)
+    },
+
+    async withdrawAgendaItem(workspaceId, agendaItemId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const item = findAgendaItem(ws, agendaItemId)
+      if (item.raisedByMemberId !== currentMember(ws, user)!.id) throw new DataError(MEETING_MSG.withdrawNotOwner, 'forbidden_role')
+      if (item.status !== 'confirmed') throw new DataError(MEETING_MSG.agendaNotConfirmed, 'conflict')
+      item.status = 'withdrawn'
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['agenda_items'] })
+      return structuredClone(item)
+    },
+
+    async recordDecision(workspaceId, agendaItemId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const item = findAgendaItem(ws, agendaItemId)
+      const error = decisionError(request, item.kind)
+      if (error) throw new DataError(error, 'invalid')
+      if (request.followUpAssigneeMemberId !== null && !isCurrentMember(ws, request.followUpAssigneeMemberId)) throw new DataError(MEETING_MSG.followUpNotMember, 'invalid')
+      const meeting = request.meetingId === null ? null : ws.snapshot.meetings.find((m) => m.id === request.meetingId)
+      if (meeting === undefined) throw new DataError(MEETING_MSG.meetingNotFound, 'invalid')
+      if (item.status !== 'confirmed') throw new DataError(MEETING_MSG.agendaNotConfirmed, 'conflict')
+      const sub = item.source?.type === 'submission' ? ws.snapshot.submissions.find((s) => s.id === item.source!.id) : undefined
+      const reevaluate = request.prDecision === 'revise_and_reevaluate'
+      // 머지 · 닫힌 PR에 다시 평가는 결정 기록 전체를 거부한다(CONTRACTS.md 「3」 평가 회차 — 2026-11-05)
+      if (reevaluate && sub && sub.state !== 'open' && sub.state !== 'draft') throw new DataError(MEETING_MSG.reevaluateClosed, 'conflict')
+
+      const at = toInstant(now())
+      const me = currentMember(ws, user)!
+      item.status = 'discussed'
+      item.decision = {
+        conclusion: request.conclusion.trim(),
+        learning: blankToNull(request.learning),
+        prDecision: request.prDecision,
+        followUpAssigneeMemberId: request.followUpAssigneeMemberId,
+        followUpDueDate: request.followUpDueDate,
+        meetingId: request.meetingId,
+        decidedByMemberId: me.id,
+        decidedAt: at,
+      }
+      const resources: SnapshotResource[] = ['agenda_items']
+      if (meeting && !meeting.discussedAgendaItemIds.includes(item.id)) {
+        meeting.discussedAgendaItemIds.push(item.id)
+        resources.push('meetings')
+      }
+      // 새 평가 회차(meeting_reevaluate) — 지금 회차는 닫혀 지난 회차가 된다
+      if (reevaluate && sub?.currentRound) {
+        const prev = sub.currentRound
+        ws.pastRounds = [...(ws.pastRounds ?? []), { submissionId: sub.id, round: { ...prev, closedAt: at } }]
+        sub.currentRound = {
+          id: nextId('r'),
+          roundNumber: prev.roundNumber + 1,
+          headSha: sub.headSha,
+          openedReason: 'meeting_reevaluate',
+          openedAt: at,
+          closedAt: null,
+          recommendCount: 0,
+          notRecommendCount: 0,
+          reasons: [],
+          myEvaluation: null,
+          canEvaluate: false,
+        }
+        resources.push('submissions')
+      }
+      save()
+      emit(workspaceId, { type: 'changed', resources })
+      return structuredClone(item)
+    },
+
+    // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----
+
+    async setDueDate(workspaceId, taskId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const task = findTaskFor(ws, taskId, currentMember(ws, user)!)
+      const error = dueDateError(request?.dueDate)
+      if (error) throw new DataError(error, 'invalid')
+      task.dueDate = request.dueDate
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['tasks'] })
+      return { taskId: task.id, dueDate: request.dueDate, updatedAt: toInstant(now()), updatedBy: structuredClone(user.user) }
+    },
+
+    async clearDueDate(workspaceId, taskId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const task = findTaskFor(ws, taskId, currentMember(ws, user)!)
+      if (task.dueDate === null) return // 마감이 없으면 그대로 204
+      task.dueDate = null
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['tasks'] })
+    },
   }
+}
+
+function isCurrentMember(ws: MockWorkspace, memberId: unknown): boolean {
+  return ws.snapshot.members.some((m) => m.id === memberId && m.removedAt === null)
+}
+
+function findAgendaItem(ws: MockWorkspace, agendaItemId: Id): AgendaItemDto {
+  const item = ws.snapshot.agendaItems.find((a) => a.id === agendaItemId)
+  if (!item) throw new DataError(MEETING_MSG.agendaNotFound, 'not_found')
+  return item
+}
+
+/** 마감을 바꿀 이슈 — 없으면 not_found, R2도 담당자도 아니면 forbidden_role */
+function findTaskFor(ws: MockWorkspace, taskId: Id, me: MemberDto): TaskDto {
+  const task = ws.snapshot.tasks.find((t) => t.id === taskId)
+  if (!task) throw new DataError(MEETING_MSG.taskNotFound, 'not_found')
+  if (!me.isRepoAdmin && !task.assigneeMemberIds.includes(me.id)) throw new DataError(MEETING_MSG.dueDateForbidden, 'forbidden_role')
+  return task
 }
 
 function findSubmission(ws: MockWorkspace, submissionId: Id): SubmissionDto {

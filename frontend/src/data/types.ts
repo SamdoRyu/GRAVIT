@@ -486,6 +486,14 @@ export interface MeetingDto {
   notes: string | null
   discussedAgendaItemIds: Id[]
 }
+/** `POST W/meetings` — 참석자는 비어도 됨 (FR-MTG-05) */
+export interface StartMeetingRequest {
+  attendeeMemberIds: Id[]
+}
+/** `POST W/meetings/{id}/end` — 회의록 0~5000자 */
+export interface EndMeetingRequest {
+  notes: string | null
+}
 
 // ---- 「11」 도움 요청 (Snapshot 요약) ----------------------------------------
 
@@ -561,6 +569,19 @@ export interface StandupPrefill {
     githubNumber: number | null
     occurredAt: Instant
   }[]
+}
+
+// ---- 「13」 작업 마감 ----------------------------------------------------------
+
+/** `PUT W/tasks/{taskId}/due-date` — R2 또는 그 이슈의 담당자 (P14) */
+export interface TaskDueDateRequest {
+  dueDate: LocalDate
+}
+export interface TaskDueDateDto {
+  taskId: Id
+  dueDate: LocalDate
+  updatedAt: Instant
+  updatedBy: UserRef
 }
 
 // ---- 「15」 개인 API — 학습 타임라인 ------------------------------------------

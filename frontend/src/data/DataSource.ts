@@ -1,7 +1,15 @@
 // 앱과 데이터 사이의 유일한 문. 소유: D (프론트 HUD · 데이터).
 // 구현: mock(src/data/mock — 브라우저 seed + localStorage) · api(src/data/api — Spring /api/**).
 import type {
+  AgendaItemCreateRequest,
+  AgendaItemDto,
   Change,
+  DecisionRequest,
+  EndMeetingRequest,
+  MeetingDto,
+  StartMeetingRequest,
+  TaskDueDateDto,
+  TaskDueDateRequest,
   DemoChange,
   ErrorCode,
   EvaluateRequest,
@@ -34,7 +42,7 @@ import type {
  * 인자 순서는 (workspaceId, 경로의 다른 ID…, 요청 DTO), 반환은 응답 DTO 그대로(204는 void).
  * 실패는 DataError(message, code)로 던진다.
  *
- * P0 메서드(#8 T5-a)에 기능 Issue마다 그 PR에서 더한다(T5-b) — 팀 설정(#38) · PR 평가(#19 · #20).
+ * P0 메서드(#8 T5-a)에 기능 Issue마다 그 PR에서 더한다(T5-b) — 팀 설정(#38) · PR 평가(#19 · #20) · 회의 · 안건 · 작업 마감(#102).
  */
 export interface DataSource {
   /** 화면에 보일 이름, 예: "로컬 mock 데이터" */
@@ -76,6 +84,27 @@ export interface DataSource {
    * 이유 없음 · 200자 초과 invalid, 작성자 · 강사 forbidden_role, 현재 회차가 아님 · PR이 머지 · 닫힘 conflict
    */
   evaluate(workspaceId: Id, submissionId: Id, request: EvaluateRequest): Promise<EvaluationRoundDto>
+
+  // ---- 「10」 회의 · 안건 (#102 T5-c-2 — C의 회의 대화상자가 쓴다) ----
+  /** POST W/meetings — 201 MeetingDto(ongoing). 진행 중 회의가 있으면 conflict, 참석자가 팀원이 아니면 invalid */
+  startMeeting(workspaceId: Id, request: StartMeetingRequest): Promise<MeetingDto>
+  /** POST W/meetings/{meetingId}/end — 200 MeetingDto(ended). 이미 끝났으면 conflict */
+  endMeeting(workspaceId: Id, meetingId: Id, request: EndMeetingRequest): Promise<MeetingDto>
+  /** POST W/agenda-items — 201 AgendaItemDto(confirmed). 종류 · 원본이 안 맞으면 invalid, 원본이 없으면 not_found */
+  createAgendaItem(workspaceId: Id, request: AgendaItemCreateRequest): Promise<AgendaItemDto>
+  /** POST W/agenda-items/{agendaItemId}/withdraw — 올린 사람만(forbidden_role), confirmed가 아니면 conflict */
+  withdrawAgendaItem(workspaceId: Id, agendaItemId: Id): Promise<AgendaItemDto>
+  /**
+   * POST W/agenda-items/{agendaItemId}/decision — 200 AgendaItemDto(discussed). revise_and_reevaluate면 새 평가 회차.
+   * 요청이 틀리면 invalid, confirmed가 아니거나 머지 · 닫힌 PR에 revise_and_reevaluate면 conflict
+   */
+  recordDecision(workspaceId: Id, agendaItemId: Id, request: DecisionRequest): Promise<AgendaItemDto>
+
+  // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
+  /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */
+  setDueDate(workspaceId: Id, taskId: Id, request: TaskDueDateRequest): Promise<TaskDueDateDto>
+  /** DELETE W/tasks/{taskId}/due-date — 204. 마감이 없어도 성공 */
+  clearDueDate(workspaceId: Id, taskId: Id): Promise<void>
 }
 
 /** CONTRACTS.md 「6」의 8개 에러 코드 전부. */
