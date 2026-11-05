@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Id, Member, Task } from '../data/types'
 import { PRIORITY_META } from '../data/meta'
-import { isOpen, matchesFilters, todayIso, workload, workloadLevel, tasksOf, openPoints } from '../data/selectors'
+import { isOpen, matchesFilters, todayIso } from '../data/selectors'
 import { useOffice } from '../store'
 
 /** Re-renders every `ms` so relative times stay fresh. Returns Date.now(). */
@@ -33,27 +33,6 @@ export function useProjectList() {
 export function useMemberList(): Member[] {
   const members = useOffice((s) => s.members)
   return useMemo(() => Object.values(members).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [members])
-}
-
-export interface MemberStat {
-  points: number
-  count: number
-  ratio: number
-  level: ReturnType<typeof workloadLevel>
-}
-
-export function useMemberStats(): Record<Id, MemberStat> {
-  const tasks = useOffice((s) => s.tasks)
-  const members = useOffice((s) => s.members)
-  return useMemo(() => {
-    const out: Record<Id, MemberStat> = {}
-    for (const m of Object.values(members)) {
-      const mine = tasksOf(tasks, m.id)
-      const ratio = workload(m, tasks)
-      out[m.id] = { points: openPoints(mine), count: mine.length, ratio, level: workloadLevel(ratio) }
-    }
-    return out
-  }, [tasks, members])
 }
 
 /** Below this width the management rail is an overlay drawer instead of a docked column. */

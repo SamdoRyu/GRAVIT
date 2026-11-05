@@ -3,12 +3,11 @@
 /* ---- tap tip (hover-only explanations reachable by tap) ---- */
 .tap-tip { position: relative; align-self: flex-start; margin-left: 4px; z-index: 5; max-width: min(320px, 100%); padding: 8px 12px; border-radius: 10px; background: var(--panel-solid); font-size: var(--fs-s); line-height: 1.45; animation: pop 0.14s ease both; }
 .kpi-tip { cursor: pointer; }
-.mcard-reasons { display: none; font-size: var(--fs-s); color: var(--text-dim); }
 
 /* pressing a card with a finger: a small lift before the long-press drag starts */
 .hud .is-pressing { transform: scale(1.03); box-shadow: 0 8px 20px rgba(30, 45, 90, 0.2); transition-delay: 0.1s; }
 /* no text selection / callout bubble on a long-press (iOS) */
-.card, .wk-chip, .mcard { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.card, .wk-chip { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 /* ---- overlay drawer (<= 1100px): the rail floats over the scene and reserves no space ---- */
 @media (max-width: 1100px) {
@@ -27,9 +26,8 @@
   .tab-count, .btn-label { display: none; }
 }
 
-/* the activity feed (expanded) and the suggestion stack share the left column: keep them apart on short screens */
+/* the activity feed (expanded) stays short on short screens */
 @media (max-height: 800px) {
-  .suggest { max-height: 30vh; }
   .feed { max-height: min(260px, 30vh); }
 }
 
@@ -55,8 +53,6 @@
   .lrow { min-height: 52px; }
   .lhead { height: 41px; }
   .card { padding: 12px 14px; }
-  .mcard { padding: 14px; }
-  .mcard-reasons { display: block; }
   .wk-chip { padding: 6px 7px; }
   .wk-chip-title { font-size: 12px; }
   .wk-cell { min-height: 68px; }

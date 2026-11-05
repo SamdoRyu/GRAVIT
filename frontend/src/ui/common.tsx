@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id, Member, Presence, DemoPriority } from '../data/types'
 import { PRESENCE_META, PRIORITY_META } from '../data/meta'
-import { SIGNAL_META, type SignalLevel } from '../data/insights'
 import { useOffice } from '../store'
 import { Icon, type IconName } from './icons'
 import { cssVars, initialOf } from './format'
@@ -117,16 +116,5 @@ export function Field({ label, error, children, className }: { label: string; er
       {children}
       {error && <em className="fld-error">{error}</em>}
     </label>
-  )
-}
-
-/** Small status diamond (same signal as the one above the avatar in 3D). */
-export function Diamond({ level, size = 10, title }: { level: SignalLevel; size?: number; title?: string }) {
-  const m = SIGNAL_META[level]
-  return (
-    <svg className="diamond" width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={title ?? m.label} style={{ color: m.color }}>
-      <title>{title ?? m.label}</title>
-      <path d="M12 1.5l9.5 10.5L12 22.5 2.5 12 12 1.5z" fill="currentColor" />
-    </svg>
   )
 }

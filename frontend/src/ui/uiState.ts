@@ -5,24 +5,11 @@ import type { TaskStatus } from '../data/types'
 import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 
-export type Tab = 'kanban' | 'list' | 'team' | 'week'
+/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2) */
+export type Tab = 'kanban' | 'list' | 'week'
 export type SortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'due' | 'estimate'
 
-const DISMISS_KEY = 'office.dismissedSuggestions'
-
-function loadDismissed(): string[] {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY)
-    const v: unknown = raw ? JSON.parse(raw) : []
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
-}
-
 interface UiState {
-  dismissed: string[]
-  dismissSuggestion: (id: string) => void
   tab: Tab
   setTab: (t: Tab) => void
   panelOpen: boolean
@@ -60,21 +47,10 @@ interface UiState {
 }
 
 export const useUi = create<UiState>((set, get) => ({
-  dismissed: loadDismissed(),
-  dismissSuggestion: (id) => {
-    if (get().dismissed.includes(id)) return
-    const dismissed = [...get().dismissed, id].slice(-200)
-    set({ dismissed })
-    try {
-      localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissed))
-    } catch {
-      /* storage unavailable: the dismissal lasts for this session only */
-    }
-  },
   tab: 'kanban',
   setTab: (tab) => {
     const cur = get().tab
-    if (tab !== 'team' && tab !== 'week') useOffice.getState().setPanelView(tab)
+    if (tab !== 'week') useOffice.getState().setPanelView(tab)
     if (tab === 'week' && cur !== 'week') set({ tab, prevWide: get().wide, wide: true })
     else if (tab !== 'week' && cur === 'week') set({ tab, wide: get().prevWide ?? get().wide, prevWide: null })
     else set({ tab })

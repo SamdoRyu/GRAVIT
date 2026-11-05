@@ -7,14 +7,12 @@ import { KanbanView } from './KanbanView'
 import { ListView } from './ListView'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
 import { OfficeDetailDrawer } from './OfficeDetail'
-import { TeamView } from './TeamView'
 import { WeekView } from './WeekView'
 import { useUi, type Tab } from './uiState'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'kanban', label: '칸반' },
   { id: 'list', label: '목록' },
-  { id: 'team', label: '팀원' },
   { id: 'week', label: '주간' },
 ]
 
@@ -26,7 +24,6 @@ function Panel() {
   const demoTaskCount = useOffice((s) => Object.keys(s.tasks).length)
   const boardCount = useOffice((s) => (s.office?.snapshot ? s.office.snapshot.tasks.length + s.office.snapshot.submissions.length : 0))
   const taskCount = officeOpen ? boardCount : demoTaskCount
-  const memberCount = useOffice((s) => Object.keys(s.members).length)
   const ui = useUi.getState()
 
   return (
@@ -43,7 +40,7 @@ function Panel() {
               onClick={() => ui.setTab(t.id)}
             >
               {t.label}
-              {t.id !== 'week' && <span className="tab-count">{t.id === 'team' ? memberCount : taskCount}</span>}
+              {t.id !== 'week' && <span className="tab-count">{taskCount}</span>}
             </button>
           ))}
         </div>
@@ -68,7 +65,6 @@ function Panel() {
       <div className={`panel-body panel-${tab}${tab === 'kanban' && wide ? ' is-wide-kanban' : ''}`}>
         {tab === 'kanban' && (officeOpen ? <OfficeKanban /> : <KanbanView />)}
         {tab === 'list' && (officeOpen ? <OfficeList /> : <ListView />)}
-        {tab === 'team' && <TeamView />}
         {tab === 'week' && <WeekView />}
       </div>
     </section>

@@ -1,11 +1,11 @@
 // Global keyboard shortcuts. OWNER: ui-builder.
-//   N new task · M start/end meeting · / search · 1-4 overlays · Esc close dialog, else clear selection
+//   N new task · M start/end meeting · / search · 1-3 overlays · Esc close dialog, else clear selection
 import { useEffect } from 'react'
 import { ongoingMeeting, useOffice, type Overlay } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 import { useUi } from './uiState'
 
-const OVERLAY_BY_CODE: Record<string, Overlay> = { Digit1: 'none', Digit2: 'workload', Digit3: 'deadline', Digit4: 'project' }
+const OVERLAY_BY_CODE: Record<string, Overlay> = { Digit1: 'none', Digit2: 'deadline', Digit3: 'project' }
 
 function isTyping(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -42,7 +42,7 @@ export function useHotkeys() {
         e.preventDefault()
         const ui = useUi.getState()
         ui.setPanelOpen(true)
-        if (ui.tab === 'team' || ui.tab === 'week') ui.setTab('kanban')
+        if (ui.tab === 'week') ui.setTab('kanban')
         requestAnimationFrame(() => {
           const el = document.getElementById('hud-search')
           el?.focus()
