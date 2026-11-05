@@ -286,11 +286,13 @@ export function OfficeList() {
   )
 }
 
-/** 읽는 중 · 실패 · 이슈 없음 · 검색 결과 없음 */
+/** 사무실 없음 · 읽는 중 · 실패 · 이슈 없음 · 검색 결과 없음 */
 function BoardEmpty({ data }: { data: { items: BoardItem[] } | null }) {
-  const status = useOffice((s) => s.office?.status)
+  const status = useOffice((s) => s.office?.status ?? null)
   const query = useUi((s) => s.boardQuery)
   if (!data) {
+    // 진입 흐름(로그인 · 사무실 고르기 — #64 · #68) 전에는 ?source=api에서 사무실이 열리지 않는다
+    if (status === null) return <Empty icon="inbox" title="열린 사무실이 없어요" hint="로그인하고 사무실을 열면 이슈 · PR이 여기에 보여요." />
     return status === 'error' ? (
       <Empty icon="alert" title="사무실 데이터를 받지 못했어요" hint="잠시 뒤 다시 시도돼요." />
     ) : (

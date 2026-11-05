@@ -1,13 +1,11 @@
 // UI-only view state (panel layout etc.). Domain state stays in src/store.ts. OWNER: ui-builder.
 import { create } from 'zustand'
 import type { BoardColumn, BoardSortKey } from '../data/rules/board'
-import type { TaskStatus } from '../data/types'
 import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 
 /** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2) */
 export type Tab = 'kanban' | 'list' | 'week'
-export type SortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'due' | 'estimate'
 
 interface UiState {
   tab: Tab
@@ -27,14 +25,8 @@ interface UiState {
   tip: string | null
   showTip: (t: string | null) => void
   setHistoryOpen: (on: boolean) => void
-  feedOpen: boolean
-  setFeedOpen: (on: boolean) => void
-  collapsed: Partial<Record<TaskStatus, boolean>>
-  toggleCollapsed: (s: TaskStatus) => void
-  sort: { key: SortKey; dir: 'asc' | 'desc' }
-  setSort: (key: SortKey) => void
 
-  // ---- v1 사무실 칸반 · 목록 (#102 T5-c-2) — 위 데모 칸과 따로 둔다 ----
+  // ---- 칸반 · 목록 (#102 T5-c-2 — v1 이슈 · PR) ----
   /** 이슈 · PR 검색어 (칸반 · 목록 공용) */
   boardQuery: string
   setBoardQuery: (q: string) => void
@@ -67,15 +59,6 @@ export const useUi = create<UiState>((set, get) => ({
   tip: null,
   showTip: (tip) => set({ tip }),
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
-  feedOpen: false,
-  setFeedOpen: (feedOpen) => set({ feedOpen }),
-  collapsed: { done: true },
-  toggleCollapsed: (s) => set({ collapsed: { ...get().collapsed, [s]: !get().collapsed[s] } }),
-  sort: { key: 'priority', dir: 'desc' },
-  setSort: (key) => {
-    const { sort } = get()
-    set({ sort: sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'priority' ? 'desc' : 'asc' } })
-  },
   boardQuery: '',
   setBoardQuery: (boardQuery) => set({ boardQuery }),
   boardCollapsed: { done: true },

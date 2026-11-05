@@ -43,7 +43,6 @@ for (const vp of [
       await open.click()
       await expect(drawer).toBeVisible()
       for (const [name, dialog] of [
-        ['작업', '새 작업'],
         ['회의', '회의 시작'],
       ] as const) {
         const button = page.getByRole('banner').getByRole('button', { name: new RegExp(`^${name}`) })

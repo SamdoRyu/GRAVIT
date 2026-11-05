@@ -1,13 +1,14 @@
-// Modal dialogs: task / member forms, remove member, confirms. OWNER: ui-builder.
+// Modal dialogs: member form, remove member, delete task, confirms. OWNER: D.
+// 데모 팀원 · 작업 대화상자는 주간 일정판(C)이 여는 데모 상세가 아직 써서 남겼다 — 일정판이 v1으로 옮겨 가면 지운다.
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import type { Estimate, Id, MemberInput, MemberPatch, DemoPriority, Reassign, TaskInput, TaskPatch, TaskStatus } from '../data/types'
-import { ESTIMATES, MEMBER_COLORS, PRIORITIES, PRIORITY_META, STATUSES, STATUS_META } from '../data/meta'
+import type { Id, MemberInput, MemberPatch, Reassign } from '../data/types'
+import { MEMBER_COLORS } from '../data/meta'
 import { OFFICE, MAX_MEMBERS } from '../office/layout'
 import { taskKey, tasksOf, workload } from '../data/selectors'
 import { useOffice, type Dialog } from '../store'
 import { Field } from './common'
 import { cssVars } from './format'
-import { useMemberList, useProjectList } from './hooks'
+import { useMemberList } from './hooks'
 import { Icon } from './icons'
 import { EndMeetingDialog, MeetingHistoryDialog, StartMeetingDialog } from './MeetingDialogs'
 import { ProjectPeriodDialog } from './PeriodDialog'
@@ -115,183 +116,6 @@ export function ConfirmDialog({
 
 function close() {
   useOffice.getState().openDialog(null)
-}
-
-// ---- Task create / edit ------------------------------------------------------
-
-interface TaskForm {
-  title: string
-  description: string
-  projectId: Id
-  status: TaskStatus
-  priority: DemoPriority
-  estimate: Estimate
-  assigneeId: string
-  dueDate: string
-}
-
-function TaskDialog({ taskId, defaults }: { taskId?: Id; defaults?: Partial<TaskInput> }) {
-  const existing = useOffice((s) => (taskId ? s.tasks[taskId] : undefined))
-  const projects = useProjectList()
-  const members = useMemberList()
-  const projectKey = useOffice((s) => s.projects[existing?.projectId ?? '']?.key)
-  const editing = !!taskId
-
-  useEffect(() => {
-    if (taskId && !existing) close()
-  }, [taskId, existing])
-
-  // Captured once when the dialog opens: edits are diffed against this, not the live task.
-  const [initial] = useState<TaskForm>(() => {
-    const base = existing ?? defaults
-    return {
-      title: base?.title ?? '',
-      description: base?.description ?? '',
-      projectId: base?.projectId ?? projects[0]?.id ?? '',
-      status: base?.status ?? 'todo',
-      priority: base?.priority ?? 'medium',
-      estimate: base?.estimate ?? 3,
-      assigneeId: base?.assigneeId ?? '',
-      dueDate: base?.dueDate ?? '',
-    }
-  })
-  const [form, setForm] = useState<TaskForm>(initial)
-  const [submitted, setSubmitted] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const set = <K extends keyof TaskForm>(k: K, v: TaskForm[K]) => setForm((f) => ({ ...f, [k]: v }))
-
-  const title = form.title.trim()
-  const titleError = title === '' ? '제목을 입력해 주세요' : title.length > 120 ? '제목은 120자 이하로 써 주세요' : ''
-  const projectError = form.projectId === '' ? '프로젝트가 필요해요' : ''
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSubmitted(true)
-    if (titleError || projectError || busy) return
-    setBusy(true)
-    const st = useOffice.getState()
-    if (editing && existing) {
-      const patch: TaskPatch = {}
-      if (title !== initial.title.trim()) patch.title = title
-      if (form.description !== initial.description) patch.description = form.description
-      if (form.projectId !== initial.projectId) patch.projectId = form.projectId
-      if (form.status !== initial.status) patch.status = form.status
-      if (form.priority !== initial.priority) patch.priority = form.priority
-      if (form.estimate !== initial.estimate) patch.estimate = form.estimate
-      if (form.dueDate !== initial.dueDate) patch.dueDate = form.dueDate || null
-      let ok = true
-      if (form.assigneeId !== initial.assigneeId) ok = await st.assignTask(existing.id, form.assigneeId || null)
-      if (ok && Object.keys(patch).length > 0) ok = await st.updateTask(existing.id, patch)
-      if (ok) {
-        st.toast('good', '작업을 수정했어요')
-        close()
-      } else {
-        setBusy(false)
-      }
-      return
-    }
-    const input: TaskInput = {
-      title,
-      projectId: form.projectId,
-      description: form.description,
-      status: form.status,
-      priority: form.priority,
-      estimate: form.estimate,
-      // A member removed while the dialog was open (e.g. by a snapshot) must not be sent as assignee.
-      assigneeId: form.assigneeId && members.some((m) => m.id === form.assigneeId) ? form.assigneeId : null,
-      dueDate: form.dueDate || null,
-    }
-    const created = await st.createTask(input)
-    if (created) {
-      st.toast('good', '작업을 만들었어요')
-      close()
-    } else {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal title={editing ? `작업 수정${existing ? ` · ${taskKey(existing, projectKey)}` : ''}` : '새 작업'} onClose={close} width={520}>
-      <form onSubmit={submit} noValidate>
-        <div className="modal-body">
-          <Field label="제목" error={submitted || title.length > 120 ? titleError : ''}>
-            <input
-              className="select"
-              type="text"
-              data-autofocus
-              value={form.title}
-              maxLength={160}
-              placeholder="무엇을 해야 하나요?"
-              onChange={(e) => set('title', e.target.value)}
-            />
-          </Field>
-          <Field label="설명">
-            <textarea className="select" rows={3} value={form.description} placeholder="자세한 내용 (선택)" onChange={(e) => set('description', e.target.value)} />
-          </Field>
-          <div className="grid2">
-            <Field label="프로젝트" error={submitted ? projectError : ''}>
-              <select className="select" value={form.projectId} onChange={(e) => set('projectId', e.target.value)}>
-                {projects.length === 0 && <option value="">프로젝트 없음</option>}
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.key} · {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="담당자">
-              <select className="select" value={form.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
-                <option value="">미배정</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="상태">
-              <select className="select" value={form.status} onChange={(e) => set('status', e.target.value as TaskStatus)}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_META[s].label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="우선순위">
-              <select className="select" value={form.priority} onChange={(e) => set('priority', e.target.value as DemoPriority)}>
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_META[p].label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="예상 포인트">
-              <select className="select" value={form.estimate} onChange={(e) => set('estimate', Number(e.target.value) as Estimate)}>
-                {ESTIMATES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}pt
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="마감일">
-              <input className="select" type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} />
-            </Field>
-          </div>
-        </div>
-        <footer className="modal-foot">
-          <button type="button" className="btn" onClick={close}>
-            취소
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {editing ? '저장' : '만들기'}
-          </button>
-        </footer>
-      </form>
-    </Modal>
-  )
 }
 
 // ---- Member create / edit ----------------------------------------------------
@@ -550,25 +374,6 @@ function DeleteTaskDialog({ taskId }: { taskId: Id }) {
   )
 }
 
-function ResetDialog() {
-  return (
-    <ConfirmDialog
-      title="데이터를 초기화할까요?"
-      message="작업과 팀원이 처음 상태로 돌아가요. 이 작업은 되돌릴 수 없어요."
-      confirmLabel="초기화"
-      danger
-      onCancel={close}
-      onConfirm={async () => {
-        const st = useOffice.getState()
-        if (await st.resetData()) {
-          st.toast('good', '데이터를 초기화했어요')
-          close()
-        }
-      }}
-    />
-  )
-}
-
 export function Dialogs() {
   const dialog = useOffice((s) => s.dialog)
   const historyOpen = useUi((s) => s.historyOpen)
@@ -586,16 +391,16 @@ function dialogKey(d: Dialog): string {
 
 function DialogSwitch({ dialog }: { dialog: Dialog }) {
   switch (dialog.kind) {
+    // 데모 작업 만들기 · 데이터 초기화는 v1에서 뺐다(#102 T5-c-2) — store의 종류는 데모 코드를 지울 때 함께 지운다
     case 'task':
-      return <TaskDialog taskId={dialog.taskId} defaults={dialog.defaults} />
+    case 'confirmReset':
+      return null
     case 'member':
       return <MemberDialog memberId={dialog.memberId} />
     case 'removeMember':
       return <RemoveMemberDialog memberId={dialog.memberId} />
     case 'deleteTask':
       return <DeleteTaskDialog taskId={dialog.taskId} />
-    case 'confirmReset':
-      return <ResetDialog />
     case 'startMeeting':
       return <StartMeetingDialog />
     case 'endMeeting':

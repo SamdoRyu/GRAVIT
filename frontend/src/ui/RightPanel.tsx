@@ -1,10 +1,8 @@
-// Right rail: detail drawer on top, management panel (tabs + filters + body) below. OWNER: ui-builder.
+// Right rail: detail drawer on top, management panel (tabs + search + body) below. OWNER: D.
+// 칸반 · 목록은 v1 이슈 · PR만 보인다(데모 작업 칸반 · 필터는 뺐다 — #102 T5-c-2).
 import { useOffice } from '../store'
 import { DetailDrawer } from './Detail'
-import { FilterBar } from './FilterBar'
 import { Icon } from './icons'
-import { KanbanView } from './KanbanView'
-import { ListView } from './ListView'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
 import { OfficeDetailDrawer } from './OfficeDetail'
 import { WeekView } from './WeekView'
@@ -19,11 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
 function Panel() {
   const tab = useUi((s) => s.tab)
   const wide = useUi((s) => s.wide)
-  // v1 사무실을 열었으면(읽는 중 · 실패 포함) 칸반 · 목록은 v1 이슈 · PR(읽기 전용), 아니면 아직 데모 작업 (#102 T5-c-2)
-  const officeOpen = useOffice((s) => s.office !== null)
-  const demoTaskCount = useOffice((s) => Object.keys(s.tasks).length)
-  const boardCount = useOffice((s) => (s.office?.snapshot ? s.office.snapshot.tasks.length + s.office.snapshot.submissions.length : 0))
-  const taskCount = officeOpen ? boardCount : demoTaskCount
+  const taskCount = useOffice((s) => (s.office?.snapshot ? s.office.snapshot.tasks.length + s.office.snapshot.submissions.length : 0))
   const ui = useUi.getState()
 
   return (
@@ -61,10 +55,10 @@ function Panel() {
           <Icon name="chevronRight" size={16} />
         </button>
       </header>
-      {(tab === 'kanban' || tab === 'list') && (officeOpen ? <OfficeBoardSearch /> : <FilterBar />)}
+      {(tab === 'kanban' || tab === 'list') && <OfficeBoardSearch />}
       <div className={`panel-body panel-${tab}${tab === 'kanban' && wide ? ' is-wide-kanban' : ''}`}>
-        {tab === 'kanban' && (officeOpen ? <OfficeKanban /> : <KanbanView />)}
-        {tab === 'list' && (officeOpen ? <OfficeList /> : <ListView />)}
+        {tab === 'kanban' && <OfficeKanban />}
+        {tab === 'list' && <OfficeList />}
         {tab === 'week' && <WeekView />}
       </div>
     </section>
