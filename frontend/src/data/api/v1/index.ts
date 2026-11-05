@@ -7,6 +7,8 @@ import type {
   Change,
   ConnectionStatus,
   ErrorCode,
+  EvaluateRequest,
+  EvaluationRoundDto,
   Id,
   LoginOptions,
   MeResponse,
@@ -92,6 +94,7 @@ async function toError(res: Response): Promise<DataError> {
 }
 
 const workspacePath = (workspaceId: Id) => `/api/workspaces/${encodeURIComponent(workspaceId)}`
+const submissionPath = (workspaceId: Id, submissionId: Id) => `${workspacePath(workspaceId)}/submissions/${encodeURIComponent(submissionId)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -312,6 +315,10 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
 
     getSettings: async (workspaceId) => json<TeamSettings>(await read(`${workspacePath(workspaceId)}/settings`)),
     updateSettings: async (workspaceId, settings) => json<TeamSettings>(await write('PUT', `${workspacePath(workspaceId)}/settings`, settings)),
+
+    listRounds: async (workspaceId, submissionId) => json<EvaluationRoundDto[]>(await read(`${submissionPath(workspaceId, submissionId)}/rounds`)),
+    evaluate: async (workspaceId, submissionId, request: EvaluateRequest) =>
+      json<EvaluationRoundDto>(await write('PUT', `${submissionPath(workspaceId, submissionId)}/evaluations/mine`, request)),
 
     close() {
       for (const s of streams.values()) {

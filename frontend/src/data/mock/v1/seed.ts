@@ -14,6 +14,7 @@ import type {
   SubmissionDto,
   SyncStatus,
   TaskDto,
+  Verdict,
   WorkspaceSnapshot,
 } from '../../types'
 
@@ -27,6 +28,20 @@ export interface MockWorkspace {
   snapshot: StoredSnapshot
   /** 활동 기록 수집에 동의한 사용자 (Viewer.activityConsented) */
   consentedUserIds: Id[]
+  /**
+   * 팀원이 mock에서 남긴 PR 평가 — 회차마다 사람당 하나 (#19 · #20). seed의 이유(currentRound.reasons)는
+   * 평가자 없는 예시라 그대로 두고, 읽을 때 이것과 합친다. 없으면 빈 목록(이 칸이 생기기 전 저장값 포함)
+   */
+  evaluations?: MockEvaluation[]
+}
+
+export interface MockEvaluation {
+  submissionId: Id
+  roundId: Id
+  memberId: Id
+  verdict: Verdict
+  reason: string
+  updatedAt: Instant
 }
 
 export interface MockState {

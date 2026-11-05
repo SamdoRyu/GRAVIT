@@ -500,3 +500,50 @@ describe('store — v1 상세 선택 (#102 T5-c-2)', () => {
     assert.equal(useOffice.getState().officeSelection, null)
   })
 })
+
+describe('store — PR 평가 (#19 · #20)', () => {
+  const OTHERS = 's_2' // #16 Draft — 남의 PR
+  const MINE = 's_1' // #15 — 내 PR
+  const round = (id: string) => office()!.snapshot!.submissions.find((s) => s.id === id)!.currentRound!
+  const flush = () => new Promise<void>((r) => setImmediate(r))
+
+  it('성공 — snapshot의 그 PR 회차를 응답으로 바꾸고 회차를 돌려준다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = round(OTHERS)
+    const saved = await useOffice.getState().evaluateSubmission(OTHERS, { roundId: before.id, verdict: 'recommend', reason: '좋아요' })
+    assert.ok(saved)
+    assert.equal(saved.myEvaluation?.reason, '좋아요')
+    assert.deepEqual(round(OTHERS), saved)
+    assert.equal(round(OTHERS).recommendCount, before.recommendCount + 1)
+  })
+
+  it('거부(내 PR) — null · 실패 알림, snapshot은 그대로', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = round(MINE)
+    const toasts = useOffice.getState().toasts.length
+    assert.equal(await useOffice.getState().evaluateSubmission(MINE, { roundId: before.id, verdict: 'recommend', reason: '셀프' }), null)
+    assert.deepEqual(round(MINE), before)
+    assert.equal(useOffice.getState().toasts.length, toasts + 1)
+    assert.equal(useOffice.getState().toasts.at(-1)?.level, 'bad')
+  })
+
+  it('conflict(지난 회차) — Snapshot을 다시 읽는다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const loads = h.loads()
+    assert.equal(await useOffice.getState().evaluateSubmission(OTHERS, { roundId: 'r_old', verdict: 'recommend', reason: '옛 회차' }), null)
+    for (let i = 0; i < 5; i++) await flush()
+    assert.equal(h.loads(), loads + 1)
+  })
+
+  it('loadRounds — 회차 목록, 사무실이 없으면 보내지 않고 null', async () => {
+    assert.equal(await useOffice.getState().loadRounds(OTHERS), null)
+    assert.equal(await useOffice.getState().evaluateSubmission(OTHERS, { roundId: 'r_2', verdict: 'recommend', reason: '좋아요' }), null)
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const rounds = await useOffice.getState().loadRounds(OTHERS)
+    assert.deepEqual(rounds, [round(OTHERS)])
+  })
+})

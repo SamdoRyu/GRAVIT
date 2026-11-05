@@ -10,6 +10,7 @@ import { useOffice, type OfficeSelection } from '../store'
 import { cssVars, relativeTime } from './format'
 import { useNow } from './hooks'
 import { Icon } from './icons'
+import { EvaluationSection } from './Evaluation'
 import { FlagTags, GithubLink, MemberAvatar, NoMemberAvatar, PriorityMark } from './officeParts'
 
 const select = (s: OfficeSelection) => useOffice.getState().selectInOffice(s)
@@ -218,7 +219,6 @@ function SubmissionDetail({ submission, snapshot, members }: { submission: Submi
   const item = submissionItem(submission)
   const linked = pick(snapshot.tasks, submission.linkedTaskIds).map(taskItem)
   const open = submission.state === 'open' || submission.state === 'draft'
-  const round = submission.currentRound
   const author = submission.authorMemberId === null ? undefined : members.get(submission.authorMemberId)
   return (
     <aside className="detail glass detail-v1" aria-label="PR 상세">
@@ -252,13 +252,7 @@ function SubmissionDetail({ submission, snapshot, members }: { submission: Submi
           </Section>
         )}
         <Section label="추천 · 비추천 평가">
-          {round ? (
-            <p className="dround">
-              {round.roundNumber}회차 · 추천 <b>{round.recommendCount}</b> · 비추천 <b>{round.notRecommendCount}</b>
-            </p>
-          ) : (
-            <Note>아직 평가 회차가 없어요.</Note>
-          )}
+          <EvaluationSection submission={submission} viewerMemberId={snapshot.viewer.memberId} />
         </Section>
         <Section label={`연결된 이슈 ${linked.length}개`}>
           <ItemList items={linked} empty="GitHub에서 이 PR에 연결된 이슈가 없어요." />
