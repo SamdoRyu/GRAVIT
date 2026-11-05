@@ -1,9 +1,9 @@
-// 12. Touch (1024x768, touch screen, no mobile emulation): a long press on a kanban card picks it up and a move to a
-// column changes its status; a quick swipe scrolls the list instead of dragging.
-// Touch is driven with CDP Input.dispatchTouchEvent (Playwright only offers taps); the 300 ms long-press timer is the
-// app's own, so we wait for store.drag instead of sleeping.
+// 12. Touch (1024x768, touch screen, no mobile emulation): a quick swipe on a card in the drawer scrolls the list
+// and never starts a drag.
+// v1 사무실의 칸반 카드는 읽기 전용이라(#102 T5-c-2) 길게 눌러 열을 옮기는 데모 검사는 뺐다 — 스와이프가 끌기로 바뀌지 않는지만 본다.
+// Touch is driven with CDP Input.dispatchTouchEvent (Playwright only offers taps).
 import type { CDPSession, Locator, Page } from '@playwright/test'
-import { expect, openApp, readStore, seedTask, serverTask, taskByTitle, test } from './fixtures'
+import { expect, openApp, readStore, test } from './fixtures'
 
 test.use({ hasTouch: true, isMobile: false, viewport: { width: 1024, height: 768 } })
 
@@ -23,39 +23,14 @@ async function openDrawer(page: Page) {
   await expect(page.getByRole('region', { name: '관리 패널' })).toBeVisible()
 }
 
-test('long-press a card, move to a column: the status changes', async ({ page, context, source, api }) => {
-  await openApp(page, source, { scene: false })
-  const task = await seedTask(page, { title: 'E2E 터치 이동', status: 'todo' })
-  await openDrawer(page)
-  await page.getByRole('searchbox').fill('E2E 터치 이동')
-  const drawer = page.getByRole('region', { name: '관리 패널' })
-  const column = (label: string) => drawer.locator('.col').filter({ has: page.getByRole('button', { name: new RegExp(`^${label}`) }) })
-  const card = column('할 일').getByRole('button', { name: /E2E 터치 이동/ })
-  await expect(card).toBeVisible()
-  const target = column('진행 중')
-
-  const cdp = await context.newCDPSession(page)
-  const from = await center(card)
-  await touch(cdp, 'touchStart', from)
-  await expect.poll(() => readStore(page, (s) => s.drag?.taskId ?? null), { message: 'long press picks the card up' }).toBe(task.id)
-  const to = await center(target)
-  for (let i = 1; i <= 8; i++) await touch(cdp, 'touchMove', { x: from.x + ((to.x - from.x) * i) / 8, y: from.y + ((to.y - from.y) * i) / 8 })
-  await expect.poll(() => readStore(page, (s) => JSON.stringify(s.dropTarget))).toBe(JSON.stringify({ kind: 'status', status: 'in_progress' }))
-  await touch(cdp, 'touchEnd')
-  await expect.poll(() => readStore(page, (s) => s.drag)).toBeNull()
-
-  await expect.poll(async () => (await taskByTitle(page, 'E2E 터치 이동')).status).toBe('in_progress')
-  if (source === 'api') await expect.poll(async () => (await serverTask(api, task.id))?.status).toBe('in_progress')
-})
-
 test('a quick swipe on a card scrolls the list and does not drag', async ({ page, context, source }) => {
   await openApp(page, source, { scene: false })
+  await expect.poll(() => readStore(page, (s) => s.office?.status)).toBe('ready')
   await openDrawer(page)
   const drawer = page.getByRole('region', { name: '관리 패널' })
   const body = drawer.locator('.panel-body')
-  const card = drawer.getByRole('button', { name: /WEB-31/ }).first()
+  const card = drawer.getByRole('article', { name: /^이슈 #5 / })
   await expect(card).toBeVisible()
-  const before = await task31(page)
   const scrollBefore = await body.evaluate((el) => el.scrollTop)
 
   const cdp = await context.newCDPSession(page)
@@ -67,12 +42,4 @@ test('a quick swipe on a card scrolls the list and does not drag', async ({ page
 
   await expect.poll(() => body.evaluate((el) => el.scrollTop), { message: 'the list scrolled' }).toBeGreaterThan(scrollBefore)
   expect(await readStore(page, (s) => s.drag)).toBeNull()
-  expect(await task31(page)).toEqual(before)
 })
-
-function task31(page: Page) {
-  return readStore(page, (s) => {
-    const t = Object.values(s.tasks).find((x) => (x as { number: number }).number === 31) as { status: string; assigneeId: string | null }
-    return { status: t.status, assigneeId: t.assigneeId }
-  })
-}
