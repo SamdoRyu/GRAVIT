@@ -76,6 +76,20 @@ public class RetroReportService {
         return toDto(access.workspaceId(), report);
     }
 
+    /**
+     * {@code PUT W/members/{memberId}/reports/{reportId}/learning}(FR-REP-02) — 내가 배운 점을 통째로 바꾼다. 본인만
+     * (다른 학생 · 강사 403). 다른 팀원의 리포트 ID면 404.
+     */
+    @Transactional
+    public RetroReportDto writeLearning(WorkspaceAccess access, Long memberId, Long reportId, String learning) {
+        workspaceService.requireMember(access.workspaceId(), memberId);
+        access.requireSelf(memberId);
+        RetroReport report = retroReportRepository.findByIdAndMemberId(reportId, memberId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        report.writeLearning(learning);
+        return toDto(access.workspaceId(), report);
+    }
+
     /** 계산 칸 — 활동 분포(활동 기록 기능 전)와 결정 카드(#62 전)는 아직 빈 목록이다. */
     private RetroReportDto toDto(Long workspaceId, RetroReport report) {
         String me = Ids.toApi(report.getMember().getId());

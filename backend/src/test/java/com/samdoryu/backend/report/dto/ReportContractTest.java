@@ -45,6 +45,14 @@ class ReportContractTest {
     }
 
     @Test
+    void learningIsRequiredUpTo5000CharsAndMayBeEmpty() {
+        assertThat(VALIDATOR.validate(new ReportLearningRequest(null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new ReportLearningRequest("a".repeat(5001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new ReportLearningRequest(""))).isEmpty();
+        assertThat(VALIDATOR.validate(new ReportLearningRequest("a".repeat(5000)))).isEmpty();
+    }
+
+    @Test
     void kindIsRequired() {
         assertThat(VALIDATOR.validate(new ReportCreateRequest(null))).hasSize(1);
         assertThat(VALIDATOR.validate(new ReportCreateRequest(ReportKind.FINAL))).isEmpty();

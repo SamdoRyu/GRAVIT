@@ -50,6 +50,15 @@ class MeetingContractTest {
     }
 
     @Test
+    void instructorFeedbackCreateRequestExampleRoundTripsAndBodyIs1To2000() throws IOException {
+        assertRoundTrip("instructor-feedback-create-request.json", InstructorFeedbackCreateRequest.class);
+        assertThat(VALIDATOR.validate(new InstructorFeedbackCreateRequest(null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new InstructorFeedbackCreateRequest(""))).hasSize(1);
+        assertThat(VALIDATOR.validate(new InstructorFeedbackCreateRequest("a".repeat(2001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new InstructorFeedbackCreateRequest("a".repeat(2000)))).isEmpty();
+    }
+
+    @Test
     void meetingExampleRoundTrips() throws IOException {
         assertRoundTrip("meeting.json", MeetingDto.class);
     }

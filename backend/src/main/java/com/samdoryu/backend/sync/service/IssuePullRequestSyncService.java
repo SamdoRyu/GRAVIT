@@ -48,7 +48,7 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>앱 기록(마감 · 요구사항 연결 · 안건 · 평가 · 카드 …)은 읽지도 덮지도 않는다.</li>
  * </ul>
  * 동기화 API · 폴링 · {@code SyncState} 기록은 #70이 이 Service를 부르며 더한다. 평가 회차는 PR을 저장할 때
- * {@link EvaluationRoundService}가 연다 — 지금은 회차가 없는 PR의 1회차({@code new_pr}, #19)뿐이다(새 커밋 회차는 #46).
+ * {@link EvaluationRoundService}가 연다 — 회차가 없는 PR의 1회차({@code new_pr}, #19)와 열린 PR의 새 커밋 회차({@code new_commit}, #46).
  * <p>
  * {@code stateChangedAt} [구현 기본값 — #69]: 상태(이슈 열림 · 닫힘, PR 상태)나 팀원 담당자 집합이 바뀌면 GitHub 시각
  * (닫혔으면 닫힌 · 머지 시각, 아니면 GitHub 고친 시각), 바뀌지 않았으면 이전 값 그대로.
@@ -210,7 +210,7 @@ public class IssuePullRequestSyncService {
         Submission submission = existing.map(s -> s.overwriteFrom(fresh))
                 .orElseGet(() -> submissionRepository.save(fresh));
         syncIssueLinks(workspace, submission, reader.linkedIssues(repo, pr.number()));
-        evaluationRoundService.openFirstRoundIfAbsent(submission, now);
+        evaluationRoundService.openRoundForSync(submission, now);
     }
 
     /**

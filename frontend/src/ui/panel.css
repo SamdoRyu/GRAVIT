@@ -112,6 +112,33 @@
 .spill { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-s); color: var(--text-dim); white-space: nowrap; }
 .lhead .c-est { justify-content: flex-end; }
 
+/* ---- v1 칸반 · 목록 (#102 T5-c-2) — 이슈 · PR 읽기 전용, 끌기 없음 ---- */
+.card-v1 { cursor: default; }
+.card-v1.is-blocked { box-shadow: inset 3px 0 0 var(--bad), 0 0 0 1px var(--line); }
+.card-v1 .card-top { flex-wrap: wrap; row-gap: 2px; }
+.kind { flex: none; padding: 0 5px; border-radius: 5px; background: var(--soft); color: var(--text-dim); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.kind-submission { background: color-mix(in srgb, #9b5de5 12%, #fff); color: #7a43c4; }
+.flag { flex: none; padding: 0 5px; border-radius: 5px; border: 1px solid var(--line); color: var(--text-dim); font-size: 10.5px; font-weight: 600; line-height: 14px; white-space: nowrap; }
+.flag-blocked { border-color: transparent; background: var(--bad-soft); color: var(--ink-bad); }
+.gh-link { flex: none; font-size: var(--fs-s); font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.gh-link:hover, .gh-link:focus-visible { text-decoration: underline; }
+.avatars { display: inline-flex; flex: none; }
+.avatars .avatar + .avatar { margin-left: -6px; }
+.avatar-v1 { --c: #7d8aa6; }
+.prio-none { width: 8px; }
+/* 우선 칸은 머리글("우선")이 한 줄에 들어가게, 담당 칸은 겹친 아바타 두 개가 들어가게 */
+.ltable-v1 .lhead, .ltable-v1 .lrow { grid-template-columns: minmax(0, 1fr) 64px 28px 36px 64px; }
+.ltable-v1.ltable-wide .lhead, .ltable-v1.ltable-wide .lrow { grid-template-columns: 72px minmax(0, 1fr) 72px 28px 140px 72px; }
+.ltable-v1 .lhead button { white-space: nowrap; }
+.ltable-v1 .c-who .avatars { overflow: hidden; max-width: 100%; }
+.lrow-v1 { cursor: default; }
+.lrow-v1 .c-who .assignee { gap: 0; }
+.lrow-v1 .l-sub { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.lrow-v1 .l-key { flex: none; white-space: nowrap; }
+/* 넓으면 번호는 번호 칸에 — 표시 · GitHub 링크는 제목 아래 그대로 */
+.ltable-wide .lrow-v1 .l-sub { display: flex; }
+.ltable-wide .lrow-v1 .l-key { display: none; }
+
 /* ---- team ---- */
 .team { display: grid; gap: 8px; }
 .backlog-drop { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px dashed rgba(20, 30, 60, 0.18); border-radius: 12px; color: var(--text-dim); font-size: var(--fs-s); transition: background 0.15s, border-color 0.15s; }
