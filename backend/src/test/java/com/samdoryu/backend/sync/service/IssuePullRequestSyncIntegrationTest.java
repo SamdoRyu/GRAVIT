@@ -5,7 +5,11 @@ import static org.mockito.BDDMockito.given;
 
 import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
+import com.samdoryu.backend.evaluation.domain.Evaluation;
+import com.samdoryu.backend.evaluation.domain.EvaluationRound;
 import com.samdoryu.backend.evaluation.domain.RoundOpenedReason;
+import com.samdoryu.backend.evaluation.domain.Verdict;
+import com.samdoryu.backend.evaluation.repository.EvaluationRepository;
 import com.samdoryu.backend.evaluation.repository.EvaluationRoundRepository;
 import com.samdoryu.backend.github.GithubReaderSelector;
 import com.samdoryu.backend.github.dto.GithubIssue;
@@ -62,6 +66,7 @@ class IssuePullRequestSyncIntegrationTest {
     @Autowired SubmissionRepository submissions;
     @Autowired TaskDueDateRepository dueDates;
     @Autowired EvaluationRoundRepository rounds;
+    @Autowired EvaluationRepository evaluations;
 
     @MockitoBean GithubReaderSelector readerSelector;
 
@@ -280,6 +285,77 @@ class IssuePullRequestSyncIntegrationTest {
         private GithubPullRequest pr(int number, GithubUser author, String sha) {
             return new GithubPullRequest(number, "PR " + number, author, false, false, false, sha, List.of(),
                     List.of(new GithubUser(1001L, "bob", null)), T0, T0, null, null);
+        }
+
+        private GithubPullRequest mergedPr(int number, GithubUser author, String sha, Instant mergedAt) {
+            return new GithubPullRequest(number, "PR " + number, author, false, true, true, sha, List.of(),
+                    List.of(), T0, mergedAt, mergedAt, mergedAt);
+        }
+
+        /**
+         * #46 FR-LRN-06 — 열린 PR에 새 커밋이 오면 새 회차(new_commit)를 열고 이전 회차를 닫는다. 이전 회차와 평가는 그대로,
+         * 회차 ID는 headSha와 별개. 같은 커밋으로 다시 동기화하거나 머지된 뒤 커밋이 바뀌면 회차를 열지 않는다.
+         */
+        @Test
+        void newCommitOnAnOpenPullRequestOpensANewRoundAndKeepsThePreviousOne() {
+            String sha1 = "a".repeat(40);
+            String sha2 = "b".repeat(40);
+            String sha3 = "c".repeat(40);
+            GithubUser alice = new GithubUser(2002L, "alice", null);
+            fake.pullRequests = List.of(pr(3, alice, sha1));
+            syncService.sync(ws.getId(), null, T0);
+            Submission pr = submissions.findByWorkspaceIdAndGithubPrNumber(ws.getId(), 3).orElseThrow();
+            EvaluationRound first = rounds.findFirstBySubmissionIdOrderByRoundNumberDesc(pr.getId()).orElseThrow();
+            AppUser bob = users.findByGithubUserId(1001L).orElseThrow();
+            evaluations.saveAndFlush(new Evaluation(first, bob, Verdict.NOT_RECOMMEND, "응답 모양이 달라요", T0));
+
+            fake.pullRequests = List.of(pr(3, alice, sha2));
+            syncService.sync(ws.getId(), T0, T1);
+            // 같은 커밋으로 다시 동기화 — 회차가 늘지 않는다
+            syncService.sync(ws.getId(), T0, T1.plusSeconds(60));
+            em.flush();
+            em.clear();
+
+            List<EvaluationRound> afterCommit = rounds.findBySubmissionIdOrderByRoundNumberDesc(pr.getId());
+            assertThat(afterCommit).extracting(EvaluationRound::getRoundNumber, EvaluationRound::getOpenedReason,
+                            EvaluationRound::getHeadSha)
+                    .containsExactly(
+                            org.assertj.core.groups.Tuple.tuple(2, RoundOpenedReason.NEW_COMMIT, sha2),
+                            org.assertj.core.groups.Tuple.tuple(1, RoundOpenedReason.NEW_PR, sha1));
+            assertThat(afterCommit.get(0).getOpenedAt()).isEqualTo(T1);
+            assertThat(afterCommit.get(0).getClosedAt()).isNull();
+            assertThat(afterCommit.get(1).getClosedAt()).isEqualTo(T1);
+            // 회차 ID는 headSha와 별개 — 숫자 ID
+            assertThat(afterCommit.get(0).getId().toString()).isNotEqualTo(sha2);
+            // 이전 회차의 평가는 그대로 남는다
+            assertThat(evaluations.findByRoundIdOrderByIdAsc(first.getId())).singleElement()
+                    .satisfies(e -> assertThat(e.getReason()).isEqualTo("응답 모양이 달라요"));
+
+            // 머지된 PR은 커밋이 바뀌어도 새 회차를 열지 않는다(평가를 받지 않음)
+            fake.pullRequests = List.of(mergedPr(3, alice, sha3, T1.plusSeconds(120)));
+            syncService.sync(ws.getId(), T1, T1.plusSeconds(180));
+            em.flush();
+            em.clear();
+            assertThat(rounds.findBySubmissionIdOrderByRoundNumberDesc(pr.getId())).hasSize(2);
+        }
+
+        /** Draft도 열린 PR이다 — 새 커밋이면 새 회차. */
+        @Test
+        void newCommitOnADraftAlsoOpensANewRound() {
+            GithubUser alice = new GithubUser(2002L, "alice", null);
+            fake.pullRequests = List.of(new GithubPullRequest(4, "PR 4", alice, true, false, false, "d".repeat(40),
+                    List.of(), List.of(), T0, T0, null, null));
+            syncService.sync(ws.getId(), null, T0);
+            fake.pullRequests = List.of(new GithubPullRequest(4, "PR 4", alice, true, false, false, "e".repeat(40),
+                    List.of(), List.of(), T0, T1, null, null));
+            syncService.sync(ws.getId(), T0, T1);
+            em.flush();
+            em.clear();
+
+            Submission draft = submissions.findByWorkspaceIdAndGithubPrNumber(ws.getId(), 4).orElseThrow();
+            assertThat(rounds.findBySubmissionIdOrderByRoundNumberDesc(draft.getId()))
+                    .extracting(EvaluationRound::getOpenedReason)
+                    .containsExactly(RoundOpenedReason.NEW_COMMIT, RoundOpenedReason.NEW_PR);
         }
     }
 }

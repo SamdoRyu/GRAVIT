@@ -63,19 +63,39 @@ public class EvaluationRoundService {
     }
 
     /**
-     * 동기화가 PR을 저장한 뒤 부른다 — 회차가 하나도 없는 PR에 1회차({@code new_pr}, 그때의 {@code headSha})를 연다.
-     * 이미 회차가 있으면 아무것도 하지 않는다.
+     * 동기화가 PR을 저장한 뒤 부른다 — 동기화가 여는 두 회차(CONTRACTS.md 「3」 평가 회차 · FR-LRN-06).
+     * <ul>
+     *   <li>회차가 하나도 없는 PR: 1회차({@code new_pr}, 그때의 {@code headSha}).</li>
+     *   <li>열린 PR(Draft 포함)의 {@code headSha}가 현재 회차의 {@code headSha}와 다름: 새 회차({@code new_commit})를 열고
+     *       이전 회차를 닫는다. 이전 회차와 그 평가는 그대로 남는다.</li>
+     * </ul>
+     * 그 밖에는 아무것도 하지 않는다 — 다시 동기화해도 회차가 늘지 않는다.
      * <p>
      * [구현 기본값 — #19] 처음 동기화 때 이미 머지 · 닫힌 PR도 1회차를 연다(「3」 "동기화로 새 PR이 들어옴"). 평가는 받지 않지만
      * {@code currentRound}가 null이 아니라 0 · 0으로 보인다. 이 기능 전에 저장된 PR은 다음에 GitHub에서 바뀌어 다시 읽힐 때 열린다.
+     * <p>
+     * [구현 기본값 — #46] 새 커밋은 이전 동기화 값이 아니라 <b>현재 회차의 {@code headSha}</b>와 비교한다. 그래서 회의 재평가로 같은
+     * 커밋에 회차가 열린 뒤에는 새 회차가 생기지 않고, PR이 닫힌 동안 커밋이 바뀌었다가 다시 열리면 그때 새 회차가 열린다.
+     * 머지 · 닫힌 PR은 평가를 받지 않으므로 새 커밋 회차를 열지 않는다.
      */
     @Transactional
-    public void openFirstRoundIfAbsent(Submission submission, Instant now) {
-        if (evaluationRoundRepository.findFirstBySubmissionIdOrderByRoundNumberDesc(submission.getId()).isPresent()) {
+    public void openRoundForSync(Submission submission, Instant now) {
+        Optional<EvaluationRound> current = evaluationRoundRepository
+                .findFirstBySubmissionIdOrderByRoundNumberDesc(submission.getId());
+        if (current.isEmpty()) {
+            evaluationRoundRepository.save(
+                    new EvaluationRound(submission, 1, submission.getHeadSha(), RoundOpenedReason.NEW_PR, now));
             return;
         }
-        evaluationRoundRepository.save(
-                new EvaluationRound(submission, 1, submission.getHeadSha(), RoundOpenedReason.NEW_PR, now));
+        EvaluationRound round = current.get();
+        if (!acceptsEvaluations(submission) || round.getHeadSha().equals(submission.getHeadSha())) {
+            return;
+        }
+        if (round.getClosedAt() == null) {
+            round.close(now);
+        }
+        evaluationRoundRepository.save(new EvaluationRound(submission, round.getRoundNumber() + 1,
+                submission.getHeadSha(), RoundOpenedReason.NEW_COMMIT, now));
     }
 
     /**
