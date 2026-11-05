@@ -45,6 +45,11 @@ class MeetingContractTest {
     }
 
     @Test
+    void decisionRequestExampleRoundTrips() throws IOException {
+        assertRoundTrip("decision-request.json", DecisionRequest.class);
+    }
+
+    @Test
     void meetingExampleRoundTrips() throws IOException {
         assertRoundTrip("meeting.json", MeetingDto.class);
     }

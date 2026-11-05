@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,8 +14,11 @@ import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.common.contract.ContractShape;
 import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.evaluation.domain.Evaluation;
 import com.samdoryu.backend.evaluation.domain.EvaluationRound;
 import com.samdoryu.backend.evaluation.domain.RoundOpenedReason;
+import com.samdoryu.backend.evaluation.domain.Verdict;
+import com.samdoryu.backend.evaluation.repository.EvaluationRepository;
 import com.samdoryu.backend.evaluation.repository.EvaluationRoundRepository;
 import com.samdoryu.backend.help.domain.HelpRequest;
 import com.samdoryu.backend.help.domain.HelpRequestStatus;
@@ -52,7 +56,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #37 결정 기록 · #33 거두기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「10」 decision · withdraw).
+ * #37 결정 기록 · #33 거두기 · #27 재평가 뒤 이전 회차 보존 — 실제 Security · MVC · MySQL(CONTRACTS_API 「10」 decision · withdraw).
  * 테스트마다 트랜잭션을 되돌린다.
  * 서버 {@code Instant.now()}와 비교되는 값(회차 닫힘 · 도움 요청 닫힘 CHECK)은 과거 시각으로 만든다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/meeting/agenda-item.json}(결정 있음).
@@ -77,6 +81,7 @@ class AgendaDecisionIntegrationTest {
     @Autowired InstructorAssignmentRepository instructorAssignments;
     @Autowired SubmissionRepository submissions;
     @Autowired EvaluationRoundRepository rounds;
+    @Autowired EvaluationRepository evaluations;
     @Autowired AgendaItemRepository agendaItems;
     @Autowired MeetingRepository meetings;
     @Autowired HelpRequestRepository helpRequests;
@@ -85,6 +90,7 @@ class AgendaDecisionIntegrationTest {
     private Workspace otherWs;
     private Member alice;
     private Member bob;
+    private AppUser bobUser;
     private Member otherWsMember;
     private Submission pr;
     private MockHttpSession aliceSession;
@@ -94,7 +100,7 @@ class AgendaDecisionIntegrationTest {
     @BeforeEach
     void setUp() {
         AppUser aliceUser = users.saveAndFlush(AppUser.github(1001L, "alice", "앨리스", null));
-        AppUser bobUser = users.saveAndFlush(AppUser.github(1002L, "bob", "밥", null));
+        bobUser = users.saveAndFlush(AppUser.github(1002L, "bob", "밥", null));
         AppUser instructorUser = users.saveAndFlush(AppUser.github(INSTRUCTOR_GITHUB_ID, "instructor", "강사", null));
         ws = workspaces.saveAndFlush(Workspace.github(5001L, "samdoryu", "a", null, aliceUser, PAST));
         otherWs = workspaces.saveAndFlush(Workspace.github(5002L, "samdoryu", "b", null, aliceUser, PAST));
@@ -212,6 +218,43 @@ class AgendaDecisionIntegrationTest {
         assertThat(all.get(0).getHeadSha()).isEqualTo(SHA);
         assertThat(all.get(0).getClosedAt()).isNull();
         assertThat(all.get(1).getClosedAt()).isNotNull();
+    }
+
+    /**
+     * #27 — 재평가 회차를 열어도 이전 회차의 평가는 그대로 남아 회차 목록에 보인다(같은 headSha에 회차 둘).
+     * 이전 회차 ID로 평가하면 conflict — 새 회차에 섞이지 않는다.
+     */
+    @Test
+    void reviseKeepsPreviousRoundEvaluations() throws Exception {
+        EvaluationRound first = rounds.saveAndFlush(new EvaluationRound(pr, 1, SHA, RoundOpenedReason.NEW_PR, PAST));
+        evaluations.saveAndFlush(new Evaluation(first, bobUser, Verdict.NOT_RECOMMEND, "실패 응답이 계약과 달라요", PAST));
+
+        decide(ws, bobSession, prItem(first.getId()), body("revise_and_reevaluate", null, null))
+                .andExpect(status().isOk());
+
+        String submissionPath = "/api/workspaces/" + Ids.toApi(ws.getId()) + "/submissions/" + Ids.toApi(pr.getId());
+        mvc.perform(get(submissionPath + "/rounds").session(bobSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].roundNumber").value(2))
+                .andExpect(jsonPath("$[0].openedReason").value("meeting_reevaluate"))
+                .andExpect(jsonPath("$[0].headSha").value(SHA))
+                .andExpect(jsonPath("$[0].notRecommendCount").value(0))
+                .andExpect(jsonPath("$[0].reasons.length()").value(0))
+                .andExpect(jsonPath("$[1].id").value(Ids.toApi(first.getId())))
+                .andExpect(jsonPath("$[1].headSha").value(SHA))
+                .andExpect(jsonPath("$[1].closedAt").isNotEmpty())
+                .andExpect(jsonPath("$[1].notRecommendCount").value(1))
+                .andExpect(jsonPath("$[1].reasons[0].reason").value("실패 응답이 계약과 달라요"));
+
+        String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
+        mvc.perform(put(submissionPath + "/evaluations/mine").session(bobSession)
+                        .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                        .header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roundId\":\"" + Ids.toApi(first.getId())
+                                + "\",\"verdict\":\"recommend\",\"reason\":\"고쳤어요\"}"))
+                .andExpect(status().isConflict());
     }
 
     @Test
