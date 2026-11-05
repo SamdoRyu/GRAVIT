@@ -348,6 +348,27 @@ export type Change =
   | { type: 'sync'; status: SyncStatus }
   | { type: 'connection'; status: ConnectionStatus }
 
+// ---- 「7」 강사 지정 ----------------------------------------------------------
+
+export interface InstructorAssignmentDto {
+  /** 지정의 키 — 로그인 이름이 아님 (CONTRACTS.md 「6」 식별자 원칙) */
+  githubUserId: GithubId
+  /** 표시용 — 아직 모르면 null */
+  githubLogin: string | null
+  displayName: string | null
+  avatarUrl: string | null
+  assignedAt: Instant
+  assignedBy: UserRef
+}
+
+export interface InstructorCandidateDto {
+  githubUserId: GithubId
+  /** 표시용 — 그 강사가 로그인한 적이 없어 모르면 null [구현 기본값] */
+  githubLogin: string | null
+  avatarUrl: string | null
+  isAssigned: boolean
+}
+
 // ---- 「9」 PR 평가 · 평가 회차 -----------------------------------------------
 
 export interface EvaluateRequest {
