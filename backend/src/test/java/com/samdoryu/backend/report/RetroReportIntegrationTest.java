@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -270,5 +271,67 @@ class RetroReportIntegrationTest {
         create(base(alice), aliceSession, "weekly").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("invalid"));
         assertThat(reports.count()).isZero();
+    }
+
+    // ---- #41 내가 배운 점 직접 쓰기 -----------------------------------------------------------------
+
+    private ResultActions writeLearning(String path, MockHttpSession session, String body) throws Exception {
+        String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
+        return mvc.perform(put(path + "/learning").session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    private String learningOf(RetroReport report) {
+        em.flush();
+        em.clear();
+        return reports.findById(report.getId()).orElseThrow().getLearning();
+    }
+
+    /** 본인이 쓰면 저장되고 리포트 전체가 돌아온다. 다시 쓰면 바꾸고, 빈 값으로 비울 수 있다. */
+    @Test
+    void selfWritesLearningAndCanRewriteOrClearIt() throws Exception {
+        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        String path = base(alice) + "/" + report.getId();
+
+        String response = writeLearning(path, aliceSession, "{\"learning\":\"에러 응답은 한 곳에서 정한다\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(Ids.toApi(report.getId())))
+                .andExpect(jsonPath("$.learning").value("에러 응답은 한 곳에서 정한다"))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("report", "retro-report.json"), actual);
+        ContractShape.assertCommonRules(actual);
+        mvc.perform(get(path).session(instructorSession))
+                .andExpect(jsonPath("$.learning").value("에러 응답은 한 곳에서 정한다"));
+
+        writeLearning(path, aliceSession, "{\"learning\":\"" + "가".repeat(5000) + "\"}").andExpect(status().isOk());
+        writeLearning(path, aliceSession, "{\"learning\":\"\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.learning").value(""));
+        assertThat(learningOf(report)).isEmpty();
+    }
+
+    /** 본인만 — 다른 학생 · 강사 403, 다른 팀원의 리포트 404, 5000자 넘음 · 값 없음 400. 아무것도 바뀌지 않는다. */
+    @Test
+    void onlySelfWritesValidLearning() throws Exception {
+        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        RetroReport bobs = reports.saveAndFlush(new RetroReport(bob, ReportKind.FINAL, T0));
+        String path = base(alice) + "/" + report.getId();
+        String body = "{\"learning\":\"남이 쓴 배운 점\"}";
+
+        writeLearning(path, bobSession, body).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        writeLearning(path, instructorSession, body).andExpect(status().isForbidden());
+        writeLearning(base(alice) + "/" + bobs.getId(), aliceSession, body).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        writeLearning(path, aliceSession, "{\"learning\":\"" + "가".repeat(5001) + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+        writeLearning(path, aliceSession, "{}").andExpect(status().isBadRequest());
+
+        assertThat(learningOf(report)).isNull();
+        assertThat(learningOf(bobs)).isNull();
     }
 }
