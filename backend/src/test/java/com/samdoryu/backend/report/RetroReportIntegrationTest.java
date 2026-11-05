@@ -23,8 +23,13 @@ import com.samdoryu.backend.meeting.domain.AgendaKind;
 import com.samdoryu.backend.meeting.domain.InstructorFeedback;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.InstructorFeedbackRepository;
+import com.samdoryu.backend.report.domain.DecisionCard;
+import com.samdoryu.backend.report.domain.DecisionCardCells;
+import com.samdoryu.backend.report.domain.FollowUpQuestion;
 import com.samdoryu.backend.report.domain.ReportKind;
 import com.samdoryu.backend.report.domain.RetroReport;
+import com.samdoryu.backend.report.repository.DecisionCardRepository;
+import com.samdoryu.backend.report.repository.FollowUpQuestionRepository;
 import com.samdoryu.backend.report.repository.RetroReportRepository;
 import com.samdoryu.backend.sync.domain.Submission;
 import com.samdoryu.backend.sync.domain.SubmissionState;
@@ -84,6 +89,8 @@ class RetroReportIntegrationTest {
     @Autowired AgendaItemRepository agendaItems;
     @Autowired InstructorFeedbackRepository instructorFeedbacks;
     @Autowired RetroReportRepository reports;
+    @Autowired DecisionCardRepository decisionCards;
+    @Autowired FollowUpQuestionRepository followUpQuestions;
 
     private Workspace ws;
     private Workspace otherWs;
@@ -142,8 +149,8 @@ class RetroReportIntegrationTest {
         taskAssignees.saveAndFlush(new TaskAssignee(task, assignee, T0));
     }
 
-    private void pr(int number, String labelsJson, Member author, long authorGithubId, boolean merged) {
-        submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(number).title("PR " + number)
+    private Submission pr(int number, String labelsJson, Member author, long authorGithubId, boolean merged) {
+        return submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(number).title("PR " + number)
                 .authorGithubUserId(authorGithubId).authorMember(author)
                 .state(merged ? SubmissionState.MERGED : SubmissionState.OPEN).headSha(SHA)
                 .reviewRequestsJson("[]").reviewsJson("[]").labelsJson(labelsJson).githubCreatedAt(T0)
@@ -209,6 +216,43 @@ class RetroReportIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(reportId))
                 .andExpect(jsonPath("$.agendaResults.length()").value(1));
+    }
+
+    /** {@code learning}이 있으면 확인한 카드, 없으면 확인 전 카드. */
+    private DecisionCard card(Member member, Submission submission, String goal, String learning) {
+        DecisionCard card = new DecisionCard(member, submission, DecisionCardCells.EMPTY, T0.plusSeconds(1000));
+        if (learning != null) {
+            card.edit(new DecisionCardCells(goal, null, null, null, null, null, null, learning, null), true,
+                    T0.plusSeconds(1100));
+        }
+        return decisionCards.saveAndFlush(card);
+    }
+
+    /** #62 결정 카드는 본인이 확인한 것만(P11) — 확인 전 카드 · 다른 팀원 카드는 빠진다. 계약 ② — 카드가 든 응답 모양. */
+    @Test
+    void reportCarriesOnlyOwnConfirmedDecisionCards() throws Exception {
+        DecisionCard confirmed = card(alice, pr(5, "[]", alice, 1001L, true), null, "실패 응답은 한 곳에서");
+        card(alice, pr(7, "[]", alice, 1001L, true), null, null);
+        card(bob, pr(6, "[]", bob, 1002L, true), null, "밥의 배움");
+        followUpQuestions.saveAndFlush(new FollowUpQuestion(confirmed, instructorUser, "왜 그 방법을 골랐나요?",
+                T0.plusSeconds(1200)));
+        em.clear();
+
+        String response = create(base(alice), aliceSession, "final")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.decisionCards.length()").value(1))
+                .andExpect(jsonPath("$.decisionCards[0].id").value(Ids.toApi(confirmed.getId())))
+                .andExpect(jsonPath("$.decisionCards[0].confirmed").value(true))
+                .andExpect(jsonPath("$.decisionCards[0].cells.learning").value("실패 응답은 한 곳에서"))
+                .andExpect(jsonPath("$.decisionCards[0].followUpQuestions[0].body").value("왜 그 방법을 골랐나요?"))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("report", "retro-report.json"), actual);
+        ContractShape.assertCommonRules(actual);
+
+        mvc.perform(get(base(alice) + "/" + actual.get("id").asString()).session(instructorSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decisionCards.length()").value(1));
     }
 
     /** 계산 칸은 읽을 때 계산 — 만든 뒤 생긴 결정도 보인다. 목록은 createdAt 내림차순. */
@@ -349,6 +393,9 @@ class RetroReportIntegrationTest {
         instructorFeedbacks.saveAndFlush(new InstructorFeedback(decided, instructorUser, "앨리스에게 한 줄",
                 T0.plusSeconds(900)));
         assign(1, "[\"area:auth\"]", true, alice);
+        DecisionCard confirmed = card(alice, pr(5, "[]", alice, 1001L, true), "첫 줄\n둘째 줄", "밥에게 배운 점");
+        followUpQuestions.saveAndFlush(new FollowUpQuestion(confirmed, instructorUser, "앨리스는 왜?",
+                T0.plusSeconds(1200)));
         RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
         em.clear();
 
@@ -358,12 +405,15 @@ class RetroReportIntegrationTest {
         assertThat(response.getContentType()).isEqualTo("text/markdown;charset=UTF-8");
         assertThat(response.getContentAsString(StandardCharsets.UTF_8))
                 .contains("# 최종 회고 리포트", "- 만든 시각: 2026-11-01T00:00:00Z",
-                        "맡은 이슈 1개(닫힘 1) · 작성한 PR 0개(머지 0) · 올린 안건 1건(결론 1)", "- area:auth",
+                        "맡은 이슈 1개(닫힘 1) · 작성한 PR 1개(머지 1) · 올린 안건 1건(결론 1)", "- area:auth",
                         "## 내가 배운 점\n\n- 없음",
                         "### @팀원 A 질문과 팀원 B 답",
                         "- 결론: 팀원 A과 팀원 C이 맞춘다 — alicebot은 그대로",
                         "- 배운 점: 배운 점 @팀원 A 질문과 팀원 B 답",
-                        "- 2026-11-01T00:15:00Z 강사: 팀원 B에게 한 줄")
+                        "- 2026-11-01T00:15:00Z 강사: 팀원 B에게 한 줄",
+                        "## 기술 결정 카드\n\n### 확인한 카드 — 2026-11-01T00:18:20Z\n\n"
+                                + "- 무엇을 하려 했나: 첫 줄\n  둘째 줄\n- 내가 배운 점: 팀원 A에게 배운 점\n"
+                                + "- 2026-11-01T00:20:00Z 강사 꼬리질문: 팀원 B는 왜?\n")
                 .doesNotContain("앨리스", "밥", "캐럴", "@bob", "Carol", "instructor");
     }
 
