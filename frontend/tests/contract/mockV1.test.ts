@@ -5,6 +5,7 @@ import { afterEach, describe, it, mock } from 'node:test'
 import { DataError, type DataErrorCode } from '../../src/data/DataSource'
 import { createMemoryStorage, createSharedMemoryStorage, type StorageLike } from '../../src/data/mock'
 import { createV1MockDataSource, V1_STORAGE_KEY, type MockSession } from '../../src/data/mock/v1'
+import { MOCK_STATE_VERSION } from '../../src/data/mock/v1/seed'
 import type { Change, OpenWorkspaceRequest } from '../../src/data/types'
 import { workspaceSnapshotExample } from './examples'
 
@@ -373,10 +374,21 @@ describe('mock v1 — 동기화', () => {
     it('버전은 맞지만 사무실 항목이 깨진 저장값은 TypeError 없이 seed로 다시 시작한다', async () => {
       for (const broken of [[{}], [{ snapshot: { workspace: { id: 'ws_x' } }, consentedUserIds: [] }], ['nope']]) {
         const storage = createMemoryStorage()
-        storage.setItem(V1_STORAGE_KEY, JSON.stringify({ version: 1, session: 'github', nextId: 100, workspaces: broken }))
+        storage.setItem(V1_STORAGE_KEY, JSON.stringify({ version: MOCK_STATE_VERSION, session: 'github', nextId: 100, workspaces: broken }))
         const source = quiet(() => tab(storage))
         assert.deepEqual((await source.listWorkspaces()).map((w) => w.id).sort(), [DEMO_WS, TEAM_WS].sort(), JSON.stringify(broken))
       }
+    })
+
+    it('저장 버전이 다른(옛) 데이터는 읽지 않고 지금 seed로 다시 시작한다', async () => {
+      const storage = createMemoryStorage()
+      tab(storage, 'github')
+      const saved = JSON.parse(storage.getItem(V1_STORAGE_KEY) ?? 'null')
+      saved.version = MOCK_STATE_VERSION - 1
+      saved.workspaces[0].snapshot.flow.averageReviewWaitHours = null // 옛 seed 모양
+      storage.setItem(V1_STORAGE_KEY, JSON.stringify(saved))
+      const source = quiet(() => tab(storage))
+      assert.equal((await source.load(TEAM_WS)).flow.averageReviewWaitHours, 6.5)
     })
   })
 

@@ -30,7 +30,7 @@ export interface MockWorkspace {
 }
 
 export interface MockState {
-  version: 1
+  version: typeof MOCK_STATE_VERSION
   session: MockSession | null
   /** 새로 만드는 행의 ID 번호 */
   nextId: number
@@ -42,7 +42,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 1
+export const MOCK_STATE_VERSION = 2 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24)
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -338,7 +338,8 @@ function teamWorkspace(now: Date): MockWorkspace {
       tasks,
       submissions,
       ...emptyCollections(),
-      flow: computeFlow({ members, tasks, submissions }),
+      // 평균 리뷰 대기는 서버가 계산한다(FR-FLOW-05). mock은 상단 바를 그려 보려고 예시 값만 둔다
+      flow: { ...computeFlow({ members, tasks, submissions }), averageReviewWaitHours: 6.5 },
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
   }
