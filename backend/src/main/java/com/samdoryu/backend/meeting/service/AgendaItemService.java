@@ -23,6 +23,7 @@ import com.samdoryu.backend.meeting.repository.MeetingRepository;
 import com.samdoryu.backend.realtime.SnapshotResource;
 import com.samdoryu.backend.realtime.WorkspaceEventHub;
 import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.service.SyncedItemService;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
@@ -126,7 +127,8 @@ public class AgendaItemService {
 
     /**
      * 결정 기록(FR-MTG-04) → {@code discussed}. 올린 사람이 아니어도 된다. 검사 순서는 대상(404 — 같은 사무실 것만) →
-     * {@code confirmed}가 아님(409) → PR 결정이 종류와 맞지 않음 · 후속 담당자가 지금 팀원이 아님(400) → 다룬 회의(404).
+     * {@code confirmed}가 아님(409) → PR 결정이 종류와 맞지 않음(400) → 머지 · 닫힌 PR에 {@code revise_and_reevaluate}(409 —
+     * CONTRACTS.md 「3」 평가 회차, 계약 49b9bf0) → 후속 담당자가 지금 팀원이 아님(400) → 다룬 회의(404).
      * 같은 트랜잭션에서 {@code revise_and_reevaluate}면 새 평가 회차를, 도움 요청 안건이면 그 도움 요청을 {@code ended}로.
      *
      * @param decidedByMemberId 세션 사용자의 그 사무실 팀원 ID(강사는 Controller에서 이미 거부됨)
@@ -140,6 +142,10 @@ public class AgendaItemService {
         }
         if ((request.prDecision() != null) != (item.getKind() == AgendaKind.PR)) {
             throw new ApiException(ErrorCode.INVALID, "PR 안건은 PR 결정을 골라야 하고, 다른 안건에는 PR 결정이 없어요");
+        }
+        if (request.prDecision() == PrDecision.REVISE_AND_REEVALUATE && isMergedOrClosed(item.getSourceSubmission())) {
+            // 닫힌 PR의 마지막 회차가 0표 회차로 바뀌지 않게 — 결정 전체를 거부하고 회차를 열지 않는다
+            throw new ApiException(ErrorCode.CONFLICT, "머지되거나 닫힌 PR은 다시 평가할 수 없어요");
         }
         Member followUpAssignee = null;
         if (request.followUpAssigneeMemberId() != null) {
@@ -205,6 +211,10 @@ public class AgendaItemService {
                 entityManager.getReference(AppUser.class, instructorUserId), request.body(), Instant.now()));
         eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
         return InstructorFeedbackDto.of(feedback);
+    }
+
+    private static boolean isMergedOrClosed(Submission submission) {
+        return submission.getState() == SubmissionState.MERGED || submission.getState() == SubmissionState.CLOSED;
     }
 
     private AgendaItem requireItem(Long workspaceId, Long agendaItemId) {

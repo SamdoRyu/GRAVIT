@@ -274,6 +274,30 @@ class AgendaDecisionIntegrationTest {
         assertThat(rounds.findBySubmissionIdOrderByRoundNumberDesc(pr.getId())).isEmpty();
     }
 
+    /** 계약 49b9bf0 — 머지 · 닫힌 PR에 revise_and_reevaluate는 409. 회차를 열지 않고 마지막 회차가 그대로 남는다. 다른 PR 결정은 기록한다. */
+    @Test
+    void reviseOnMergedOrClosedPullRequestIs409() throws Exception {
+        int number = 3;
+        for (SubmissionState state : List.of(SubmissionState.MERGED, SubmissionState.CLOSED)) {
+            Submission done = submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(number++)
+                    .title("끝난 PR").authorGithubUserId(1001L).authorMember(alice).state(state).headSha(SHA)
+                    .reviewRequestsJson("[]").reviewsJson("[]").labelsJson("[]").githubCreatedAt(PAST)
+                    .githubUpdatedAt(PAST).stateChangedAt(PAST).syncedAt(PAST).build());
+            EvaluationRound last = rounds.saveAndFlush(new EvaluationRound(done, 1, SHA, RoundOpenedReason.NEW_PR, PAST));
+            AgendaItem item = agendaItems.saveAndFlush(
+                    AgendaItem.forSubmission(ws, done, last.getId(), "끝난 PR", null, null, null, alice, PAST));
+
+            decide(ws, bobSession, item, body("revise_and_reevaluate", null, null))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error.code").value("conflict"));
+            assertThat(rounds.findBySubmissionIdOrderByRoundNumberDesc(done.getId())).as(state.value())
+                    .singleElement().satisfies(round -> assertThat(round.getClosedAt()).isNull());
+
+            decide(ws, bobSession, item, body("merge_as_is", null, null)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("discussed"));
+        }
+    }
+
     /** 도움 요청 안건의 결정 → 그 도움 요청은 ended(같은 트랜잭션). */
     @Test
     void helpRequestAgendaEndsTheHelpRequest() throws Exception {
