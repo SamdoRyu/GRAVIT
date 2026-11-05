@@ -1,5 +1,6 @@
 package com.samdoryu.backend.report.service;
 
+import com.samdoryu.backend.auth.service.AppUserService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
@@ -15,6 +16,7 @@ import com.samdoryu.backend.report.domain.DecisionCard;
 import com.samdoryu.backend.report.domain.DecisionCardCells;
 import com.samdoryu.backend.report.domain.FollowUpQuestion;
 import com.samdoryu.backend.report.dto.DecisionCardDto;
+import com.samdoryu.backend.report.dto.DecisionCardDto.FollowUpQuestionDto;
 import com.samdoryu.backend.report.repository.DecisionCardRepository;
 import com.samdoryu.backend.report.repository.FollowUpQuestionRepository;
 import com.samdoryu.backend.requirement.dto.RequirementLinkDto;
@@ -41,7 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 기술 결정 카드(FR-REP-07 · P11 · CONTRACTS_API 「15」). 개인 기록 — 공통 접근 규칙: 경로의 팀원이 그 사무실 팀원(빠진 팀원 포함)이
  * 아니면 {@code not_found}, 읽기는 본인 · 지정된 강사, 쓰기는 본인만(다른 학생 · 강사 {@code forbidden_role}). 사무실 접근은
- * Controller가 끝낸 뒤 부른다. Snapshot · SSE에 싣지 않는다. 꼬리질문 요청 · 쓰기는 #59.
+ * Controller가 끝낸 뒤 부른다. Snapshot · SSE에 싣지 않는다. 강사 꼬리질문(#59 · FR-REP-11)은 본인이 요청한 카드에만
+ * 지정된 강사가 쓴다.
  */
 @Service
 public class DecisionCardService {
@@ -60,12 +63,14 @@ public class DecisionCardService {
     private final AgendaItemService agendaItemService;
     private final MeetingService meetingService;
     private final StandupService standupService;
+    private final AppUserService appUserService;
 
     public DecisionCardService(DecisionCardRepository decisionCardRepository,
             FollowUpQuestionRepository followUpQuestionRepository, WorkspaceService workspaceService,
             SyncedItemService syncedItemService, EvaluationRoundService evaluationRoundService,
             RequirementService requirementService, RequirementLinkService requirementLinkService,
-            AgendaItemService agendaItemService, MeetingService meetingService, StandupService standupService) {
+            AgendaItemService agendaItemService, MeetingService meetingService, StandupService standupService,
+            AppUserService appUserService) {
         this.decisionCardRepository = decisionCardRepository;
         this.followUpQuestionRepository = followUpQuestionRepository;
         this.workspaceService = workspaceService;
@@ -76,6 +81,7 @@ public class DecisionCardService {
         this.agendaItemService = agendaItemService;
         this.meetingService = meetingService;
         this.standupService = standupService;
+        this.appUserService = appUserService;
     }
 
     /** {@code GET W/members/{memberId}/decision-cards} — createdAt 내림차순. 본인 · 지정된 강사. */
@@ -135,14 +141,52 @@ public class DecisionCardService {
             boolean confirmed) {
         workspaceService.requireMember(access.workspaceId(), memberId);
         access.requireSelf(memberId);
-        DecisionCard card = decisionCardRepository.findByIdAndMemberId(cardId, memberId)
-                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        DecisionCard card = requireCard(memberId, cardId);
         if (confirmed && !cells.hasLearning()) {
             throw new ApiException(ErrorCode.INVALID, "확인하려면 내가 배운 점을 써 주세요");
         }
         card.edit(cells, confirmed, now());
         return DecisionCardDto.of(card,
                 followUpQuestionRepository.findWithInstructorByDecisionCardIds(List.of(card.getId())));
+    }
+
+    /**
+     * {@code POST W/members/{memberId}/decision-cards/{cardId}/follow-up-request}(FR-REP-11) — 본인이 강사 꼬리질문을 요청한다
+     * → {@code followUpRequested: true}. 이미 켜져 있으면 처음 요청 시각 그대로 돌려준다. 다른 팀원의 카드 ID면 {@code not_found}.
+     * 요청을 끄는 API는 없다. 강사 요청함(#58)은 이 값을 읽을 때 계산한다.
+     */
+    @Transactional
+    public DecisionCardDto requestFollowUp(WorkspaceAccess access, Long memberId, Long cardId) {
+        workspaceService.requireMember(access.workspaceId(), memberId);
+        access.requireSelf(memberId);
+        DecisionCard card = requireCard(memberId, cardId);
+        card.requestFollowUp(now());
+        return DecisionCardDto.of(card,
+                followUpQuestionRepository.findWithInstructorByDecisionCardIds(List.of(card.getId())));
+    }
+
+    /**
+     * {@code POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions}(FR-REP-11 · P13) — 지정된 강사가 꼬리질문을
+     * 직접 쓴다(AI 없음). 9칸과 따로 붙고 카드의 수정 시각 · 확인 여부는 바꾸지 않는다. 검사 순서: 팀원 아님 {@code not_found} →
+     * 강사 아님(학생 · 본인도) {@code forbidden_role} → 다른 팀원의 카드 ID {@code not_found} → 꼬리질문을 요청하지 않은 카드
+     * {@code forbidden_role}(강사 쓰기는 요청된 건만 — FR-AUTH-08).
+     */
+    @Transactional
+    public FollowUpQuestionDto addFollowUpQuestion(WorkspaceAccess access, Long memberId, Long cardId, String body) {
+        workspaceService.requireMember(access.workspaceId(), memberId);
+        access.requireInstructor();
+        DecisionCard card = requireCard(memberId, cardId);
+        if (card.getFollowUpRequestedAt() == null) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE, "꼬리질문을 요청한 카드에만 쓸 수 있어요");
+        }
+        FollowUpQuestion question = followUpQuestionRepository.save(
+                new FollowUpQuestion(card, appUserService.require(access.userId()), body, now()));
+        return FollowUpQuestionDto.of(question);
+    }
+
+    private DecisionCard requireCard(Long memberId, Long cardId) {
+        return decisionCardRepository.findByIdAndMemberId(cardId, memberId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
     }
 
     /** 카드 재료 — 앱이 가진 것만, 모두 그 사무실 조건으로 읽는다. */
