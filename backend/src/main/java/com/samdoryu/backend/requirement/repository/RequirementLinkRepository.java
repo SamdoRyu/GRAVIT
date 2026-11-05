@@ -17,4 +17,7 @@ public interface RequirementLinkRepository extends JpaRepository<RequirementLink
     /** 사무실의 연결 전부 — 진행률(연결 · 닫힌 이슈 수)을 세려고 이슈를 함께 읽는다. */
     @EntityGraph(attributePaths = "task")
     List<RequirementLink> findByRequirementWorkspaceId(Long workspaceId);
+
+    /** Snapshot {@code requirementLinks} — 연결한 순서. */
+    List<RequirementLink> findByRequirementWorkspaceIdOrderByLinkedAtAscIdAsc(Long workspaceId);
 }
