@@ -3,6 +3,7 @@
 // 다루면 바로 드러나게 한다(CONTRACTS.md 「2」 변환 경계). GitHub 식별자는 10진 문자열이다.
 // 요구사항 · 연결 · 안건 · 회의 · 도움 요청 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []).
 import type {
+  EvaluationRoundDto,
   FlowSummary,
   Id,
   Instant,
@@ -33,6 +34,8 @@ export interface MockWorkspace {
    * 평가자 없는 예시라 그대로 두고, 읽을 때 이것과 합친다. 없으면 빈 목록(이 칸이 생기기 전 저장값 포함)
    */
   evaluations?: MockEvaluation[]
+  /** 회의 결정 revise_and_reevaluate로 닫힌 지난 평가 회차 (#102 — 회의 · 안건). 없으면 빈 목록 */
+  pastRounds?: { submissionId: Id; round: EvaluationRoundDto }[]
 }
 
 export interface MockEvaluation {

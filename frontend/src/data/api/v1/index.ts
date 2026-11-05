@@ -6,7 +6,15 @@ import { DataError, type DataErrorCode, type DataSource } from '../../DataSource
 import type {
   Change,
   ConnectionStatus,
+  AgendaItemCreateRequest,
+  AgendaItemDto,
+  DecisionRequest,
+  EndMeetingRequest,
   ErrorCode,
+  MeetingDto,
+  StartMeetingRequest,
+  TaskDueDateDto,
+  TaskDueDateRequest,
   EvaluateRequest,
   EvaluationRoundDto,
   Id,
@@ -95,6 +103,8 @@ async function toError(res: Response): Promise<DataError> {
 
 const workspacePath = (workspaceId: Id) => `/api/workspaces/${encodeURIComponent(workspaceId)}`
 const submissionPath = (workspaceId: Id, submissionId: Id) => `${workspacePath(workspaceId)}/submissions/${encodeURIComponent(submissionId)}`
+const agendaPath = (workspaceId: Id, agendaItemId: Id) => `${workspacePath(workspaceId)}/agenda-items/${encodeURIComponent(agendaItemId)}`
+const taskPath = (workspaceId: Id, taskId: Id) => `${workspacePath(workspaceId)}/tasks/${encodeURIComponent(taskId)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -319,6 +329,18 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     listRounds: async (workspaceId, submissionId) => json<EvaluationRoundDto[]>(await read(`${submissionPath(workspaceId, submissionId)}/rounds`)),
     evaluate: async (workspaceId, submissionId, request: EvaluateRequest) =>
       json<EvaluationRoundDto>(await write('PUT', `${submissionPath(workspaceId, submissionId)}/evaluations/mine`, request)),
+
+    startMeeting: async (workspaceId, request: StartMeetingRequest) => json<MeetingDto>(await write('POST', `${workspacePath(workspaceId)}/meetings`, request)),
+    endMeeting: async (workspaceId, meetingId, request: EndMeetingRequest) =>
+      json<MeetingDto>(await write('POST', `${workspacePath(workspaceId)}/meetings/${encodeURIComponent(meetingId)}/end`, request)),
+    createAgendaItem: async (workspaceId, request: AgendaItemCreateRequest) => json<AgendaItemDto>(await write('POST', `${workspacePath(workspaceId)}/agenda-items`, request)),
+    withdrawAgendaItem: async (workspaceId, agendaItemId) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/withdraw`)),
+    recordDecision: async (workspaceId, agendaItemId, request: DecisionRequest) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/decision`, request)),
+
+    setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
+    async clearDueDate(workspaceId, taskId) {
+      await write('DELETE', `${taskPath(workspaceId, taskId)}/due-date`)
+    },
 
     close() {
       for (const s of streams.values()) {

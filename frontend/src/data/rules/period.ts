@@ -21,6 +21,9 @@ function dayNumberOf(date: string): number | null {
   return Math.round(t / DAY_MS)
 }
 
+/** 계약의 LocalDate("YYYY-MM-DD", 있는 날짜)인가 */
+export const isLocalDate = (v: unknown): v is LocalDate => typeof v === 'string' && dayNumberOf(v) !== null
+
 export type ProjectPhase = 'before' | 'during' | 'end_day' | 'after'
 
 export interface ProjectDay {

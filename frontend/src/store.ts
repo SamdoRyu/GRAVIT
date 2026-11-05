@@ -3,7 +3,7 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, Change, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceListItem, WorkspaceSnapshot } from './data/types'
+import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceListItem, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -102,6 +102,25 @@ interface OfficeState {
   evaluateSubmission: (submissionId: Id, request: EvaluateRequest) => Promise<EvaluationRoundDto | null>
   /** PR의 평가 회차 전부(GET rounds — 현재 회차가 처음). 실패하면 알림 후 null */
   loadRounds: (submissionId: Id) => Promise<EvaluationRoundDto[] | null>
+
+  // ---- 회의 · 안건 · 작업 마감 (#102 T5-c-2 — C의 회의 대화상자 · 일정판이 부른다) ----
+  // 모두: 사무실이 없으면 보내지 않고 null(false). 성공하면 응답을 snapshot에 바로 반영하고 결과를 돌려준다.
+  // 실패하면 사유를 알림으로 보이고 null(false). conflict(이미 진행 중 · 이미 결정됨 등)면 Snapshot을 다시 읽는다.
+  // 이름이 데모 액션(startMeeting · endMeeting · setAgenda …)과 겹치지 않게 했다 — 데모 코드를 지울 때 정리한다.
+  /** POST W/meetings — 참석자는 비어도 됨 */
+  startOfficeMeeting: (attendeeMemberIds: Id[]) => Promise<MeetingDto | null>
+  /** POST W/meetings/{id}/end — 회의록 0~5000자(null 가능) */
+  endOfficeMeeting: (meetingId: Id, notes: string | null) => Promise<MeetingDto | null>
+  /** POST W/agenda-items — 이슈 · PR · 배운 점 · 기타 안건 올리기 */
+  raiseAgendaItem: (request: AgendaItemCreateRequest) => Promise<AgendaItemDto | null>
+  /** POST W/agenda-items/{id}/withdraw — 올린 사람만, 결정 전만 */
+  withdrawAgendaItem: (agendaItemId: Id) => Promise<AgendaItemDto | null>
+  /** POST W/agenda-items/{id}/decision — 결론 · 배운 점 · PR 결정 · 후속 담당 */
+  recordAgendaDecision: (agendaItemId: Id, request: DecisionRequest) => Promise<AgendaItemDto | null>
+  /** PUT W/tasks/{id}/due-date — R2 또는 그 이슈 담당자 */
+  setTaskDueDate: (taskId: Id, dueDate: LocalDate) => Promise<boolean>
+  /** DELETE W/tasks/{id}/due-date */
+  clearTaskDueDate: (taskId: Id) => Promise<boolean>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -226,6 +245,8 @@ function assignPatch(tasks: Record<Id, Task>, t: Task, memberId: Id | null): Tas
   return patch
 }
 
+/** id가 같은 것을 바꾸고, 없으면 뒤에 붙인다 */
+const upsert = <T extends { id: Id }>(list: readonly T[], item: T): T[] => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item])
 const byId = <T extends { id: Id }>(list: T[]) => Object.fromEntries(list.map((x) => [x.id, x])) as Record<Id, T>
 const isNotFound = (e: unknown) => e instanceof DataError && e.code === 'not_found'
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '요청을 처리하지 못했어요')
@@ -308,6 +329,27 @@ export const useOffice = create<OfficeState>((set, get) => {
       syncDuringLoad = null
       const current = get().office
       if (current) set({ office: { ...current, status: current.snapshot ? 'ready' : 'error', error: toOfficeError(e) } })
+    }
+  }
+
+  /**
+   * v1 사무실 쓰기 한 번. 사무실이 없으면 보내지 않고 null. 성공하면 patch로 snapshot을 바로 고친다(그 사이 사무실을
+   * 닫거나 바꿨으면 버린다). 실패하면 알림 후 null — conflict면 지금 값을 다시 읽어 화면을 맞춘다.
+   */
+  const officeWrite = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>, patch: (snapshot: WorkspaceSnapshot, result: T) => WorkspaceSnapshot): Promise<T | null> => {
+    const src = officeSource
+    const office = get().office
+    if (!src || !office) return null
+    const gen = officeGen
+    try {
+      const result = await run(src, office.workspaceId)
+      const current = get().office
+      if (gen === officeGen && current?.snapshot) set({ office: { ...current, snapshot: patch(current.snapshot, result) } })
+      return result
+    } catch (e) {
+      fail(e)
+      if (e instanceof DataError && e.code === 'conflict' && gen === officeGen) void loadOffice(gen)
+      return null
     }
   }
 
@@ -450,6 +492,46 @@ export const useOffice = create<OfficeState>((set, get) => {
         return null
       }
     },
+
+    // ---- 회의 · 안건 · 작업 마감 (#102 T5-c-2) — 응답을 바로 반영하고, 서버의 changed 알림으로 다시 읽는다 ----
+    startOfficeMeeting: (attendeeMemberIds) =>
+      officeWrite(
+        (src, ws) => src.startMeeting(ws, { attendeeMemberIds }),
+        (snap, meeting) => ({ ...snap, meetings: upsert(snap.meetings, meeting) }),
+      ),
+    endOfficeMeeting: (meetingId, notes) =>
+      officeWrite(
+        (src, ws) => src.endMeeting(ws, meetingId, { notes }),
+        (snap, meeting) => ({ ...snap, meetings: upsert(snap.meetings, meeting) }),
+      ),
+    raiseAgendaItem: (request) =>
+      officeWrite(
+        (src, ws) => src.createAgendaItem(ws, request),
+        (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+      ),
+    withdrawAgendaItem: (agendaItemId) =>
+      officeWrite(
+        (src, ws) => src.withdrawAgendaItem(ws, agendaItemId),
+        (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+      ),
+    recordAgendaDecision: (agendaItemId, request) =>
+      officeWrite(
+        (src, ws) => src.recordDecision(ws, agendaItemId, request),
+        (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+      ),
+    setTaskDueDate: async (taskId, dueDate) =>
+      (await officeWrite(
+        (src, ws) => src.setDueDate(ws, taskId, { dueDate }),
+        (snap, saved) => ({ ...snap, tasks: snap.tasks.map((t) => (t.id === saved.taskId ? { ...t, dueDate: saved.dueDate } : t)) }),
+      )) !== null,
+    clearTaskDueDate: async (taskId) =>
+      (await officeWrite(
+        async (src, ws) => {
+          await src.clearDueDate(ws, taskId)
+          return true as const
+        },
+        (snap) => ({ ...snap, tasks: snap.tasks.map((t) => (t.id === taskId ? { ...t, dueDate: null } : t)) }),
+      )) !== null,
 
     selection: null,
     // 데모 쪽을 고르면 v1 상세는 닫는다(상세 서랍은 하나)

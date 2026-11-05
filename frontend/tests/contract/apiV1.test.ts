@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { meResponseExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, meResponseExample, meetingExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -126,6 +126,18 @@ async function startFake(): Promise<Fake> {
       if (r.method === 'PUT' && sub[3] === 'evaluations/mine') {
         const { verdict, reason } = JSON.parse(r.body) as { verdict: string; reason: string }
         return sendJson(res, 200, { ...round, myEvaluation: { verdict, reason, updatedAt: '2026-11-05T03:10:00Z' } })
+      }
+    }
+    // 「10」 회의 · 안건 · 「13」 작업 마감 — 경로 · 메서드만 맞으면 예시를 돌려준다
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/meetings$/.test(path)) return sendJson(res, 201, meetingExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/meetings\/[^/]+\/end$/.test(path)) return sendJson(res, 200, { ...meetingExample, status: 'ended' })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items$/.test(path)) return sendJson(res, 201, agendaItemExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/(withdraw|decision)$/.test(path)) return sendJson(res, 200, agendaItemExample)
+    if (/^\/api\/workspaces\/[^/]+\/tasks\/[^/]+\/due-date$/.test(path)) {
+      if (r.method === 'PUT') return sendJson(res, 200, { taskId: '7', dueDate: (JSON.parse(r.body) as { dueDate: string }).dueDate, updatedAt: '2026-11-05T03:10:00Z', updatedBy: meResponseExample.user })
+      if (r.method === 'DELETE') {
+        res.writeHead(204)
+        return res.end()
       }
     }
     sendError(res, 404, 'not_found', '없는 경로예요')
@@ -257,6 +269,41 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.updateSettings('3', { ...next, projectEndDate: '2026-11-01' }), 'invalid', '끝 날짜는 시작 날짜보다 빠를 수 없어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자만 바꿀 수 있어요'))
     await rejectsWith(api.updateSettings('3', next), 'forbidden_role', '레포 관리자만 바꿀 수 있어요')
+  })
+
+  it('회의 · 안건 · 작업 마감 — 경로 · 메서드 · CSRF · JSON 본문, DELETE 204, 409를 그대로 (#102)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    const create = { kind: 'pr' as const, sourceId: '9', title: '실패 응답 모양', background: null, tried: null, unresolvedReason: null }
+    const decide = { conclusion: '고친다', learning: null, prDecision: 'revise_and_reevaluate' as const, followUpAssigneeMemberId: null, followUpDueDate: null, meetingId: '5' }
+    assert.deepEqual(await api.startMeeting('3', { attendeeMemberIds: ['12'] }), meetingExample)
+    assert.equal((await api.endMeeting('3', '5', { notes: '회의록' })).status, 'ended')
+    assert.deepEqual(await api.createAgendaItem('3', create), agendaItemExample)
+    await api.withdrawAgendaItem('3', '7')
+    await api.recordDecision('3', '7', decide)
+    assert.equal((await api.setDueDate('3', '7', { dueDate: '2026-11-09' })).dueDate, '2026-11-09')
+    assert.equal(await api.clearDueDate('3', '7'), undefined)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      [
+        'POST /api/workspaces/3/meetings tok-1',
+        'POST /api/workspaces/3/meetings/5/end tok-1',
+        'POST /api/workspaces/3/agenda-items tok-1',
+        'POST /api/workspaces/3/agenda-items/7/withdraw tok-1',
+        'POST /api/workspaces/3/agenda-items/7/decision tok-1',
+        'PUT /api/workspaces/3/tasks/7/due-date tok-1',
+        'DELETE /api/workspaces/3/tasks/7/due-date tok-1',
+      ],
+    )
+    assert.deepEqual(
+      fake.requests.map((r) => (r.body ? JSON.parse(r.body) : null)),
+      [{ attendeeMemberIds: ['12'] }, { notes: '회의록' }, create, null, decide, { dueDate: '2026-11-09' }, null],
+    )
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '이미 진행 중인 회의가 있어요'))
+    await rejectsWith(api.startMeeting('3', { attendeeMemberIds: [] }), 'conflict', '이미 진행 중인 회의가 있어요')
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요'))
+    await rejectsWith(api.clearDueDate('3', '7'), 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요')
   })
 
   it('PR 평가 — GET rounds · PUT evaluations/mine, PUT은 CSRF와 JSON 본문, 400 · 403 · 409를 그대로 (#19 · #20)', async () => {

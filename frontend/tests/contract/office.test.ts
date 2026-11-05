@@ -547,3 +547,71 @@ describe('store — PR 평가 (#19 · #20)', () => {
     assert.deepEqual(rounds, [round(OTHERS)])
   })
 })
+
+describe('store — 회의 · 안건 · 작업 마감 (#102 T5-c-2)', () => {
+  const snap = () => office()!.snapshot!
+  const flush = () => new Promise<void>((r) => setImmediate(r))
+
+  it('회의 시작 · 끝 — 응답이 snapshot.meetings에 바로 들어간다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const started = await useOffice.getState().startOfficeMeeting(['m_1'])
+    assert.equal(started?.status, 'ongoing')
+    assert.deepEqual(snap().meetings, [started])
+    const ended = await useOffice.getState().endOfficeMeeting(started!.id, '회의록')
+    assert.deepEqual(snap().meetings, [ended])
+    assert.equal(ended?.notes, '회의록')
+  })
+
+  it('안건 올리기 · 결정 · 거두기 — snapshot.agendaItems에 반영', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const st = useOffice.getState()
+    const a = await st.raiseAgendaItem({ kind: 'learning', sourceId: null, title: '배운 점', background: null, tried: null, unresolvedReason: null })
+    const b = await st.raiseAgendaItem({ kind: 'other', sourceId: null, title: '기타', background: null, tried: null, unresolvedReason: null })
+    assert.deepEqual(snap().agendaItems.map((x) => x.id), [a!.id, b!.id])
+    const decided = await st.recordAgendaDecision(a!.id, { conclusion: '공유했다', learning: null, prDecision: null, followUpAssigneeMemberId: null, followUpDueDate: null, meetingId: null })
+    const withdrawn = await st.withdrawAgendaItem(b!.id)
+    assert.deepEqual(snap().agendaItems.map((x) => x.status), ['discussed', 'withdrawn'])
+    assert.equal(decided?.decision?.conclusion, '공유했다')
+    assert.equal(withdrawn?.status, 'withdrawn')
+  })
+
+  it('거부 — null · 실패 알림, conflict(진행 중 회의)면 Snapshot을 다시 읽는다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    await useOffice.getState().startOfficeMeeting([])
+    const loads = h.loads()
+    const toasts = useOffice.getState().toasts.length
+    assert.equal(await useOffice.getState().startOfficeMeeting([]), null)
+    assert.equal(useOffice.getState().toasts.at(-1)?.level, 'bad')
+    assert.equal(useOffice.getState().toasts.length, toasts + 1)
+    for (let i = 0; i < 5; i++) await flush()
+    assert.equal(h.loads(), loads + 1)
+    // invalid는 다시 읽지 않는다
+    assert.equal(await useOffice.getState().raiseAgendaItem({ kind: 'issue', sourceId: null, title: 'x', background: null, tried: null, unresolvedReason: null }), null)
+    for (let i = 0; i < 5; i++) await flush()
+    assert.equal(h.loads(), loads + 1)
+  })
+
+  it('작업 마감 — 담당 이슈는 true와 함께 snapshot.tasks의 dueDate가 바뀌고, 남의 이슈는 false', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const due = (id: string) => snap().tasks.find((t) => t.id === id)!.dueDate
+    assert.equal(await useOffice.getState().setTaskDueDate('t_2', '2026-11-09'), true)
+    assert.equal(due('t_2'), '2026-11-09')
+    assert.equal(await useOffice.getState().clearTaskDueDate('t_2'), true)
+    assert.equal(due('t_2'), null)
+    const before = due('t_6')
+    assert.equal(await useOffice.getState().setTaskDueDate('t_6', '2026-11-09'), false)
+    assert.equal(due('t_6'), before)
+  })
+
+  it('사무실이 없으면 보내지 않고 null · false', async () => {
+    const st = useOffice.getState()
+    assert.equal(await st.startOfficeMeeting([]), null)
+    assert.equal(await st.withdrawAgendaItem('ag_1'), null)
+    assert.equal(await st.setTaskDueDate('t_2', '2026-11-09'), false)
+    assert.equal(await st.clearTaskDueDate('t_2'), false)
+  })
+})
