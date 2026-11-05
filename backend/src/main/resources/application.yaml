@@ -51,6 +51,8 @@ app:
   review-login-enabled: ${REVIEW_LOGIN_ENABLED:false}
   # GitHub App name (URL slug) for the "install / request approval" link on the repository screen (P2). Empty = no link.
   github-app-slug: ${GITHUB_APP_SLUG:}
+  # Master admin (ROLE-03, FR-AUTH-03): GitHub login name. v1 grants it no screen, API or extra data access. Empty = none.
+  master-admin-github-login: ${MASTER_ADMIN_GITHUB_LOGIN:}
   # GitHub App credentials for server-side sync (installation tokens). Unset = real-workspace sync is recorded as unavailable.
   # The private key file lives in secrets/ (git-ignored) — never commit it.
   github-app:

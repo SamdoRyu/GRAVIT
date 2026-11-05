@@ -14,7 +14,7 @@ import java.util.List;
  * @param authorMemberId 작성자가 팀원이 아니면 null
  * @param suggestedReviewerMemberIds 추천 리뷰어(FR-FLOW-04 — Should). 아직 계산하지 않아 빈 목록
  * @param linkedTaskIds GitHub 공식 연결만
- * @param isBlocked 서버 계산(FR-FLOW-01) — #22 전에는 false
+ * @param isBlocked 서버 계산(FR-FLOW-01) — {@link #of}는 false로 만들고 Snapshot이 {@link #withBlocked}로 채운다
  * @param currentRound 가장 최근 회차(「9」). PR이 닫혀도 마지막 회차를 보인다. 회차가 없으면 null —
  *        {@link #of}는 null로 만들고 Snapshot이 {@link #withCurrentRound}로 채운다
  */
@@ -81,5 +81,13 @@ public record SubmissionDto(
                 reviewRequestedMemberIds, reviews, suggestedReviewerMemberIds, labels, priority, linkedTaskIds,
                 isBlocked, htmlUrl, githubCreatedAt, githubUpdatedAt, mergedAt, closedAt, lastCommitAt, stateChangedAt,
                 syncedAt, round);
+    }
+
+    /** 막힘 계산(flow 패키지 BlockedRule)을 붙인 사본. */
+    public SubmissionDto withBlocked(boolean blocked) {
+        return new SubmissionDto(id, githubPrNumber, title, authorMemberId, authorGithubLogin, state, headSha,
+                reviewRequestedMemberIds, reviews, suggestedReviewerMemberIds, labels, priority, linkedTaskIds,
+                blocked, htmlUrl, githubCreatedAt, githubUpdatedAt, mergedAt, closedAt, lastCommitAt, stateChangedAt,
+                syncedAt, currentRound);
     }
 }

@@ -6,6 +6,7 @@
 import type {
   AgendaItemCreateRequest,
   AgendaItemDto,
+  DecisionRequest,
   ErrorResponse,
   EvaluateRequest,
   HelpCommentCreateRequest,
@@ -51,6 +52,16 @@ export const agendaItemCreateRequestExample = {
   tried: '로컬에서 401 응답 확인',
   unresolvedReason: '추천·비추천 의견이 갈림',
 } satisfies AgendaItemCreateRequest
+
+// contract/examples/meeting/decision-request.json — CONTRACTS_API.md 「10」
+export const decisionRequestExample = {
+  conclusion: '에러 응답을 계약 모양으로 맞추고 다시 평가받는다',
+  learning: '에러 응답 모양은 전역 예외 처리 한 곳에서 바꾼다',
+  prDecision: 'revise_and_reevaluate',
+  followUpAssigneeMemberId: '3',
+  followUpDueDate: '2026-11-07',
+  meetingId: '5',
+} satisfies DecisionRequest
 
 // contract/examples/meeting/agenda-item.json — CONTRACTS_API.md 「10」
 export const agendaItemExample = {
@@ -321,6 +332,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-summary.json': helpRequestSummaryExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
+  'meeting/decision-request.json': decisionRequestExample,
   'meeting/meeting.json': meetingExample,
   'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,

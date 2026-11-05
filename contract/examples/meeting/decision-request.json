@@ -1,0 +1,1 @@
+{ "conclusion": "에러 응답을 계약 모양으로 맞추고 다시 평가받는다", "learning": "에러 응답 모양은 전역 예외 처리 한 곳에서 바꾼다", "prDecision": "revise_and_reevaluate", "followUpAssigneeMemberId": "3", "followUpDueDate": "2026-11-07", "meetingId": "5" }
