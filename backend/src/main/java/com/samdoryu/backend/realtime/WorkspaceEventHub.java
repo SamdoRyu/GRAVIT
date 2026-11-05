@@ -52,7 +52,10 @@ public class WorkspaceEventHub {
         this.instructorAssignmentService = instructorAssignmentService;
     }
 
-    /** 검사를 마친 연결을 등록한다. */
+    /**
+     * 검사를 마친 연결을 등록한다. 바로 keep-alive 주석을 하나 보내 응답 헤더가 곧장 나가게 한다 — 그러지 않으면 첫
+     * keep-alive(최대 30초)까지 헤더가 나가지 않아 화면이 그동안 "연결 중"에 머문다.
+     */
     public SseEmitter subscribe(WorkspaceAccess access, AppPrincipal principal, String sessionId) {
         SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT.toMillis());
         Subscription subscription = new Subscription(access, principal, sessionId, emitter);
@@ -62,6 +65,7 @@ public class WorkspaceEventHub {
         emitter.onCompletion(remove);
         emitter.onTimeout(remove);
         emitter.onError(error -> remove.run());
+        ping(subscription);
         return emitter;
     }
 
@@ -104,12 +108,16 @@ public class WorkspaceEventHub {
                     close(subscription);
                     continue;
                 }
-                try {
-                    subscription.emitter().send(SseEmitter.event().comment("ping"));
-                } catch (IOException | IllegalStateException e) {
-                    close(subscription);
-                }
+                ping(subscription);
             }
+        }
+    }
+
+    private void ping(Subscription subscription) {
+        try {
+            subscription.emitter().send(SseEmitter.event().comment("ping"));
+        } catch (IOException | IllegalStateException e) {
+            close(subscription);
         }
     }
 

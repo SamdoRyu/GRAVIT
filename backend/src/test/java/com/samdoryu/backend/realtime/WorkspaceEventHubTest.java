@@ -78,6 +78,15 @@ class WorkspaceEventHubTest {
         mvc.perform(get("/api/workspaces/" + WS + "/events").session(stranger)).andExpect(status().isNotFound());
     }
 
+    /** 연결하자마자 주석 하나를 보내 응답 헤더가 바로 나간다 — 첫 keep-alive(최대 30초)까지 화면이 "연결 중"에 머물지 않게. */
+    @Test
+    void connectingSendsAPingCommentAtOnce() throws Exception {
+        MvcResult stream = connect(member());
+
+        assertThat(stream.getResponse().getContentAsString()).isEqualTo(":ping\n\n");
+        assertThat(stream.getResponse().getContentType()).startsWith("text/event-stream");
+    }
+
     @Test
     void keepAliveSendsAPingComment() throws Exception {
         MvcResult stream = connect(member());
