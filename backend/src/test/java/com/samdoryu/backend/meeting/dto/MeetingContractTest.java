@@ -10,6 +10,8 @@ import jakarta.validation.Validator;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
@@ -70,6 +72,22 @@ class MeetingContractTest {
     @Test
     void kindIsRequired() {
         assertThat(VALIDATOR.validate(new AgendaItemCreateRequest(null, null, "a", null, null, null))).hasSize(1);
+    }
+
+    @Test
+    void meetingStartNeedsAttendeeListThatMayBeEmpty() {
+        assertThat(VALIDATOR.validate(new MeetingStartRequest(null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new MeetingStartRequest(Arrays.asList("2", null)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new MeetingStartRequest(List.of()))).isEmpty();
+        assertThat(VALIDATOR.validate(new MeetingStartRequest(List.of("2", "3")))).isEmpty();
+    }
+
+    @Test
+    void meetingNotesAreOptionalUpTo5000Chars() {
+        assertThat(VALIDATOR.validate(new MeetingEndRequest(null))).isEmpty();
+        assertThat(VALIDATOR.validate(new MeetingEndRequest(""))).isEmpty();
+        assertThat(VALIDATOR.validate(new MeetingEndRequest("a".repeat(5000)))).isEmpty();
+        assertThat(VALIDATOR.validate(new MeetingEndRequest("a".repeat(5001)))).hasSize(1);
     }
 
     private static AgendaItemCreateRequest create(String title, String background) {
