@@ -20,15 +20,10 @@
   .hud .rail > .detail { box-shadow: 0 18px 48px rgba(30, 45, 90, 0.22), 0 2px 6px rgba(30, 45, 90, 0.1); }
   /* An open drawer starts below the top bar (var(--top-h), measured), so 회의 / + 작업 / ⋯ stay reachable. */
   .hud.rail-normal .rail, .hud.rail-wide .rail { top: var(--top-h, 76px); transition: width 0.25s ease, top 0.2s ease; }
-  /* The bottom-left stack (toasts + feed) sits under an open drawer and never wider than the space left of it. */
+  /* The bottom-left stack (toasts) sits under an open drawer and never wider than the space left of it. */
   .hud.rail-normal .hud-bottom, .hud.rail-wide .hud-bottom { z-index: 10; max-width: calc(100% - var(--rail-w) - 36px); overflow: hidden; }
   .tabs button { white-space: nowrap; }
   .tab-count, .btn-label { display: none; }
-}
-
-/* the activity feed (expanded) stays short on short screens */
-@media (max-height: 800px) {
-  .feed { max-height: min(260px, 30vh); }
 }
 
 /* ---- touch ---- */
@@ -43,7 +38,6 @@
   .seg button { height: 40px; padding: 0 14px; }
   .search input { height: 40px; }
   .kpi { min-height: 44px; }
-  .balance { min-width: 40px; justify-content: center; }
   .fchip { position: relative; height: 36px; padding: 0 14px; }
   .fchip::after { content: ''; position: absolute; inset: -4px 0; }
   .fchip-lg { height: 40px; }
@@ -58,8 +52,6 @@
   .wk-cell { min-height: 68px; }
   .wk-label.is-member { min-height: 44px; }
   .wk-bar .btn { min-height: 40px; }
-  .feed-btn { min-height: 40px; }
-  .feed-pill { height: 44px; }
   .panel-reopen { height: 44px; }
   .sug-link { min-height: 40px; padding: 0 12px; }
   .sug-pill-main { min-height: 40px; }

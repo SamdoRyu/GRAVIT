@@ -8,7 +8,6 @@ import './panel.css'
 import './dialogs.css'
 import './meeting.css'
 import './responsive.css'
-import { ActivityFeed } from './ActivityFeed'
 import { Dialogs } from './Dialogs'
 import { DragGhost, useTrackPointer } from './DragGhost'
 import { OVERLAY_QUERY, useMediaQuery, useTouchDragGuard } from './hooks'
@@ -148,7 +147,6 @@ export function Hud() {
       <TopBar />
       <div className="hud-bottom">
         <Toasts />
-        <ActivityFeed />
       </div>
       <Rail />
       <Dialogs />

@@ -1,11 +1,10 @@
-// Global keyboard shortcuts. OWNER: ui-builder.
-//   N new task · M start/end meeting · / search · 1-3 overlays · Esc close dialog, else clear selection
+// Global keyboard shortcuts. OWNER: D.
+//   M start/end meeting · / search · Esc close dialog, else clear selection
+//   (데모의 N 새 작업 · 1-3 오버레이는 v1에서 뺐다 — #102 T5-c-2)
 import { useEffect } from 'react'
-import { ongoingMeeting, useOffice, type Overlay } from '../store'
+import { ongoingMeeting, useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 import { useUi } from './uiState'
-
-const OVERLAY_BY_CODE: Record<string, Overlay> = { Digit1: 'none', Digit2: 'deadline', Digit3: 'project' }
 
 function isTyping(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -31,10 +30,7 @@ export function useHotkeys() {
       }
       if (st.dialog || st.drag || useUi.getState().historyOpen) return
 
-      if (e.code === 'KeyN') {
-        e.preventDefault()
-        st.openDialog({ kind: 'task' })
-      } else if (e.code === 'KeyM') {
+      if (e.code === 'KeyM') {
         e.preventDefault()
         const live = ongoingMeeting(st.meetings)
         st.openDialog(live ? { kind: 'endMeeting', meetingId: live.id } : { kind: 'startMeeting' })
@@ -48,8 +44,6 @@ export function useHotkeys() {
           el?.focus()
           if (el instanceof HTMLInputElement) el.select()
         })
-      } else if (e.code in OVERLAY_BY_CODE) {
-        st.setOverlay(OVERLAY_BY_CODE[e.code])
       }
     }
     window.addEventListener('keydown', onKey)

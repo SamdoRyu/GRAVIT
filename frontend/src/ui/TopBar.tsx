@@ -1,52 +1,33 @@
-// Top bar: wordmark, KPI chips, demo toggle, overlay switch, create buttons. OWNER: ui-builder.
+// Top bar: wordmark, v1 팀 지표, 동기화 상태, 회의, 더보기. OWNER: D.
 // 사람별 업무량 표현(업무량 오버레이 · 업무 재배정 추천)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2).
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useShallow } from 'zustand/react/shallow'
-import { MAX_MEMBERS } from '../office/layout'
-import { computeKpis } from '../data/selectors'
-import { ongoingMeeting, useOffice, type Overlay } from '../store'
+// 데모 화면(데모 지표 줄 · 오버레이 · 작업 만들기 · 데모 스위치 · 팀원 추가 · 초기화)도 뺐다 — v1은 GitHub가 원본이다.
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ongoingMeeting, useOffice } from '../store'
 import { AnimatedNumber } from './common'
 import type { FlowSummary, TeamSettings, WorkspaceSnapshot } from '../data/types'
 import { ddayText, kstToday, projectDay } from '../data/rules/period'
-import { cssVars, finiteOrNull, formatDuration, formatHours, formatMonthDay } from './format'
-import { useNow, useProjectList } from './hooks'
+import { finiteOrNull, formatDuration, formatHours, formatMonthDay } from './format'
+import { useNow } from './hooks'
 import { Icon } from './icons'
 import { useUi } from './uiState'
 import { ConnectionBanner } from './Toasts'
 import { SyncStatus } from './SyncStatus'
 
-const OVERLAYS: { id: Overlay; label: string; key: string }[] = [
-  { id: 'none', label: '기본', key: '1' },
-  { id: 'deadline', label: '마감 위험', key: '2' },
-  { id: 'project', label: '프로젝트', key: '3' },
-]
-
-/** Make sure the task lists are visible after a KPI click. */
-function revealTasks() {
-  const ui = useUi.getState()
-  ui.setPanelOpen(true)
-  if (ui.tab === 'week') ui.setTab('kanban')
-}
-
 function Kpi({
   label,
-  bad,
-  active,
   onClick,
   title,
   hint,
   children,
 }: {
   label: string
-  bad?: boolean
-  active?: boolean
   onClick?: () => void
   title?: string
   /** Explanation shown on tap (touch has no hover tooltips). */
   hint?: string
   children: ReactNode
 }) {
-  const cls = `kpi${bad ? ' kpi-bad' : ''}${active ? ' is-active' : ''}`
+  const cls = 'kpi'
   const body = (
     <>
       <span className="kpi-value">{children}</span>
@@ -54,7 +35,7 @@ function Kpi({
     </>
   )
   return onClick ? (
-    <button type="button" className={`${cls} kpi-click`} onClick={onClick} title={title} aria-pressed={active}>
+    <button type="button" className={`${cls} kpi-click`} onClick={onClick} title={title}>
       {body}
     </button>
   ) : hint ? (
@@ -66,12 +47,6 @@ function Kpi({
       {body}
     </div>
   )
-}
-
-function imbalanceLabel(v: number) {
-  if (v < 0.35) return { text: '균형', tone: 'good' as const }
-  if (v < 0.7) return { text: '약간 쏠림', tone: 'warn' as const }
-  return { text: '쏠림', tone: 'bad' as const }
 }
 
 /**
@@ -137,118 +112,6 @@ function NoValue() {
   )
 }
 
-function KpiRow() {
-  const tasks = useOffice((s) => s.tasks)
-  const members = useOffice((s) => s.members)
-  const { overdueOnly, unassignedOnly } = useOffice(
-    useShallow((s) => ({
-      overdueOnly: s.filters.overdueOnly,
-      unassignedOnly: s.filters.assigneeIds.length === 1 && s.filters.assigneeIds[0] === 'unassigned',
-    })),
-  )
-  const kpis = useMemo(() => computeKpis(tasks, members), [tasks, members])
-  const memberCount = Object.keys(members).length
-  const imb = imbalanceLabel(kpis.imbalance)
-  // 특정 팀원 이름(가장 바쁜 팀원)은 보이지 않는다 — 사람별 비교 금지 (FR-FLOW-06, #24)
-  const balanceHint = `업무 편중도: ${imb.text}`
-
-  return (
-    <div className="kpis">
-      <Kpi label="진행 중" hint="진행 중 상태인 작업 수예요">
-        <AnimatedNumber value={kpis.inProgress} />
-      </Kpi>
-      <Kpi
-        label="지연"
-        bad={kpis.overdue > 0}
-        active={overdueOnly}
-        title={overdueOnly ? '지연 필터 끄기' : '지연된 작업만 보기'}
-        onClick={() => {
-          revealTasks()
-          useOffice.getState().setFilters({ overdueOnly: !overdueOnly })
-        }}
-      >
-        <AnimatedNumber value={kpis.overdue} />
-      </Kpi>
-      <Kpi
-        label="미배정"
-        active={unassignedOnly}
-        title={unassignedOnly ? '미배정 필터 끄기' : '미배정 작업만 보기'}
-        onClick={() => {
-          revealTasks()
-          useOffice.getState().setFilters({ assigneeIds: unassignedOnly ? [] : ['unassigned'] })
-        }}
-      >
-        <AnimatedNumber value={kpis.unassigned} />
-      </Kpi>
-      <Kpi label="이번 주 완료" hint="이번 주(월요일부터)에 완료된 작업 수예요">
-        <AnimatedNumber value={kpis.doneThisWeek} />
-      </Kpi>
-      {memberCount > 0 && (
-        <button
-          type="button"
-          className={`balance balance-${imb.tone}`}
-          title={balanceHint}
-          onClick={() => useUi.getState().showTip(balanceHint)}
-        >
-          <i className="dot" />
-          <span className="balance-word">{imb.text}</span>
-        </button>
-      )}
-    </div>
-  )
-}
-
-function OverlaySwitch() {
-  const overlay = useOffice((s) => s.overlay)
-  const projects = useProjectList()
-  return (
-    <div className={`overlay-row glass${overlay === 'none' ? ' is-plain' : ''}`}>
-      <div className="seg" role="radiogroup" aria-label="화면 오버레이">
-        {OVERLAYS.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            role="radio"
-            aria-checked={overlay === o.id}
-            className={overlay === o.id ? 'is-on' : ''}
-            onClick={() => useOffice.getState().setOverlay(o.id)}
-            title={`${o.label} (${o.key})`}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      {overlay !== 'none' && (
-      <div className="legend" key={overlay}>
-        {overlay === 'deadline' && (
-          <>
-            <span className="legend-item">
-              <i className="dot" style={cssVars({ '--c': 'var(--good)' })} />
-              여유
-            </span>
-            <span className="legend-item">
-              <i className="dot" style={cssVars({ '--c': 'var(--warn)' })} />
-              임박
-            </span>
-            <span className="legend-item">
-              <i className="dot" style={cssVars({ '--c': 'var(--bad)' })} />
-              지연
-            </span>
-          </>
-        )}
-        {overlay === 'project' &&
-          projects.map((p) => (
-            <span key={p.id} className="legend-item" title={p.name}>
-              <i className="dot" style={cssVars({ '--c': p.color })} />
-              {p.key}
-            </span>
-          ))}
-      </div>
-      )}
-    </div>
-  )
-}
-
 /** "회의" button with the agenda count; becomes a slim live pill while a meeting is ongoing. */
 function MeetingControl() {
   const live = useOffice((s) => ongoingMeeting(s.meetings))
@@ -287,12 +150,9 @@ function MeetingControl() {
   )
 }
 
-function MoreMenu({ onReset }: { onReset: () => void }) {
+function MoreMenu() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const canReset = useOffice((s) => s.canReset)
-  const { canDemo, demoMode } = useOffice(useShallow((s) => ({ canDemo: s.canDemo, demoMode: s.demoMode })))
-  const full = useOffice((s) => Object.keys(s.members).length >= MAX_MEMBERS)
   useEffect(() => {
     if (!open) return
     const down = (e: PointerEvent) => {
@@ -322,34 +182,6 @@ function MoreMenu({ onReset }: { onReset: () => void }) {
             type="button"
             role="menuitem"
             className="menu-item"
-            disabled={full}
-            title={full ? `자리가 가득 찼어요 (최대 ${MAX_MEMBERS}명)` : undefined}
-            onClick={() => {
-              setOpen(false)
-              useOffice.getState().openDialog({ kind: 'member' })
-            }}
-          >
-            <Icon name="users" size={15} />
-            팀원 추가
-            {full && <span className="menu-note">가득 참</span>}
-          </button>
-          {canDemo && (
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={demoMode}
-              className="menu-item menu-narrow"
-              onClick={() => useOffice.getState().setDemoMode(!demoMode)}
-            >
-              <Icon name="pulse" size={15} />
-              데모 모드
-              <span className="menu-note">{demoMode ? '켜짐' : '꺼짐'}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
             onClick={() => {
               setOpen(false)
               useUi.getState().setHistoryOpen(true)
@@ -358,23 +190,6 @@ function MoreMenu({ onReset }: { onReset: () => void }) {
             <Icon name="history" size={15} />
             회의록
           </button>
-          {canReset && (
-            <>
-              <hr className="menu-sep" />
-              <button
-                type="button"
-                role="menuitem"
-                className="menu-item menu-danger"
-                onClick={() => {
-                  setOpen(false)
-                  onReset()
-                }}
-              >
-                <Icon name="refresh" size={15} />
-                데이터 초기화
-              </button>
-            </>
-          )}
         </div>
       )}
     </div>
@@ -388,7 +203,7 @@ function TapTip() {
     if (!tip) return
     const timer = window.setTimeout(() => useUi.getState().showTip(null), 4000)
     const down = (e: PointerEvent) => {
-      if (!(e.target instanceof Element) || !e.target.closest('.kpi-tip, .balance')) useUi.getState().showTip(null)
+      if (!(e.target instanceof Element) || !e.target.closest('.kpi-tip')) useUi.getState().showTip(null)
     }
     window.addEventListener('pointerdown', down)
     return () => {
@@ -405,12 +220,9 @@ function TapTip() {
 }
 
 export function TopBar() {
-  const { sourceLabel, canDemo, demoMode } = useOffice(
-    useShallow((s) => ({ sourceLabel: s.sourceLabel, canDemo: s.canDemo, demoMode: s.demoMode })),
-  )
+  const sourceLabel = useOffice((s) => s.sourceLabel)
   const status = useOffice((s) => s.status)
   const connection = useOffice((s) => s.connection)
-  const officeOpen = useOffice((s) => s.office !== null)
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   return (
     <div className="hud-top">
@@ -423,24 +235,12 @@ export function TopBar() {
           <span className="brand-name">팀 오피스</span>
           {connection !== null && <span className="badge-server">서버</span>}
         </div>
-        {/* v1 사무실을 열었으면(읽는 중 · 실패 포함) 팀 지표, 아니면 아직 데모 지표 (화면이 v1으로 옮겨 가면 KpiRow를 지운다) */}
-        {officeOpen ? <OfficeKpis snapshot={snapshot} /> : <KpiRow />}
+        {/* 사무실을 읽는 중 · 실패 · 열지 않음이면 값 칸이 "—" */}
+        <OfficeKpis snapshot={snapshot} />
         <SyncStatus />
-        {canDemo && (
-          <label className="demo" title="데모 모드 · 팀원 자동 활동">
-            <input type="checkbox" role="switch" checked={demoMode} onChange={(e) => useOffice.getState().setDemoMode(e.target.checked)} />
-            <span className="switch" aria-hidden="true" />
-            <span className="demo-text">데모</span>
-          </label>
-        )}
         <MeetingControl />
-        <button type="button" className="btn btn-primary" onClick={() => useOffice.getState().openDialog({ kind: 'task' })} title="새 작업 (N)">
-          <Icon name="plus" size={14} />
-          작업
-        </button>
-        <MoreMenu onReset={() => useOffice.getState().openDialog({ kind: 'confirmReset' })} />
+        <MoreMenu />
       </header>
-      <OverlaySwitch />
       {status === 'error' && (
         <div className="error-banner" role="alert">
           <span className="error-dot" />
