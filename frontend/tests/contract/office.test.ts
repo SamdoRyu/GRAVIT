@@ -5,8 +5,8 @@ import { afterEach, describe, it, mock } from 'node:test'
 import { DataError, type DataSource } from '../../src/data/DataSource'
 import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
-import type { Change, SyncStatus, WorkspaceSnapshot } from '../../src/data/types'
-import { OFFICE_RELOAD_DELAY_MS, useOffice } from '../../src/store'
+import type { Change, SyncStatus, WorkspaceListItem, WorkspaceSnapshot } from '../../src/data/types'
+import { OFFICE_RELOAD_DELAY_MS, pickWorkspace, useOffice } from '../../src/store'
 import { finiteOrNull, formatHours } from '../../src/ui/format'
 import { describeSync, failureReason } from '../../src/ui/syncText'
 import { workspaceSnapshotExample } from './examples'
@@ -372,5 +372,69 @@ describe('store — 팀 설정 바꾸기 (#38 — FR-PLAN-01)', () => {
     useOffice.getState().closeOffice()
     assert.equal(await saving, true)
     assert.equal(office(), null)
+  })
+})
+
+describe('store — 첫 사무실 열기 (#102 T5-c-1)', () => {
+  const item = (id: string, kind: WorkspaceListItem['kind'], displayName: string): WorkspaceListItem => ({
+    id,
+    kind,
+    displayName,
+    githubOwner: null,
+    githubRepo: null,
+    githubRepoId: null,
+    htmlUrl: null,
+    openedAt: '2026-11-01T00:00:00Z',
+    myRole: 'participant',
+  })
+
+  it('pickWorkspace — 고른 ID가 목록에 있으면 그것, 아니면 GitHub 팀 사무실, 없으면 첫째, 빈 목록은 null', () => {
+    const list = [item('ws_d', 'demo', 'A 시연'), item('ws_g', 'github', 'B 팀'), item('ws_h', 'github', 'C 팀')]
+    assert.equal(pickWorkspace(list, 'ws_h'), 'ws_h')
+    assert.equal(pickWorkspace(list, 'ws_none'), 'ws_g', '목록에 없는 ID는 무시한다')
+    assert.equal(pickWorkspace(list), 'ws_g')
+    assert.equal(pickWorkspace([item('ws_d', 'demo', 'A 시연')]), 'ws_d')
+    assert.equal(pickWorkspace([]), null)
+  })
+
+  it('mock 기본 세션 — 팀 사무실(ws_1)을 열고 Snapshot을 받는다', async () => {
+    const h = harness()
+    await useOffice.getState().openDefaultOffice(h.source)
+    assert.equal(office()?.status, 'ready')
+    assert.equal(office()?.snapshot?.workspace.id, TEAM_WS)
+  })
+
+  it('?workspace로 고른 사무실을 연다', async () => {
+    const h = harness()
+    const list = await h.source.listWorkspaces()
+    const other = list.find((w) => w.id !== TEAM_WS)
+    assert.ok(other, 'mock 사용자는 사무실이 둘 이상이다')
+    await useOffice.getState().openDefaultOffice(h.source, other.id)
+    assert.equal(office()?.snapshot?.workspace.id, other.id)
+  })
+
+  it('로그인 전(목록 unauthorized)이면 열지 않고 알림도 없다', async () => {
+    const source = createV1MockDataSource({ storage: createMemoryStorage(), session: null, latencyMs: [0, 0] })
+    const toasts = useOffice.getState().toasts.length
+    await useOffice.getState().openDefaultOffice(source)
+    assert.equal(office(), null)
+    assert.equal(useOffice.getState().toasts.length, toasts)
+  })
+
+  it('두 번 불러도(StrictMode) 한 번만 연다 — 구독 하나', async () => {
+    const h = harness()
+    await Promise.all([useOffice.getState().openDefaultOffice(h.source), useOffice.getState().openDefaultOffice(h.source)])
+    assert.equal(office()?.status, 'ready')
+    assert.equal(h.listenerCount(), 1)
+    assert.equal(h.loads(), 1)
+  })
+
+  it('이미 연 사무실이 있으면 바꾸지 않는다', async () => {
+    const h = harness()
+    const list = await h.source.listWorkspaces()
+    const other = list.find((w) => w.id !== TEAM_WS)!
+    await useOffice.getState().openOffice(h.source, other.id)
+    await useOffice.getState().openDefaultOffice(h.source)
+    assert.equal(office()?.workspaceId, other.id)
   })
 })

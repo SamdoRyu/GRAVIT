@@ -3,12 +3,20 @@ import { lazy, Suspense, useEffect } from 'react'
 import { useOffice } from './store'
 import { createMockDataSource } from './data/mock'
 import { createApiDataSource } from './data/api'
+import { createV1MockDataSource } from './data/mock/v1'
 import { Hud } from './ui/Hud'
 import { SceneBoundary } from './app/SceneBoundary'
 
 // One source per page load (module scope, so StrictMode's double effects don't create two).
 // `?source=api` talks to the local server (docs/API.md); otherwise the in-browser mock.
-const dataSource = new URLSearchParams(location.search).get('source') === 'api' ? createApiDataSource() : createMockDataSource()
+const params = new URLSearchParams(location.search)
+const apiMode = params.get('source') === 'api'
+const dataSource = apiMode ? createApiDataSource() : createMockDataSource()
+
+// v1 사무실(WorkspaceSnapshot — #102 T5-c-1). 지금은 mock만 연다 — `?source=api`의 v1 연결은 백엔드 Snapshot API(#103) 뒤 T5-c-3.
+// 진입 흐름(#64 · #68) 전까지 `?workspace=<id>`로 고를 수 있고, 없으면 팀 사무실을 연다.
+const officeSource = apiMode ? null : createV1MockDataSource()
+const preferredWorkspace = params.get('workspace')
 
 // three.js + the scene are the bulk of the bundle: load them in parallel with the data so the HUD
 // (and the loader) paint first.
@@ -24,6 +32,7 @@ const sceneFor = (attempt: number) => {
 export default function App() {
   useEffect(() => {
     void useOffice.getState().init(dataSource)
+    if (officeSource) void useOffice.getState().openDefaultOffice(officeSource, preferredWorkspace)
   }, [])
 
   useEffect(() => {

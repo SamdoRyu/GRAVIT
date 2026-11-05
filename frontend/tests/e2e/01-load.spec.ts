@@ -11,22 +11,14 @@ test('loads the office: HUD, KPI numbers, 3D canvas, no console errors', async (
   const box = await page.locator('canvas').boundingBox()
   expect(box?.width).toBeGreaterThan(800)
 
-  // KPI chips show the numbers computed from the data.
-  const expected = await page.evaluate(async () => {
-    const storePath = '/src/store.ts'
-    const selPath = '/src/data/selectors.ts'
-    const { useOffice } = await import(/* @vite-ignore */ storePath)
-    const { computeKpis } = await import(/* @vite-ignore */ selPath)
-    const s = useOffice.getState()
-    return computeKpis(s.tasks, s.members)
-  })
-  expect(expected.open).toBeGreaterThan(0)
+  // v1 사무실(#102 T5-c-1): mock은 팀 사무실을 열고, 상단 바 지표는 그 Snapshot의 팀 값이다.
+  await expect.poll(() => readStore(page, (s) => s.office?.status)).toBe('ready')
+  const flow = await readStore(page, (s) => s.office!.snapshot!.flow)
+  expect(await readStore(page, (s) => s.office!.snapshot!.workspace.kind)).toBe('github')
   const kpis = page.locator('.kpis')
   const value = (label: string) => kpis.locator('.kpi', { hasText: label }).locator('.kpi-value')
-  await expect(value('진행 중')).toHaveText(String(expected.inProgress))
-  await expect(value('지연')).toHaveText(String(expected.overdue))
-  await expect(value('미배정')).toHaveText(String(expected.unassigned))
-  await expect(value('이번 주 완료')).toHaveText(String(expected.doneThisWeek))
+  await expect(value('열린 PR')).toHaveText(String(flow.openSubmissionCount))
+  await expect(kpis.locator('.kpi').first().locator('.kpi-label')).toHaveText(/^(시작 전|종료까지|오늘 종료|종료됨)$/)
 
   // The data source matches the project.
   const label = await readStore(page, (s) => s.sourceLabel)
