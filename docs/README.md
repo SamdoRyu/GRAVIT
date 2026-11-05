@@ -24,6 +24,11 @@
 | 2026-11-04 | CONTRACTS.md 「8」 | 기본 테마 이름: 사무실 → 우주정거장(확정 시안 `frontend/public/station/`) | #76 · #77 |
 | 2026-11-04 | CONTRACTS.md 「10」 | 행 추가: 아바타 이동 연출 · 작업 포드 표시 · 책상 자리가 없는 팀원 | C 요청(빛 신호 이동) · 2026-11-04 결정 |
 | 2026-11-04 | CONTRACTS_API.md 「5」 `MemberDto.deskIndex` · `members` 정렬 | 0~7, 자리가 없는 지금 팀원은 `null`이고 deskIndex 있는 팀원 뒤 | 2026-11-04 결정 — 작업 포드 8개 |
+| 2026-11-05 | 두 파일 머리말 「마지막 갱신」 | 2026-11-05 | #146 |
+| 2026-11-05 | CONTRACTS.md 「3」 요구사항 재동기화 충돌 표 | ①에서 짝을 못 찾은 같은 제목이 두 번 이상(원본 ID 유무 무관)이고 기존 후보가 있으면 `duplicate_title` | #146 — #14 · #122 |
+| 2026-11-05 | CONTRACTS.md 「3」 평가 회차 · CONTRACTS_API.md 「10」 decision | 머지 · 닫힌 PR 안건에 `revise_and_reevaluate`면 `409`, 회차를 열지 않음 | #146 — #27 · #128 |
+| 2026-11-05 | CONTRACTS.md 「3」 막힘 신호 · 평균 리뷰 대기(새 절) · 「10」 목록 · CONTRACTS_API.md 「5」 `averageReviewWaitHours` | 막힘 판정 규칙(승인 후 머지 대기 포함)과 평균 리뷰 대기 계산 규칙 [구현 기본값] | #146 — #22 · #129 · #24 |
+| 2026-11-05 | CONTRACTS_API.md 「8」 `POST W/requirement-links` | 같은 연결이 이미 있으면 요구사항 상태와 상관없이 `200` | #146 — #18 · #130 |
 
 ## 계약 문서의 기준 위치
 
