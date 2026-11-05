@@ -3,7 +3,7 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, Change, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceListItem, WorkspaceSnapshot } from './data/types'
+import type { Activity, Change, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceListItem, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -95,6 +95,13 @@ interface OfficeState {
    * 실패하면 마지막 값을 그대로 두고 사유를 알림으로 보인 뒤 false.
    */
   updateOfficeSettings: (settings: TeamSettings) => Promise<boolean>
+  /**
+   * PR 추천 · 비추천 평가(PUT evaluations/mine — #19 · #20). 성공하면 snapshot의 그 PR currentRound를 응답으로 바꾸고 회차를 돌려준다.
+   * 실패하면 사유를 알림으로 보이고 null. 회차가 바뀌었거나 PR이 닫혔으면(conflict) Snapshot을 다시 읽는다.
+   */
+  evaluateSubmission: (submissionId: Id, request: EvaluateRequest) => Promise<EvaluationRoundDto | null>
+  /** PR의 평가 회차 전부(GET rounds — 현재 회차가 처음). 실패하면 알림 후 null */
+  loadRounds: (submissionId: Id) => Promise<EvaluationRoundDto[] | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -409,6 +416,38 @@ export const useOffice = create<OfficeState>((set, get) => {
       } catch (e) {
         fail(e)
         return false
+      }
+    },
+    evaluateSubmission: async (submissionId, request) => {
+      const src = officeSource
+      const office = get().office
+      if (!src || !office) return null
+      const gen = officeGen
+      try {
+        const round = await src.evaluate(office.workspaceId, submissionId, request)
+        // 응답 회차가 그 PR의 현재 회차면 바로 반영한다(changed 알림으로 다시 읽기 전에도 화면이 맞게)
+        const current = get().office
+        if (gen === officeGen && current?.snapshot) {
+          const submissions = current.snapshot.submissions.map((s) => (s.id === submissionId && s.currentRound?.id === round.id ? { ...s, currentRound: round } : s))
+          set({ office: { ...current, snapshot: { ...current.snapshot, submissions } } })
+        }
+        return round
+      } catch (e) {
+        fail(e)
+        // 그 사이 새 회차가 열렸거나 PR이 닫혔다 — 지금 값을 다시 읽어 화면을 맞춘다
+        if (e instanceof DataError && e.code === 'conflict' && gen === officeGen) void loadOffice(gen)
+        return null
+      }
+    },
+    loadRounds: async (submissionId) => {
+      const src = officeSource
+      const office = get().office
+      if (!src || !office) return null
+      try {
+        return await src.listRounds(office.workspaceId, submissionId)
+      } catch (e) {
+        fail(e)
+        return null
       }
     },
 

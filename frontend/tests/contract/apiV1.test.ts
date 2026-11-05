@@ -119,6 +119,15 @@ async function startFake(): Promise<Fake> {
         return
       }
     }
+    const sub = /^\/api\/workspaces\/([^/]+)\/submissions\/([^/]+)\/(rounds|evaluations\/mine)$/.exec(path)
+    if (sub) {
+      const round = workspaceSnapshotExample.submissions[0].currentRound
+      if (r.method === 'GET' && sub[3] === 'rounds') return sendJson(res, 200, [round])
+      if (r.method === 'PUT' && sub[3] === 'evaluations/mine') {
+        const { verdict, reason } = JSON.parse(r.body) as { verdict: string; reason: string }
+        return sendJson(res, 200, { ...round, myEvaluation: { verdict, reason, updatedAt: '2026-11-05T03:10:00Z' } })
+      }
+    }
     sendError(res, 404, 'not_found', '없는 경로예요')
   }
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
@@ -248,6 +257,32 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.updateSettings('3', { ...next, projectEndDate: '2026-11-01' }), 'invalid', '끝 날짜는 시작 날짜보다 빠를 수 없어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자만 바꿀 수 있어요'))
     await rejectsWith(api.updateSettings('3', next), 'forbidden_role', '레포 관리자만 바꿀 수 있어요')
+  })
+
+  it('PR 평가 — GET rounds · PUT evaluations/mine, PUT은 CSRF와 JSON 본문, 400 · 403 · 409를 그대로 (#19 · #20)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    const round = workspaceSnapshotExample.submissions[0].currentRound
+    const request = { roundId: round.id, verdict: 'not_recommend' as const, reason: '실패 응답 모양이 계약과 달라요' }
+    assert.deepEqual(await api.listRounds('3', '9'), [round])
+    const saved = await api.evaluate('3', '9', request)
+    assert.deepEqual(saved.myEvaluation, { verdict: request.verdict, reason: request.reason, updatedAt: '2026-11-05T03:10:00Z' })
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      ['GET /api/workspaces/3/submissions/9/rounds -', 'PUT /api/workspaces/3/submissions/9/evaluations/mine tok-1'],
+    )
+    assert.deepEqual(JSON.parse(fake.requests[1].body), request)
+    assert.match(fake.requests[1].contentType ?? '', /^application\/json/)
+
+    for (const [status, code, message] of [
+      [400, 'invalid', '한 줄 이유를 적어 주세요'],
+      [403, 'forbidden_role', '내 PR은 평가할 수 없어요'],
+      [409, 'conflict', '그 사이 새 평가 회차가 열렸어요'],
+    ] as const) {
+      fake.next.push((_r, res) => sendError(res, status, code, message))
+      await rejectsWith(api.evaluate('3', '9', request), code, message)
+    }
   })
 })
 

@@ -4,8 +4,23 @@
 // 로그인 여부(unauthorized)와 "내가 들어갈 수 있는 사무실"(not_found)은 지킨다.
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
+import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { SETTINGS_MSG, SPEC_PATH_MAX_LENGTH, settingsError } from '../../rules/period'
-import type { Change, Id, Instant, MeResponse, OpenWorkspaceRequest, RepositoryChoice, SyncStatus, TeamSettings, Viewer, WorkspaceSnapshot } from '../../types'
+import type {
+  Change,
+  EvaluationRoundDto,
+  Id,
+  Instant,
+  MeResponse,
+  MemberDto,
+  OpenWorkspaceRequest,
+  RepositoryChoice,
+  SubmissionDto,
+  SyncStatus,
+  TeamSettings,
+  Viewer,
+  WorkspaceSnapshot,
+} from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
 import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockSession, type MockState, type MockWorkspace } from './seed'
 
@@ -114,6 +129,26 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
     return ws
   }
 
+  /**
+   * 요청자 기준 현재 회차 — seed 이유(평가자 없음)에 팀원이 남긴 평가를 합쳐 수 · 이유를 다시 센다.
+   * 이유는 추천 먼저, 그 안에서 저장 순서. myEvaluation은 요청자 것만, canEvaluate는 열린 PR · 작성자 아님.
+   */
+  function roundFor(ws: MockWorkspace, sub: SubmissionDto, me: MemberDto): EvaluationRoundDto | null {
+    const round = sub.currentRound
+    if (!round) return null
+    const given = (ws.evaluations ?? []).filter((e) => e.submissionId === sub.id && e.roundId === round.id)
+    const reasons = orderReasons([...round.reasons, ...given.map((e) => ({ verdict: e.verdict, reason: e.reason }))])
+    const mine = given.find((e) => e.memberId === me.id)
+    return {
+      ...round,
+      recommendCount: reasons.filter((r) => r.verdict === 'recommend').length,
+      notRecommendCount: reasons.filter((r) => r.verdict === 'not_recommend').length,
+      reasons,
+      myEvaluation: mine ? { verdict: mine.verdict, reason: mine.reason, updatedAt: mine.updatedAt } : null,
+      canEvaluate: (sub.state === 'open' || sub.state === 'draft') && sub.authorMemberId !== me.id,
+    }
+  }
+
   function toSnapshot(ws: MockWorkspace, user: MeResponse): WorkspaceSnapshot {
     const me = currentMember(ws, user)
     if (!me) throw new DataError(MSG.workspaceNotFound, 'not_found')
@@ -124,9 +159,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       memberId: me.id,
       activityConsented: ws.consentedUserIds.includes(user.user.userId),
     }
-    for (const sub of s.submissions) {
-      if (sub.currentRound) sub.currentRound.canEvaluate = (sub.state === 'open' || sub.state === 'draft') && sub.authorMemberId !== me.id
-    }
+    for (const sub of s.submissions) sub.currentRound = roundFor(ws, sub, me)
     // 키 순서는 계약 표 그대로
     return {
       workspace: s.workspace,
@@ -292,7 +325,45 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       emit(workspaceId, { type: 'changed', resources: ['settings'] })
       return structuredClone(ws.snapshot.settings)
     },
+
+    // mock은 현재 회차 하나만 갖는다(새 회차는 동기화 · 회의 결정에서 열리는데 mock에는 없다)
+    async listRounds(workspaceId, submissionId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const sub = findSubmission(ws, submissionId)
+      const round = roundFor(ws, sub, currentMember(ws, user)!)
+      return round ? [round] : []
+    },
+
+    // 검사 순서: 로그인 → 사무실 · PR(404) → 요청(400) → 작성자(403) → PR 상태 · 회차(409)
+    async evaluate(workspaceId, submissionId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const sub = findSubmission(ws, submissionId)
+      const me = currentMember(ws, user)!
+      const error = evaluationError(request)
+      if (error) throw new DataError(error, 'invalid')
+      if (sub.authorMemberId === me.id) throw new DataError(EVALUATION_MSG.ownSubmission, 'forbidden_role')
+      if (sub.state !== 'open' && sub.state !== 'draft') throw new DataError(EVALUATION_MSG.closedSubmission, 'conflict')
+      if (!sub.currentRound || sub.currentRound.id !== request.roundId) throw new DataError(EVALUATION_MSG.staleRound, 'conflict')
+
+      const roundId = sub.currentRound.id
+      const others = (ws.evaluations ?? []).filter((e) => !(e.submissionId === sub.id && e.roundId === roundId && e.memberId === me.id))
+      ws.evaluations = [...others, { submissionId: sub.id, roundId, memberId: me.id, verdict: request.verdict, reason: request.reason.trim(), updatedAt: toInstant(now()) }]
+      save()
+      // 추천 · 비추천 수와 이유는 Snapshot의 PR에 있다
+      emit(workspaceId, { type: 'changed', resources: ['submissions'] })
+      return structuredClone(roundFor(ws, sub, me)!)
+    },
   }
+}
+
+function findSubmission(ws: MockWorkspace, submissionId: Id): SubmissionDto {
+  const sub = ws.snapshot.submissions.find((s) => s.id === submissionId)
+  if (!sub) throw new DataError(EVALUATION_MSG.submissionNotFound, 'not_found')
+  return sub
 }
 
 // ---- 검사 · 저장 ---------------------------------------------------------------

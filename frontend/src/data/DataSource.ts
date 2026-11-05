@@ -4,6 +4,8 @@ import type {
   Change,
   DemoChange,
   ErrorCode,
+  EvaluateRequest,
+  EvaluationRoundDto,
   Id,
   LoginOptions,
   MeResponse,
@@ -32,7 +34,7 @@ import type {
  * 인자 순서는 (workspaceId, 경로의 다른 ID…, 요청 DTO), 반환은 응답 DTO 그대로(204는 void).
  * 실패는 DataError(message, code)로 던진다.
  *
- * P0 메서드(#8 T5-a)에 기능 Issue마다 그 PR에서 더한다(T5-b) — 팀 설정(#38).
+ * P0 메서드(#8 T5-a)에 기능 Issue마다 그 PR에서 더한다(T5-b) — 팀 설정(#38) · PR 평가(#19 · #20).
  */
 export interface DataSource {
   /** 화면에 보일 이름, 예: "로컬 mock 데이터" */
@@ -66,6 +68,14 @@ export interface DataSource {
   getSettings(workspaceId: Id): Promise<TeamSettings>
   /** PUT W/settings — 전체 교체, R2만. 범위 · 날짜 순서가 틀리면 invalid, R2가 아니면 forbidden_role */
   updateSettings(workspaceId: Id, settings: TeamSettings): Promise<TeamSettings>
+
+  /** GET W/submissions/{submissionId}/rounds — 회차 번호 내림차순(현재 회차가 처음) */
+  listRounds(workspaceId: Id, submissionId: Id): Promise<EvaluationRoundDto[]>
+  /**
+   * PUT W/submissions/{submissionId}/evaluations/mine — 내 평가를 만들거나 바꾼다. 응답은 그 회차(myEvaluation 포함).
+   * 이유 없음 · 200자 초과 invalid, 작성자 · 강사 forbidden_role, 현재 회차가 아님 · PR이 머지 · 닫힘 conflict
+   */
+  evaluate(workspaceId: Id, submissionId: Id, request: EvaluateRequest): Promise<EvaluationRoundDto>
 }
 
 /** CONTRACTS.md 「6」의 8개 에러 코드 전부. */

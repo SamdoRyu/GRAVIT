@@ -164,6 +164,25 @@ button.person:hover { border-color: rgba(20, 30, 60, 0.25); background: var(--so
 .detail-v1 .detail-foot .gh-open { text-decoration: none; color: var(--accent); font-weight: 600; }
 .detail-v1 .detail-foot { flex-wrap: wrap; row-gap: 4px; padding-left: 12px; }
 
+/* ---- PR 평가 (#19 · #20) — 이유는 평가자 없이 ---- */
+.eval { display: grid; gap: 8px; }
+.eval-reasons { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.eval-reasons li { display: flex; align-items: baseline; gap: 6px; font-size: var(--fs-s); line-height: 1.45; }
+.eval-reason { min-width: 0; overflow-wrap: anywhere; }
+.verdict { flex: none; padding: 0 5px; border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.verdict-recommend { background: var(--good-soft); color: var(--ink-good); }
+.verdict-not_recommend { background: var(--bad-soft); color: var(--ink-bad); }
+.eval-form { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.eval-verdicts { display: flex; gap: 6px; }
+.verdict-btn { flex: 1; }
+.verdict-btn-recommend.is-on { background: var(--good-soft); border-color: var(--good); color: var(--ink-good); }
+.verdict-btn-not_recommend.is-on { background: var(--bad-soft); border-color: var(--bad); color: var(--ink-bad); }
+.eval-count { margin-left: 6px; font-variant-numeric: tabular-nums; }
+.eval-count.is-over { color: var(--ink-bad); font-weight: 600; }
+.eval-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.eval-past { display: grid; gap: 8px; }
+.eval-round { padding-top: 8px; border-top: 1px dashed var(--line); }
+
 /* ---- detail drawer ---- */
 .detail { flex: 0 1 auto; max-height: 58%; min-height: 150px; display: flex; flex-direction: column; overflow: hidden; animation: slide-in-right 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
 .detail-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 4px 16px; }
