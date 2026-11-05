@@ -184,6 +184,19 @@ describe('store — 알림 반영', () => {
     assert.equal(h.loads(), 2)
   })
 
+  it('사무실 알림 연결 상태를 store.connection에 둔다 — 사무실을 닫으면 비운다', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    h.push({ type: 'connection', status: 'connecting' })
+    assert.equal(useOffice.getState().connection, 'connecting')
+    h.push({ type: 'connection', status: 'online' })
+    assert.equal(useOffice.getState().connection, 'online')
+    h.push({ type: 'connection', status: 'offline' })
+    assert.equal(useOffice.getState().connection, 'offline')
+    useOffice.getState().closeOffice()
+    assert.equal(useOffice.getState().connection, null, '닫은 사무실의 연결 상태가 남지 않는다')
+  })
+
   /** load를 하나씩 붙잡아 두었다가 원하는 순서로 풀 수 있는 source */
   function gatedLoads(h: ReturnType<typeof harness>) {
     const gates: { release: () => void; promise: Promise<WorkspaceSnapshot> }[] = []
