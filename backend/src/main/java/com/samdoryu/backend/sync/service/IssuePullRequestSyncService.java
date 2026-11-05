@@ -1,5 +1,6 @@
 package com.samdoryu.backend.sync.service;
 
+import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.GithubReaderSelector;
 import com.samdoryu.backend.github.dto.GithubIssue;
@@ -46,7 +47,8 @@ import tools.jackson.databind.json.JsonMapper;
  *       {@code AssigneeOrder}).</li>
  *   <li>앱 기록(마감 · 요구사항 연결 · 안건 · 평가 · 카드 …)은 읽지도 덮지도 않는다.</li>
  * </ul>
- * 동기화 API · 폴링 · {@code SyncState} 기록 · 평가 회차 열기는 각 Issue(#70 · FR-GH-05 · #19)가 이 Service를 부르며 더한다.
+ * 동기화 API · 폴링 · {@code SyncState} 기록은 #70이 이 Service를 부르며 더한다. 평가 회차는 PR을 저장할 때
+ * {@link EvaluationRoundService}가 연다 — 지금은 회차가 없는 PR의 1회차({@code new_pr}, #19)뿐이다(새 커밋 회차는 #46).
  * <p>
  * {@code stateChangedAt} [구현 기본값 — #69]: 상태(이슈 열림 · 닫힘, PR 상태)나 팀원 담당자 집합이 바뀌면 GitHub 시각
  * (닫혔으면 닫힌 · 머지 시각, 아니면 GitHub 고친 시각), 바뀌지 않았으면 이전 값 그대로.
@@ -62,16 +64,19 @@ public class IssuePullRequestSyncService {
     private final TaskAssigneeRepository taskAssigneeRepository;
     private final SubmissionRepository submissionRepository;
     private final SubmissionIssueLinkRepository submissionIssueLinkRepository;
+    private final EvaluationRoundService evaluationRoundService;
 
     public IssuePullRequestSyncService(WorkspaceService workspaceService, GithubReaderSelector readerSelector,
             TaskRepository taskRepository, TaskAssigneeRepository taskAssigneeRepository,
-            SubmissionRepository submissionRepository, SubmissionIssueLinkRepository submissionIssueLinkRepository) {
+            SubmissionRepository submissionRepository, SubmissionIssueLinkRepository submissionIssueLinkRepository,
+            EvaluationRoundService evaluationRoundService) {
         this.workspaceService = workspaceService;
         this.readerSelector = readerSelector;
         this.taskRepository = taskRepository;
         this.taskAssigneeRepository = taskAssigneeRepository;
         this.submissionRepository = submissionRepository;
         this.submissionIssueLinkRepository = submissionIssueLinkRepository;
+        this.evaluationRoundService = evaluationRoundService;
     }
 
     /** @param issues 이번에 저장한 이슈 수, {@code pullRequests} PR 수 */
@@ -205,6 +210,7 @@ public class IssuePullRequestSyncService {
         Submission submission = existing.map(s -> s.overwriteFrom(fresh))
                 .orElseGet(() -> submissionRepository.save(fresh));
         syncIssueLinks(workspace, submission, reader.linkedIssues(repo, pr.number()));
+        evaluationRoundService.openFirstRoundIfAbsent(submission, now);
     }
 
     /**

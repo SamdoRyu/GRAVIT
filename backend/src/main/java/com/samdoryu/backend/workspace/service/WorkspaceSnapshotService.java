@@ -2,6 +2,8 @@ package com.samdoryu.backend.workspace.service;
 
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.evaluation.dto.EvaluationRoundDto;
+import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
 import com.samdoryu.backend.flow.dto.FlowSummary;
 import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
@@ -21,13 +23,14 @@ import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code GET W/snapshot} 조립(CONTRACTS_API 「5」). 다른 패키지 조각은 그 패키지 Service로만 읽는다.
  * 아직 기능이 없는 조각 — {@code requirements} · {@code requirementLinks}(#14 · #18), {@code activityNotes}(FR-ACT) — 은
- * 빈 목록, {@code flow}는 열린 PR 수만 채운다(나머지는 #22 · #24).
+ * 빈 목록, {@code flow}는 열린 PR 수만 채운다(나머지는 #22 · #24). PR의 {@code currentRound}는 평가 회차 조각(#19)이다.
  */
 @Service
 public class WorkspaceSnapshotService {
@@ -45,11 +48,12 @@ public class WorkspaceSnapshotService {
     private final AgendaItemService agendaItemService;
     private final MeetingService meetingService;
     private final HelpRequestService helpRequestService;
+    private final EvaluationRoundService evaluationRoundService;
 
     public WorkspaceSnapshotService(WorkspaceService workspaceService, MemberRepository memberRepository,
             TeamSettingsRepository teamSettingsRepository, SyncService syncService,
             SyncedItemService syncedItemService, AgendaItemService agendaItemService, MeetingService meetingService,
-            HelpRequestService helpRequestService) {
+            HelpRequestService helpRequestService, EvaluationRoundService evaluationRoundService) {
         this.workspaceService = workspaceService;
         this.memberRepository = memberRepository;
         this.teamSettingsRepository = teamSettingsRepository;
@@ -58,6 +62,7 @@ public class WorkspaceSnapshotService {
         this.agendaItemService = agendaItemService;
         this.meetingService = meetingService;
         this.helpRequestService = helpRequestService;
+        this.evaluationRoundService = evaluationRoundService;
     }
 
     /**
@@ -71,7 +76,10 @@ public class WorkspaceSnapshotService {
         List<Member> members = memberRepository.findByWorkspaceId(workspaceId).stream().sorted(MEMBER_ORDER).toList();
         TeamSettingsDto settings = teamSettingsRepository.findByWorkspaceId(workspaceId).map(TeamSettingsDto::of)
                 .orElseThrow(() -> new IllegalStateException("팀 설정이 없는 사무실: " + workspaceId));
-        List<SubmissionDto> submissions = syncedItemService.listSubmissions(workspaceId);
+        Map<Long, EvaluationRoundDto> currentRounds = evaluationRoundService.currentRounds(access);
+        List<SubmissionDto> submissions = syncedItemService.listSubmissions(workspaceId).stream()
+                .map(submission -> submission.withCurrentRound(currentRounds.get(Ids.fromPath(submission.id()))))
+                .toList();
         return new WorkspaceSnapshot(
                 WorkspaceSummary.of(workspaceService.requireWorkspace(workspaceId)),
                 viewerOf(access, members),
