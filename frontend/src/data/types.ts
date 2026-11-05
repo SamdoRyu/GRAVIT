@@ -563,6 +563,71 @@ export interface TimelineEntry {
   ref: { type: 'submission' | 'agenda_item' | 'task'; id: Id } | null
 }
 
+// ---- 「15」 개인 API — 회고 리포트 · 기술 결정 카드 ---------------------------
+
+export interface RetroReportSummary {
+  id: Id
+  kind: 'final' | 'midterm'
+  createdAt: Instant
+}
+export interface RetroReportDto extends RetroReportSummary {
+  memberId: Id
+  /** 자동 요약 — 규칙으로 조립, AI 없음 */
+  summary: string | null
+  /** 담당 기능 영역 (area:* — FR-REP-01) */
+  areaLabels: string[]
+  /** 내가 배운 점 (FR-REP-02) */
+  learning: string | null
+  /** 내가 올린 안건과 결론 · PR 결정 (FR-LRN-05 · 12) */
+  agendaResults: {
+    agendaItemId: Id
+    title: string
+    conclusion: string
+    learning: string | null
+    prDecision: 'revise_and_reevaluate' | 'merge_as_is' | 'close_pr' | null
+    decidedAt: Instant
+  }[]
+  /** FR-LRN-22 */
+  instructorFeedbacks: { agendaItemId: Id; instructor: UserRef; body: string; createdAt: Instant }[]
+  /** 본인 것만 (FR-ACT-03). kind = ActivityRecordDto['kind'] */
+  activityDistribution: { kind: 'planning' | 'research' | 'design' | 'presentation' | 'mentor_question'; totalMinutes: number }[]
+  /** 본인이 확인한 카드만 (P11) */
+  decisionCards: DecisionCardDto[]
+}
+/** 9칸 — 각 0~2000자, 재료가 없으면 null */
+export interface DecisionCardCells {
+  goal: string | null
+  initialApproach: string | null
+  /** 받은 평가 — 추천·비추천 이유, 평가자 없음 */
+  feedbackReceived: string | null
+  meetingDecision: string | null
+  finalChange: string | null
+  rationale: string | null
+  blockedMoment: string | null
+  learning: string | null
+  /** 원본 (PR · 이슈 · 회의 링크) */
+  source: string | null
+}
+export interface DecisionCardDto {
+  id: Id
+  memberId: Id
+  submissionId: Id
+  cells: DecisionCardCells
+  confirmed: boolean
+  confirmedAt: Instant | null
+  followUpRequested: boolean
+  followUpRequestedAt: Instant | null
+  followUpQuestions: FollowUpQuestionDto[]
+  createdAt: Instant
+  updatedAt: Instant
+}
+export interface FollowUpQuestionDto {
+  id: Id
+  instructor: UserRef
+  body: string
+  createdAt: Instant
+}
+
 // ============================================================================
 // 데모 모델 — 화면 이행 중(이전 3D 데모). 화면이 v1 타입으로 옮겨 가면 지운다.
 // ============================================================================
