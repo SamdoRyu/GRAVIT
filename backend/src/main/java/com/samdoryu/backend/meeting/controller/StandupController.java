@@ -5,6 +5,7 @@ import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.meeting.dto.StandupDto;
+import com.samdoryu.backend.meeting.dto.StandupPrefill;
 import com.samdoryu.backend.meeting.dto.StandupSaveRequest;
 import com.samdoryu.backend.meeting.service.StandupService;
 import jakarta.validation.Valid;
@@ -40,6 +41,14 @@ public class StandupController {
     public List<StandupDto> list(@PathVariable String workspaceId, @RequestParam(required = false) String date) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return standupService.listByDate(access.workspaceId(), parseDate(date));
+    }
+
+    /** 팀원 — 강사는 {@code forbidden_role}. {@code date}의 전날(한국 시간) 내 GitHub 활동. */
+    @GetMapping("/{date}/mine/prefill")
+    public StandupPrefill prefill(@PathVariable String workspaceId, @PathVariable String date) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        Long memberId = access.requireTeamMember();
+        return standupService.prefill(access.workspaceId(), memberId, parseDate(date));
     }
 
     /** 팀원 — 강사는 {@code forbidden_role}. 있으면 고치고 없으면 만든다. */

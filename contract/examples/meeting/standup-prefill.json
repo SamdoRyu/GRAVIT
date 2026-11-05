@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-05",
+  "items": [
+    { "kind": "commit", "title": "세션 만료 처리", "githubNumber": null, "occurredAt": "2026-11-04T02:10:00Z" },
+    { "kind": "pr_opened", "title": "feat(auth): GitHub 로그인", "githubNumber": 15, "occurredAt": "2026-11-04T03:00:00Z" },
+    { "kind": "review_submitted", "title": "feat(sync): 동기화 상태", "githubNumber": 14, "occurredAt": "2026-11-04T06:30:00Z" },
+    { "kind": "issue_closed", "title": "GitHub 로그인", "githubNumber": 12, "occurredAt": "2026-11-04T09:00:00Z" }
+  ]
+}

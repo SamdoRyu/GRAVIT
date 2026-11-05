@@ -55,6 +55,13 @@ class MeetingContractTest {
     }
 
     @Test
+    void standupPrefillExampleRoundTrips() throws IOException {
+        assertRoundTrip("standup-prefill.json", StandupPrefill.class);
+        assertThat(MAPPER.writeValueAsString(StandupPrefill.Kind.values()))
+                .isEqualTo("[\"commit\",\"pr_opened\",\"pr_merged\",\"issue_closed\",\"review_submitted\"]");
+    }
+
+    @Test
     void standupTextsAreAtMost2000AndYesterdayIsRequiredButMayBeEmpty() {
         assertThat(VALIDATOR.validate(new StandupSaveRequest(null, null))).hasSize(1);
         assertThat(VALIDATOR.validate(new StandupSaveRequest("a".repeat(2001), null))).hasSize(1);
