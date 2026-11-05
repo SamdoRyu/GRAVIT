@@ -5,6 +5,8 @@ import static org.mockito.BDDMockito.given;
 
 import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
+import com.samdoryu.backend.evaluation.domain.RoundOpenedReason;
+import com.samdoryu.backend.evaluation.repository.EvaluationRoundRepository;
 import com.samdoryu.backend.github.GithubReaderSelector;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -59,6 +61,7 @@ class IssuePullRequestSyncIntegrationTest {
     @Autowired TaskAssigneeRepository assignees;
     @Autowired SubmissionRepository submissions;
     @Autowired TaskDueDateRepository dueDates;
+    @Autowired EvaluationRoundRepository rounds;
 
     @MockitoBean GithubReaderSelector readerSelector;
 
@@ -153,6 +156,28 @@ class IssuePullRequestSyncIntegrationTest {
             // 동기화는 앱 기록을 덮지 않는다
             assertThat(dueDates.findByTaskId(task.getId()).orElseThrow().getDueDate())
                     .isEqualTo(LocalDate.of(2026, 11, 10));
+        }
+
+        /** #19 — 새 PR마다 1회차(new_pr, 그때의 headSha). 다시 동기화해도 회차를 더 열지 않는다. */
+        @Test
+        void everyNewPullRequestGetsItsFirstRoundOnce() {
+            syncService.sync(demo.getId(), null, T0);
+            syncService.sync(demo.getId(), null, T1);
+            em.flush();
+            em.clear();
+
+            assertThat(rounds.count()).isEqualTo(4);
+            for (int number : new int[] {7, 8, 9, 10}) {
+                Submission pr = submissions.findByWorkspaceIdAndGithubPrNumber(demo.getId(), number).orElseThrow();
+                assertThat(rounds.findBySubmissionIdOrderByRoundNumberDesc(pr.getId())).singleElement()
+                        .satisfies(round -> {
+                            assertThat(round.getRoundNumber()).isEqualTo(1);
+                            assertThat(round.getOpenedReason()).isEqualTo(RoundOpenedReason.NEW_PR);
+                            assertThat(round.getHeadSha()).isEqualTo(pr.getHeadSha());
+                            assertThat(round.getOpenedAt()).isEqualTo(T0);
+                            assertThat(round.getClosedAt()).isNull();
+                        });
+            }
         }
     }
 

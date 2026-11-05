@@ -15,7 +15,8 @@ import java.util.List;
  * @param suggestedReviewerMemberIds 추천 리뷰어(FR-FLOW-04 — Should). 아직 계산하지 않아 빈 목록
  * @param linkedTaskIds GitHub 공식 연결만
  * @param isBlocked 서버 계산(FR-FLOW-01) — #22 전에는 false
- * @param currentRound 가장 최근 회차(「9」). PR이 닫혀도 마지막 회차를 보인다 — #19 전에는 null
+ * @param currentRound 가장 최근 회차(「9」). PR이 닫혀도 마지막 회차를 보인다. 회차가 없으면 null —
+ *        {@link #of}는 null로 만들고 Snapshot이 {@link #withCurrentRound}로 채운다
  */
 public record SubmissionDto(
         String id,
@@ -72,5 +73,13 @@ public record SubmissionDto(
                 submission.getStateChangedAt(),
                 submission.getSyncedAt(),
                 null);
+    }
+
+    /** 평가 회차 조각(evaluation 패키지)을 붙인 사본. */
+    public SubmissionDto withCurrentRound(EvaluationRoundDto round) {
+        return new SubmissionDto(id, githubPrNumber, title, authorMemberId, authorGithubLogin, state, headSha,
+                reviewRequestedMemberIds, reviews, suggestedReviewerMemberIds, labels, priority, linkedTaskIds,
+                isBlocked, htmlUrl, githubCreatedAt, githubUpdatedAt, mergedAt, closedAt, lastCommitAt, stateChangedAt,
+                syncedAt, round);
     }
 }
