@@ -8,6 +8,7 @@ import com.samdoryu.backend.flow.dto.FlowSummary;
 import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
 import com.samdoryu.backend.meeting.service.MeetingService;
+import com.samdoryu.backend.requirement.service.RequirementLinkService;
 import com.samdoryu.backend.requirement.service.RequirementService;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.dto.SubmissionDto;
@@ -30,8 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code GET W/snapshot} 조립(CONTRACTS_API 「5」). 다른 패키지 조각은 그 패키지 Service로만 읽는다.
- * 아직 기능이 없는 조각 — {@code requirementLinks}(#18), {@code activityNotes}(FR-ACT) — 은 빈 목록, {@code flow}는 열린 PR
- * 수만 채운다(나머지는 #22 · #24). PR의 {@code currentRound}는 평가 회차 조각(#19), {@code requirements}는 요구사항 조각(#14)이다.
+ * 아직 기능이 없는 조각 — {@code activityNotes}(FR-ACT) — 은 빈 목록, {@code flow}는 열린 PR 수만 채운다(나머지는 #22 · #24).
+ * PR의 {@code currentRound}는 평가 회차 조각(#19), {@code requirements}는 요구사항 조각(#14), {@code requirementLinks}는 연결
+ * 조각(#18)이다.
  */
 @Service
 public class WorkspaceSnapshotService {
@@ -51,12 +53,13 @@ public class WorkspaceSnapshotService {
     private final HelpRequestService helpRequestService;
     private final EvaluationRoundService evaluationRoundService;
     private final RequirementService requirementService;
+    private final RequirementLinkService requirementLinkService;
 
     public WorkspaceSnapshotService(WorkspaceService workspaceService, MemberRepository memberRepository,
             TeamSettingsRepository teamSettingsRepository, SyncService syncService,
             SyncedItemService syncedItemService, AgendaItemService agendaItemService, MeetingService meetingService,
             HelpRequestService helpRequestService, EvaluationRoundService evaluationRoundService,
-            RequirementService requirementService) {
+            RequirementService requirementService, RequirementLinkService requirementLinkService) {
         this.workspaceService = workspaceService;
         this.memberRepository = memberRepository;
         this.teamSettingsRepository = teamSettingsRepository;
@@ -67,6 +70,7 @@ public class WorkspaceSnapshotService {
         this.helpRequestService = helpRequestService;
         this.evaluationRoundService = evaluationRoundService;
         this.requirementService = requirementService;
+        this.requirementLinkService = requirementLinkService;
     }
 
     /**
@@ -93,7 +97,7 @@ public class WorkspaceSnapshotService {
                 syncedItemService.listTasks(workspaceId),
                 submissions,
                 requirementService.listAll(workspaceId),
-                List.of(),
+                requirementLinkService.listLinks(workspaceId),
                 agendaItemService.listAll(workspaceId),
                 meetingService.listRecent(workspaceId),
                 helpRequestService.listSummaries(workspaceId, now),
