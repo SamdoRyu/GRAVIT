@@ -4,6 +4,10 @@ import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
+import java.util.Collection;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +25,16 @@ public class AppUserService {
     @Transactional(readOnly = true)
     public AppUser require(Long userId) {
         return appUserRepository.findById(userId).orElseThrow(() -> new ApiException(ErrorCode.UNAUTHORIZED));
+    }
+
+    /** GitHub 사용자 ID로 이미 있는 사용자만 찾는다 — 강사 표시용(로그인한 적이 없으면 빠진다). */
+    @Transactional(readOnly = true)
+    public Map<Long, AppUser> findGithubUsers(Collection<Long> githubUserIds) {
+        if (githubUserIds.isEmpty()) {
+            return Map.of();
+        }
+        return appUserRepository.findByGithubUserIdIn(githubUserIds).stream()
+                .collect(Collectors.toMap(AppUser::getGithubUserId, Function.identity()));
     }
 
     /**

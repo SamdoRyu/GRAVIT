@@ -14,6 +14,8 @@ import type {
   HelpRequestCreateRequest,
   HelpRequestDetail,
   HelpRequestSummary,
+  InstructorAssignmentDto,
+  InstructorCandidateDto,
   InstructorFeedbackCreateRequest,
   MeResponse,
   MeetingDto,
@@ -382,6 +384,24 @@ export const helpRequestDetailExample = {
   learning: null,
 } satisfies HelpRequestDetail
 
+// contract/examples/instructor/instructor-assignment.json — CONTRACTS_API.md 「7」
+export const instructorAssignmentExample = {
+  githubUserId: '9001',
+  githubLogin: 'mentor-park',
+  displayName: '박멘토',
+  avatarUrl: 'https://avatars.githubusercontent.com/u/9001?v=4',
+  assignedAt: '2026-11-04T01:00:00Z',
+  assignedBy: { userId: '7', githubLogin: 'octo-kim', displayName: '김옥토', avatarUrl: 'https://avatars.githubusercontent.com/u/1001?v=4' },
+} satisfies InstructorAssignmentDto
+
+// contract/examples/instructor/instructor-candidate.json — CONTRACTS_API.md 「7」
+export const instructorCandidateExample = {
+  githubUserId: '9002',
+  githubLogin: null,
+  avatarUrl: null,
+  isAssigned: false,
+} satisfies InstructorCandidateDto
+
 /** contract/examples/ 기준 상대 경로 → TS 사본. 공통 JSON마다 하나씩 있어야 한다(④가 검사). */
 export const EXAMPLES: Record<string, unknown> = {
   'auth/me-response.json': meResponseExample,
@@ -392,6 +412,8 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-create-request.json': helpRequestCreateRequestExample,
   'help/help-request-detail.json': helpRequestDetailExample,
   'help/help-request-summary.json': helpRequestSummaryExample,
+  'instructor/instructor-assignment.json': instructorAssignmentExample,
+  'instructor/instructor-candidate.json': instructorCandidateExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
   'meeting/decision-request.json': decisionRequestExample,

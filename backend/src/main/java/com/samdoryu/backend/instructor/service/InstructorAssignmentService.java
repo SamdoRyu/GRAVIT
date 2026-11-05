@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 강사 지정(FR-AUTH-06). 다른 패키지는 이 Service로만 지정을 읽는다.
- * 지정 · 해제 API({@code PUT · DELETE W/instructors/{githubUserId}})는 강사 지정 Issue에서 더한다.
+ * 지정 · 해제 · 목록 API({@code W/instructors} · {@code W/instructor-candidates})는 {@link InstructorRosterService}.
  */
 @Service
 public class InstructorAssignmentService {
