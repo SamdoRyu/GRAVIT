@@ -33,6 +33,7 @@ import com.samdoryu.backend.meeting.repository.StandupRepository;
 import com.samdoryu.backend.report.domain.DecisionCard;
 import com.samdoryu.backend.report.domain.DecisionCardCells;
 import com.samdoryu.backend.report.repository.DecisionCardRepository;
+import com.samdoryu.backend.report.repository.FollowUpQuestionRepository;
 import com.samdoryu.backend.requirement.domain.Requirement;
 import com.samdoryu.backend.requirement.domain.RequirementLink;
 import com.samdoryu.backend.requirement.repository.RequirementLinkRepository;
@@ -78,6 +79,8 @@ import tools.jackson.databind.JsonNode;
  *   <li>고치기: 9칸 통째로, {@code confirmed: true}인데 배운 점이 비면 {@code 400}.</li>
  *   <li>계약 ② — 실제 응답 ↔ {@code contract/examples/report/retro-report.json}의 {@code decisionCards[0]} 모양.
  *       평가자 식별 값이 응답에 없다(익명성).</li>
+ *   <li>#59 FR-REP-11 꼬리질문: 요청은 본인만({@code 200}, 다시 요청해도 처음 시각). 꼬리질문은 지정된 강사만, 요청된 카드에만
+ *       {@code 201} — 요청 안 된 카드 · 본인 · 다른 학생 {@code 403}, 1~1000자 밖 {@code 400}. 9칸과 따로 붙는다.</li>
  * </ul>
  */
 @SpringBootTest(properties = {
@@ -108,6 +111,7 @@ class DecisionCardIntegrationTest {
     @Autowired AgendaItemRepository agendaItems;
     @Autowired StandupRepository standups;
     @Autowired DecisionCardRepository cards;
+    @Autowired FollowUpQuestionRepository followUpQuestions;
 
     private Workspace ws;
     private AppUser bobUser;
@@ -347,5 +351,83 @@ class DecisionCardIntegrationTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
 
         assertThat(cards.findById(card.getId()).orElseThrow().getCells()).isEqualTo(DecisionCardCells.EMPTY);
+    }
+
+    // ---- #59 꼬리질문 요청 · 쓰기 ----
+
+    @Test
+    void theOwnerRequestsAFollowUpAndTheAssignedInstructorWritesAQuestion() throws Exception {
+        DecisionCard card = savedCard();
+        String path = cardsPath(alice) + "/" + Ids.toApi(card.getId());
+
+        String requested = write(post(path + "/follow-up-request"), aliceSession, "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followUpRequested").value(true))
+                .andExpect(jsonPath("$.followUpRequestedAt").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        String requestedAt = ContractShape.readTree(requested).get("followUpRequestedAt").asString();
+        // 다시 요청해도 처음 요청 시각 그대로
+        write(post(path + "/follow-up-request"), aliceSession, "")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followUpRequestedAt").value(requestedAt));
+
+        String body = write(post(path + "/follow-up-questions"), instructorSession,
+                "{\"body\":\"이 결정을 다시 한다면 무엇을 바꾸겠어요?\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.body").value("이 결정을 다시 한다면 무엇을 바꾸겠어요?"))
+                .andExpect(jsonPath("$.instructor.githubLogin").value("instructor"))
+                .andReturn().getResponse().getContentAsString();
+
+        // 계약 ② — 「15」 FollowUpQuestionDto · 「1」 UserRef
+        JsonNode question = ContractShape.readTree(body);
+        assertThat(question.propertyNames()).containsExactlyInAnyOrder("id", "instructor", "body", "createdAt");
+        assertThat(question.get("instructor").propertyNames()).containsExactlyInAnyOrder(
+                "userId", "githubLogin", "displayName", "avatarUrl");
+        ContractShape.assertCommonRules(question);
+
+        // 카드에 따로 붙는다 — 본인 · 강사 모두 목록에서 본다. 9칸 · 수정 시각은 그대로
+        for (MockHttpSession session : List.of(aliceSession, instructorSession)) {
+            mvc.perform(get(cardsPath(alice)).session(session))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].followUpQuestions.length()").value(1))
+                    .andExpect(jsonPath("$[0].followUpQuestions[0].id").value(question.get("id").asString()))
+                    .andExpect(jsonPath("$[0].updatedAt").value("2026-11-01T00:00:00Z"));
+        }
+        assertThat(cards.findById(card.getId()).orElseThrow().getCells()).isEqualTo(DecisionCardCells.EMPTY);
+    }
+
+    @Test
+    void followUpRulesFollowTheContract() throws Exception {
+        DecisionCard card = savedCard();
+        String path = cardsPath(alice) + "/" + Ids.toApi(card.getId());
+        String question = "{\"body\":\"질문\"}";
+
+        // 요청 안 된 카드 — 강사도 403
+        write(post(path + "/follow-up-questions"), instructorSession, question)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        // 요청은 본인만 — 강사(InstructorWriteGuard) · 다른 학생 403
+        write(post(path + "/follow-up-request"), instructorSession, "")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        write(post(path + "/follow-up-request"), bobSession, "")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
+
+        write(post(path + "/follow-up-request"), aliceSession, "").andExpect(status().isOk());
+
+        // 꼬리질문은 강사가 직접 쓴다 — 본인 · 다른 학생 403
+        write(post(path + "/follow-up-questions"), aliceSession, question)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        write(post(path + "/follow-up-questions"), bobSession, question)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        // 길이 1~1000자
+        write(post(path + "/follow-up-questions"), instructorSession, "{\"body\":\"\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
+        write(post(path + "/follow-up-questions"), instructorSession, "{\"body\":\"" + "a".repeat(1001) + "\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
+        // 다른 팀원 경로로 같은 카드 ID — 404
+        write(post(cardsPath(bob) + "/" + Ids.toApi(card.getId()) + "/follow-up-questions"), instructorSession,
+                question)
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("not_found"));
+
+        assertThat(followUpQuestions.findAll()).isEmpty();
     }
 }

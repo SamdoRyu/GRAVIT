@@ -14,8 +14,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 계약 테스트 ① — CONTRACTS_API 「15」 기술 결정 카드 ↔ Java DTO. 응답은 {@code contract/examples/report/retro-report.json}의
- * {@code decisionCards[0]}, 요청은 계약 문서의 모양. 실제 HTTP 응답(②)은 {@code DecisionCardIntegrationTest}.
+ * 계약 테스트 ① — CONTRACTS_API 「15」 기술 결정 카드 · 꼬리질문 ↔ Java DTO. 카드 응답은
+ * {@code contract/examples/report/retro-report.json}의 {@code decisionCards[0]}, 꼬리질문 · 요청은 계약 문서의 모양.
+ * 실제 HTTP 응답(②)은 {@code DecisionCardIntegrationTest}.
  */
 class DecisionCardContractTest {
 
@@ -34,6 +35,32 @@ class DecisionCardContractTest {
             + "\"feedbackReceived\":\"비추천: 실패 응답 모양이 달라요\",\"meetingDecision\":null,\"finalChange\":null,"
             + "\"rationale\":null,\"blockedMoment\":null,\"learning\":\"에러 응답은 한 곳에서\",\"source\":null},"
             + "\"confirmed\":true}";
+
+    /** 계약 「15」 FollowUpQuestionDto — instructor는 「1」 UserRef. 예시 JSON의 카드에는 꼬리질문이 없어 TS 인터페이스를 옮겼다. */
+    static final String CONTRACT_FOLLOW_UP_QUESTION = "{\"id\":\"30\","
+            + "\"instructor\":{\"userId\":\"7\",\"githubLogin\":\"teacher\",\"displayName\":\"강사\",\"avatarUrl\":null},"
+            + "\"body\":\"이 결정을 다시 한다면 무엇을 바꾸겠어요?\",\"createdAt\":\"2026-11-06T02:00:00Z\"}";
+
+    @Test
+    void followUpQuestionRoundTripsThroughDto() {
+        JsonNode contract = ContractShape.readTree(CONTRACT_FOLLOW_UP_QUESTION);
+
+        DecisionCardDto.FollowUpQuestionDto question = MAPPER.treeToValue(contract,
+                DecisionCardDto.FollowUpQuestionDto.class);
+
+        assertThat(MAPPER.<JsonNode>valueToTree(question)).isEqualTo(contract);
+        ContractShape.assertCommonRules(contract);
+    }
+
+    @Test
+    void followUpQuestionBodyIs1To1000Chars() {
+        assertThat(MAPPER.readValue("{\"body\":\"질문\"}", FollowUpQuestionCreateRequest.class).body()).isEqualTo("질문");
+        assertThat(VALIDATOR.validate(new FollowUpQuestionCreateRequest(null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new FollowUpQuestionCreateRequest(""))).hasSize(1);
+        assertThat(VALIDATOR.validate(new FollowUpQuestionCreateRequest("a".repeat(1001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new FollowUpQuestionCreateRequest("a"))).isEmpty();
+        assertThat(VALIDATOR.validate(new FollowUpQuestionCreateRequest("a".repeat(1000)))).isEmpty();
+    }
 
     static JsonNode exampleCard() throws IOException {
         return MAPPER.readTree(Files.readString(RETRO_REPORT)).get("decisionCards").get(0);

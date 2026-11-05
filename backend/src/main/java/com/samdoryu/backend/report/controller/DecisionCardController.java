@@ -5,7 +5,9 @@ import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.report.dto.DecisionCardCreateRequest;
 import com.samdoryu.backend.report.dto.DecisionCardDto;
+import com.samdoryu.backend.report.dto.DecisionCardDto.FollowUpQuestionDto;
 import com.samdoryu.backend.report.dto.DecisionCardUpdateRequest;
+import com.samdoryu.backend.report.dto.FollowUpQuestionCreateRequest;
 import com.samdoryu.backend.report.service.DecisionCardService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -20,8 +22,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 기술 결정 카드 — CONTRACTS_API 「15」(FR-REP-07 · P11). 개인 API: 사무실 접근 → 경로 팀원(404) → 본인 · 강사(403)는
- * {@link DecisionCardService}가 본다. 강사의 쓰기는 {@code InstructorWriteGuard}가 먼저 막는다.
+ * 기술 결정 카드 — CONTRACTS_API 「15」(FR-REP-07 · 11 · P11). 개인 API: 사무실 접근 → 경로 팀원(404) → 본인 · 강사(403)는
+ * {@link DecisionCardService}가 본다. 강사의 쓰기는 {@code InstructorWriteGuard}가 먼저 막는다 — 꼬리질문 쓰기만 강사에게 열려 있다.
  */
 @RestController
 @RequestMapping("/api/workspaces/{workspaceId}/members/{memberId}/decision-cards")
@@ -58,5 +60,23 @@ public class DecisionCardController {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return decisionCardService.update(access, Ids.fromPath(memberId), Ids.fromPath(cardId),
                 request.cells().toCells(), request.confirmed());
+    }
+
+    /** 본인만 — 강사에게 꼬리질문 요청(FR-REP-11). 본문 없음. */
+    @PostMapping("/{cardId}/follow-up-request")
+    public DecisionCardDto requestFollowUp(@PathVariable String workspaceId, @PathVariable String memberId,
+            @PathVariable String cardId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return decisionCardService.requestFollowUp(access, Ids.fromPath(memberId), Ids.fromPath(cardId));
+    }
+
+    /** 지정된 강사(R4)만, 꼬리질문을 요청한 카드에만. 경로 변수 이름은 {@code InstructorWriteGuard} 허용 목록과 같아야 한다. */
+    @PostMapping("/{cardId}/follow-up-questions")
+    @ResponseStatus(HttpStatus.CREATED)
+    public FollowUpQuestionDto addFollowUpQuestion(@PathVariable String workspaceId, @PathVariable String memberId,
+            @PathVariable String cardId, @Valid @RequestBody FollowUpQuestionCreateRequest request) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return decisionCardService.addFollowUpQuestion(access, Ids.fromPath(memberId), Ids.fromPath(cardId),
+                request.body());
     }
 }

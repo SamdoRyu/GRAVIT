@@ -9,8 +9,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
+import com.samdoryu.backend.auth.service.AppUserService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
+import com.samdoryu.backend.report.domain.FollowUpQuestion;
+import com.samdoryu.backend.report.dto.DecisionCardDto.FollowUpQuestionDto;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.evaluation.domain.Verdict;
@@ -70,9 +74,10 @@ class DecisionCardServiceTest {
     private final AgendaItemService agendaItemService = mock(AgendaItemService.class);
     private final MeetingService meetingService = mock(MeetingService.class);
     private final StandupService standupService = mock(StandupService.class);
+    private final AppUserService appUserService = mock(AppUserService.class);
     private final DecisionCardService service = new DecisionCardService(cards, questions, workspaceService,
             syncedItemService, evaluationRoundService, requirementService, requirementLinkService, agendaItemService,
-            meetingService, standupService);
+            meetingService, standupService, appUserService);
 
     private final WorkspaceAccess alice = new WorkspaceAccess(WS, 1L, WorkspaceRole.PARTICIPANT, ALICE);
     private final WorkspaceAccess bob = new WorkspaceAccess(WS, 2L, WorkspaceRole.PARTICIPANT, BOB);
@@ -327,5 +332,81 @@ class DecisionCardServiceTest {
                 ErrorCode.FORBIDDEN_ROLE);
         given(cards.findByIdAndMemberId(9L, ALICE)).willReturn(Optional.empty());
         assertError(() -> service.update(alice, ALICE, 9L, cellsWithLearning(null), false), ErrorCode.NOT_FOUND);
+    }
+
+    // ---- #59 꼬리질문 요청 · 쓰기 ----
+
+    @Test
+    void theOwnerRequestsAFollowUpOnceAndAgainKeepsTheFirstTime() {
+        DecisionCard card = existingCard();
+
+        DecisionCardDto requested = service.requestFollowUp(alice, ALICE, 8L);
+        assertThat(requested.followUpRequested()).isTrue();
+        Instant first = requested.followUpRequestedAt();
+        assertThat(first).isNotNull();
+
+        assertThat(service.requestFollowUp(alice, ALICE, 8L).followUpRequestedAt()).isEqualTo(first);
+        // 요청은 9칸 · 확인 여부를 건드리지 않는다
+        assertThat(card.getCells()).isEqualTo(DecisionCardCells.EMPTY);
+        assertThat(card.getConfirmedAt()).isNull();
+    }
+
+    @Test
+    void onlyTheOwnerRequestsAFollowUp() {
+        DecisionCard card = existingCard();
+
+        assertError(() -> service.requestFollowUp(bob, ALICE, 8L), ErrorCode.FORBIDDEN_ROLE);
+        assertError(() -> service.requestFollowUp(instructor, ALICE, 8L), ErrorCode.FORBIDDEN_ROLE);
+        given(cards.findByIdAndMemberId(9L, ALICE)).willReturn(Optional.empty());
+        assertError(() -> service.requestFollowUp(alice, ALICE, 9L), ErrorCode.NOT_FOUND);
+        assertThat(card.getFollowUpRequestedAt()).isNull();
+    }
+
+    @Test
+    void theInstructorWritesAFollowUpQuestionOnARequestedCard() {
+        DecisionCard card = existingCard();
+        card.requestFollowUp(T0.plusSeconds(60));
+        AppUser teacher = AppUser.github(9001L, "teacher", "강사", null);
+        ReflectionTestUtils.setField(teacher, "id", 9L);
+        given(appUserService.require(9L)).willReturn(teacher);
+        given(questions.save(any(FollowUpQuestion.class))).willAnswer(invocation -> {
+            FollowUpQuestion question = invocation.getArgument(0);
+            ReflectionTestUtils.setField(question, "id", 30L);
+            return question;
+        });
+        Instant updatedBefore = card.getUpdatedAt();
+
+        FollowUpQuestionDto question = service.addFollowUpQuestion(instructor, ALICE, 8L, "이 결정을 다시 한다면?");
+
+        assertThat(question.id()).isEqualTo("30");
+        assertThat(question.body()).isEqualTo("이 결정을 다시 한다면?");
+        assertThat(question.instructor().userId()).isEqualTo("9");
+        assertThat(question.instructor().githubLogin()).isEqualTo("teacher");
+        assertThat(question.createdAt()).isAfter(T0);
+        // 9칸과 따로 붙는다 — 카드의 수정 시각 · 확인 여부는 그대로
+        assertThat(card.getUpdatedAt()).isEqualTo(updatedBefore);
+        assertThat(card.getCells()).isEqualTo(DecisionCardCells.EMPTY);
+    }
+
+    @Test
+    void aCardWithoutAFollowUpRequestIsForbiddenForTheInstructor() {
+        existingCard();
+
+        assertError(() -> service.addFollowUpQuestion(instructor, ALICE, 8L, "질문"), ErrorCode.FORBIDDEN_ROLE);
+        verify(questions, never()).save(any());
+    }
+
+    @Test
+    void onlyTheAssignedInstructorWritesFollowUpQuestions() {
+        DecisionCard card = existingCard();
+        card.requestFollowUp(T0.plusSeconds(60));
+
+        // 본인 · 다른 학생도 꼬리질문은 못 쓴다(강사가 직접 쓴다 — FR-REP-11)
+        assertError(() -> service.addFollowUpQuestion(alice, ALICE, 8L, "질문"), ErrorCode.FORBIDDEN_ROLE);
+        assertError(() -> service.addFollowUpQuestion(bob, ALICE, 8L, "질문"), ErrorCode.FORBIDDEN_ROLE);
+        // 강사라도 다른 팀원의 카드 ID면 404
+        given(cards.findByIdAndMemberId(9L, ALICE)).willReturn(Optional.empty());
+        assertError(() -> service.addFollowUpQuestion(instructor, ALICE, 9L, "질문"), ErrorCode.NOT_FOUND);
+        verify(questions, never()).save(any());
     }
 }
