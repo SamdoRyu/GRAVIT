@@ -22,6 +22,7 @@ import type {
   MeResponse,
   OpenWorkspaceRequest,
   RepositoryChoiceResponse,
+  ReviewLoginRequest,
   SnapshotResource,
   SyncStatus,
   TeamSettings,
@@ -123,13 +124,15 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
 
   async function send(method: string, path: string, payload?: unknown): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' }
-    if (payload !== undefined) headers['Content-Type'] = 'application/json; charset=utf-8'
+    // 심사용 로그인만 form(application/x-www-form-urlencoded), 나머지는 JSON (CONTRACTS_API.md 「2」)
+    const form = payload instanceof URLSearchParams
+    if (payload !== undefined) headers['Content-Type'] = form ? 'application/x-www-form-urlencoded;charset=UTF-8' : 'application/json; charset=utf-8'
     if (method !== 'GET') {
       const token = csrfToken()
       if (token) headers[CSRF_HEADER] = token
     }
     try {
-      return await fetch(base + path, { method, headers, body: payload === undefined ? undefined : JSON.stringify(payload) })
+      return await fetch(base + path, { method, headers, body: payload === undefined ? undefined : form ? payload.toString() : JSON.stringify(payload) })
     } catch {
       throw new DataError(UNREACHABLE, 'unavailable')
     }
@@ -291,6 +294,9 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     getMe: async () => json<MeResponse>(await read('/api/me')),
     async logout() {
       await write('POST', '/api/logout')
+    },
+    async reviewLogin(request: ReviewLoginRequest) {
+      await write('POST', '/api/review-login', new URLSearchParams({ username: request.username, password: request.password }))
     },
 
     listRepositories: async () => json<RepositoryChoiceResponse>(await read('/api/repositories')),

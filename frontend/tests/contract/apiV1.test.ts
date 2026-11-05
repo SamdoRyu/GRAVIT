@@ -97,7 +97,7 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'GET' && path === '/api/repositories') return sendJson(res, 200, { organizations: [] })
     if (r.method === 'GET' && path === '/api/workspaces') return sendJson(res, 200, [{ ...workspaceSnapshotExample.workspace, myRole: 'participant' }])
     if (r.method === 'POST' && path === '/api/workspaces') return sendJson(res, 201, workspaceSnapshotExample.workspace)
-    if (r.method === 'POST' && path === '/api/logout') {
+    if (r.method === 'POST' && (path === '/api/logout' || path === '/api/review-login')) {
       res.writeHead(204)
       return res.end()
     }
@@ -249,6 +249,21 @@ describe('v1 api — 쓰기 · CSRF', () => {
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '강사는 동기화할 수 없어요'))
     await rejectsWith(api.requestSync('3'), 'forbidden_role', '강사는 동기화할 수 없어요')
     assert.equal(fake.requests.length, 1)
+  })
+
+  it('심사용 로그인 — POST /api/review-login을 form 본문(username · password)과 CSRF로 보내고, 401 · 404를 그대로 (#63 · #64)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.equal(await api.reviewLogin({ username: 'review 1', password: 'p&w=d' }), undefined)
+    const [req] = fake.requests
+    assert.equal(`${req.method} ${req.path} ${req.csrf}`, 'POST /api/review-login tok-1')
+    assert.match(req.contentType ?? '', /^application\/x-www-form-urlencoded/)
+    assert.deepEqual(Object.fromEntries(new URLSearchParams(req.body)), { username: 'review 1', password: 'p&w=d' }, '특수 문자도 인코딩')
+    fake.next.push((_r, res) => sendError(res, 401, 'unauthorized', '아이디나 비밀번호가 맞지 않아요'))
+    await rejectsWith(api.reviewLogin({ username: 'review', password: 'x' }), 'unauthorized', '아이디나 비밀번호가 맞지 않아요')
+    fake.next.push((_r, res) => sendError(res, 404, 'not_found', '없는 경로예요'))
+    await rejectsWith(api.reviewLogin({ username: 'review', password: 'x' }), 'not_found', '없는 경로예요')
   })
 
   it('팀 설정 — GET · PUT W/settings, PUT은 전체를 JSON 본문으로 보내고 400 · 403을 그대로 돌려준다 (#38)', async () => {

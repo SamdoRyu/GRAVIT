@@ -192,6 +192,7 @@ textarea.select { height: auto; padding: 7px 8px; resize: vertical; line-height:
 .menu-item:disabled { opacity: 0.5; cursor: not-allowed; }
 .menu-note { margin-left: auto; font-size: var(--fs-s); color: var(--text-dim); }
 .menu-sep { height: 1px; margin: 4px 0; border: 0; background: var(--line); }
+.menu-me { padding: 6px 10px 2px; color: var(--text-dim); font-size: var(--fs-s); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-danger { color: var(--ink-bad); }
 .menu-danger:hover:not(:disabled) { background: var(--bad-soft); }
 

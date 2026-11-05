@@ -37,8 +37,16 @@ const DEFAULT_SYNC_DURATION_MS = 800
 /** 동기화가 끝났을 때 다시 읽으라고 알리는 자원 */
 const SYNCED_RESOURCES = ['members', 'tasks', 'submissions'] as const
 
+/** mock 심사용 계정 — 실제 값은 서버 설정이 정한다(#63). 로그인 화면이 mock일 때만 안내한다 */
+export const MOCK_REVIEW_LOGIN = { username: 'review', password: 'review' } as const
+
+/** mock 전용 — GitHub 로그인은 브라우저가 GitHub로 갔다 돌아오는 흐름이라 mock에서는 이 함수로 끝낸다 */
+export type V1MockDataSource = DataSource & { completeGithubLogin(): void }
+
 const MSG = {
   unauthorized: '로그인이 필요해요',
+  reviewLoginFailed: '아이디나 비밀번호가 맞지 않아요',
+  reviewLoginDisabled: '이 환경에서는 심사용 로그인을 쓸 수 없어요',
   workspaceNotFound: '사무실을 찾을 수 없어요',
   repoNotFound: '레포를 찾을 수 없어요',
   notRepoAdmin: '레포 관리자만 사무실을 열 수 있어요',
@@ -64,7 +72,7 @@ export interface V1MockOptions {
   syncDurationMs?: number
 }
 
-export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
+export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSource {
   const storage = opts.storage ?? defaultStorage()
   const random = opts.random ?? Math.random
   const now = opts.now ?? (() => new Date())
@@ -228,6 +236,20 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
     async logout() {
       await wait()
       state.session = null
+      save()
+    },
+
+    // 값이 틀리면 어느 값인지 말하지 않는다(401). 꺼진 환경이면 경로가 없다(404)
+    async reviewLogin(request) {
+      await wait()
+      if (!reviewLoginEnabled) throw new DataError(MSG.reviewLoginDisabled, 'not_found')
+      if (request?.username !== MOCK_REVIEW_LOGIN.username || request?.password !== MOCK_REVIEW_LOGIN.password) throw new DataError(MSG.reviewLoginFailed, 'unauthorized')
+      state.session = 'review'
+      save()
+    },
+
+    completeGithubLogin() {
+      state.session = 'github'
       save()
     },
 

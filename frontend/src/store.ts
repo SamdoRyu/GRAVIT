@@ -3,7 +3,7 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceListItem, WorkspaceSnapshot } from './data/types'
+import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -83,11 +83,6 @@ interface OfficeState {
    * 어느 사무실을 열지는 진입 흐름(로그인 · 사무실 고르기 — #64 · #68)이 정해 부른다.
    */
   openOffice: (source: DataSource, workspaceId: Id) => Promise<void>
-  /**
-   * 진입 흐름이 생기기 전의 임시 진입(#102 T5-c-1) — 들어갈 수 있는 사무실 목록에서 pickWorkspace로 골라 연다.
-   * 이미 연 사무실이 있거나, 목록을 읽지 못했거나(로그인 전 등), 열 사무실이 없으면 열지 않는다(상단 바는 데모 지표 그대로).
-   */
-  openDefaultOffice: (source: DataSource, preferredId?: Id | null) => Promise<void>
   /** 구독을 끊고 office를 비운다 */
   closeOffice: () => void
   /**
@@ -194,15 +189,6 @@ interface OfficeState {
 export function ongoingMeeting(meetings: Record<Id, Meeting>): Meeting | null {
   for (const m of Object.values(meetings)) if (m.status === 'ongoing') return m
   return null
-}
-
-/**
- * 진입 흐름(#64 · #68)이 생기기 전에 열 사무실 (#102 T5-c-1).
- * preferredId가 목록에 있으면 그것, 아니면 GitHub 팀 사무실 중 첫째(목록은 displayName 순), 없으면 첫째. 목록이 비면 null.
- */
-export function pickWorkspace(list: readonly WorkspaceListItem[], preferredId: Id | null = null): Id | null {
-  const preferred = preferredId === null ? undefined : list.find((w) => w.id === preferredId)
-  return (preferred ?? list.find((w) => w.kind === 'github') ?? list[0])?.id ?? null
 }
 
 let source: DemoDataSource | null = null
@@ -419,17 +405,6 @@ export const useOffice = create<OfficeState>((set, get) => {
       // 읽기 전에 구독한다 — 읽는 사이에 온 알림을 놓치지 않게
       officeUnsubscribe = src.subscribe(workspaceId, (c) => applyOfficeChange(gen, c))
       await loadOffice(gen)
-    },
-    openDefaultOffice: async (src, preferredId = null) => {
-      let list: WorkspaceListItem[]
-      try {
-        list = await src.listWorkspaces()
-      } catch {
-        return
-      }
-      const id = pickWorkspace(list, preferredId)
-      // 목록을 읽는 사이 다른 곳(StrictMode의 두 번째 호출 등)이 이미 열었으면 그대로 둔다
-      if (id !== null && !get().office) await get().openOffice(src, id)
     },
     closeOffice: () => {
       officeGen++

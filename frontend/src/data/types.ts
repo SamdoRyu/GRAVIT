@@ -64,6 +64,11 @@ export interface LoginOptions {
   /** false면 화면이 심사용 로그인 폼을 숨긴다(숨김은 보안이 아니다 — 경로 자체가 없다). */
   reviewLoginEnabled: boolean
 }
+/** `POST /api/review-login` — application/x-www-form-urlencoded의 username · password 칸 */
+export interface ReviewLoginRequest {
+  username: string
+  password: string
+}
 
 export interface MeResponse {
   user: UserRef
