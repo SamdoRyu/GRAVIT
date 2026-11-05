@@ -6,8 +6,9 @@ import { WORKLOAD_LEVELS } from '../data/meta'
 import { computeKpis } from '../data/selectors'
 import { ongoingMeeting, useOffice, type Overlay } from '../store'
 import { AnimatedNumber } from './common'
-import type { FlowSummary } from '../data/types'
-import { cssVars, finiteOrNull, formatDuration, formatHours } from './format'
+import type { FlowSummary, TeamSettings, WorkspaceSnapshot } from '../data/types'
+import { ddayText, kstToday, projectDay } from '../data/rules/period'
+import { cssVars, finiteOrNull, formatDuration, formatHours, formatMonthDay } from './format'
 import { useNow, useProjectList } from './hooks'
 import { Icon } from './icons'
 import { useUi } from './uiState'
@@ -84,13 +85,46 @@ function TeamMetrics({ flow }: { flow: FlowSummary | null }) {
   const open = finiteOrNull(flow?.openSubmissionCount)
   const wait = finiteOrNull(flow?.averageReviewWaitHours)
   return (
-    <div className="kpis">
+    <>
       <Kpi label="열린 PR" hint={open === null ? '사무실 데이터를 아직 받지 못했어요' : '지금 열려 있는 PR 수예요 — 팀 전체 값'}>
         {open === null ? <NoValue /> : <AnimatedNumber value={open} />}
       </Kpi>
       <Kpi label="평균 리뷰 대기" hint={wait === null ? '아직 계산할 리뷰가 없어요' : 'PR이 리뷰를 기다린 평균 시간이에요 — 팀 전체 값'}>
         {wait === null ? <NoValue /> : formatHours(wait)}
       </Kpi>
+    </>
+  )
+}
+
+/** 프로젝트 기간 D-day (FR-PLAN-01) — 끝 날짜까지, 한국 시간 달력 날짜 기준. R2는 눌러서 기간을 바꾼다 */
+function ProjectDday({ settings, canEdit }: { settings: TeamSettings | null; canEdit: boolean }) {
+  const now = useNow(60_000) // 자정이 지나면 다음 날로 바뀌게
+  const day = settings ? projectDay(settings, kstToday(new Date(now))) : null
+  const edit = settings && canEdit ? () => useOffice.getState().openDialog({ kind: 'projectPeriod' }) : undefined
+  if (!settings || !day) {
+    const hint = settings ? '프로젝트 기간이 올바르지 않아요' : '사무실 데이터를 아직 받지 못했어요'
+    return (
+      <Kpi label="D-day" hint={hint} onClick={edit} title={edit ? `${hint} — 눌러서 기간 바꾸기` : undefined}>
+        <NoValue />
+      </Kpi>
+    )
+  }
+  const { value, label } = ddayText(day)
+  const today = day.dayOfProject === null ? '' : ` · 오늘 ${day.dayOfProject}일째`
+  const hint = `프로젝트 기간 ${formatMonthDay(settings.projectStartDate)} ~ ${formatMonthDay(settings.projectEndDate)} (총 ${day.totalDays}일)${today}`
+  return (
+    <Kpi label={label} hint={hint} onClick={edit} title={edit ? `${hint} — 눌러서 기간 바꾸기` : undefined}>
+      {value}
+    </Kpi>
+  )
+}
+
+/** v1 사무실이 열렸을 때 상단 바 지표 줄 — D-day가 먼저(좁은 화면에서는 앞의 것만 보인다) */
+function OfficeKpis({ snapshot }: { snapshot: WorkspaceSnapshot | null }) {
+  return (
+    <div className="kpis">
+      <ProjectDday settings={snapshot?.settings ?? null} canEdit={snapshot?.viewer.role === 'repo_admin'} />
+      <TeamMetrics flow={snapshot?.flow ?? null} />
     </div>
   )
 }
@@ -386,7 +420,7 @@ export function TopBar() {
   const status = useOffice((s) => s.status)
   const connection = useOffice((s) => s.connection)
   const officeOpen = useOffice((s) => s.office !== null)
-  const flow = useOffice((s) => s.office?.snapshot?.flow ?? null)
+  const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   return (
     <div className="hud-top">
       <div className="top-head">
@@ -399,7 +433,7 @@ export function TopBar() {
           {connection !== null && <span className="badge-server">서버</span>}
         </div>
         {/* v1 사무실을 열었으면(읽는 중 · 실패 포함) 팀 지표, 아니면 아직 데모 지표 (화면이 v1으로 옮겨 가면 KpiRow를 지운다) */}
-        {officeOpen ? <TeamMetrics flow={flow} /> : <KpiRow />}
+        {officeOpen ? <OfficeKpis snapshot={snapshot} /> : <KpiRow />}
         <SyncStatus />
         {canDemo && (
           <label className="demo" title="데모 모드 · 팀원 자동 활동">

@@ -18,6 +18,7 @@ import type {
   RepositoryChoiceResponse,
   SyncStatus,
   Task,
+  TeamSettings,
   TaskInput,
   TaskPatch,
   Workspace,
@@ -31,7 +32,7 @@ import type {
  * 인자 순서는 (workspaceId, 경로의 다른 ID…, 요청 DTO), 반환은 응답 DTO 그대로(204는 void).
  * 실패는 DataError(message, code)로 던진다.
  *
- * 지금은 P0 메서드만 있다(#8 T5-a). 나머지는 기능 Issue마다 그 PR에서 더한다(T5-b).
+ * P0 메서드(#8 T5-a)에 기능 Issue마다 그 PR에서 더한다(T5-b) — 팀 설정(#38).
  */
 export interface DataSource {
   /** 화면에 보일 이름, 예: "로컬 mock 데이터" */
@@ -60,6 +61,11 @@ export interface DataSource {
   requestSync(workspaceId: Id): Promise<SyncStatus>
   /** GET W/sync-status */
   getSyncStatus(workspaceId: Id): Promise<SyncStatus>
+
+  /** GET W/settings */
+  getSettings(workspaceId: Id): Promise<TeamSettings>
+  /** PUT W/settings — 전체 교체, R2만. 범위 · 날짜 순서가 틀리면 invalid, R2가 아니면 forbidden_role */
+  updateSettings(workspaceId: Id, settings: TeamSettings): Promise<TeamSettings>
 }
 
 /** CONTRACTS.md 「6」의 8개 에러 코드 전부. */

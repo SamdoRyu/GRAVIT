@@ -334,3 +334,43 @@ describe('상단 바 팀 지표 (#24 — FR-FLOW-05)', () => {
     assert.deepEqual(Object.keys(flow), Object.keys(workspaceSnapshotExample.flow))
   })
 })
+
+describe('store — 팀 설정 바꾸기 (#38 — FR-PLAN-01)', () => {
+  const openAdminOffice = async (h: ReturnType<typeof harness>) => {
+    const ws = await h.source.openWorkspace({ githubRepoId: '880001300', projectStartDate: '2026-11-04', projectEndDate: '2026-11-17', specDocumentPath: null, activityConsent: true })
+    await useOffice.getState().openOffice(h.source, ws.id)
+    return ws.id
+  }
+
+  it('R2 — 성공하면 snapshot.settings가 응답으로 바뀌고 나머지 설정은 그대로', async () => {
+    const h = harness()
+    await openAdminOffice(h)
+    const before = office()!.snapshot!.settings
+    const ok = await useOffice.getState().updateOfficeSettings({ ...before, projectEndDate: '2026-11-30' })
+    assert.equal(ok, true)
+    assert.deepEqual(office()?.snapshot?.settings, { ...before, projectEndDate: '2026-11-30' })
+  })
+
+  it('R2가 아니면 false · 실패 알림, 마지막 값은 그대로', async () => {
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    const before = office()!.snapshot!.settings
+    const toasts = useOffice.getState().toasts.length
+    assert.equal(await useOffice.getState().updateOfficeSettings({ ...before, projectEndDate: '2026-12-01' }), false)
+    assert.deepEqual(office()?.snapshot?.settings, before)
+    const last = useOffice.getState().toasts.at(-1)
+    assert.equal(useOffice.getState().toasts.length, toasts + 1)
+    assert.equal(last?.level, 'bad')
+  })
+
+  it('사무실이 없으면 보내지 않고 false, 응답 전에 닫으면 응답을 버린다', async () => {
+    assert.equal(await useOffice.getState().updateOfficeSettings({ projectStartDate: '2026-11-04', projectEndDate: '2026-11-17', specDocumentPath: null, reviewWaitHours: 48, noCommitHours: 48 }), false)
+    const h = harness()
+    await openAdminOffice(h)
+    const before = office()!.snapshot!.settings
+    const saving = useOffice.getState().updateOfficeSettings({ ...before, projectEndDate: '2026-11-30' })
+    useOffice.getState().closeOffice()
+    assert.equal(await saving, true)
+    assert.equal(office(), null)
+  })
+})
