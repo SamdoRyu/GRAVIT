@@ -1,0 +1,8 @@
+# Tests only — layered over src/main/resources/application.yaml (classpath:/config/ is read after classpath:/).
+# Spring keeps one cached context per distinct test config, each with its own Hikari pool (default: 10 connections held).
+# Small pools keep the whole suite under MySQL max_connections (151) as test configs grow.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 1

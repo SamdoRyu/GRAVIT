@@ -91,7 +91,13 @@ class ReviewLoginIntegrationTest {
                 .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
                 .header(HttpHeaders.ORIGIN, ORIGIN)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .param("username", username).param("password", password));
+                .param("username", username).param("password", password)
+                // 브라우저처럼 세션 쿠키(요청한 세션 ID)를 함께 보낸다 — 세션 고정 방지는 요청한 세션 ID가 유효할 때 ID를 바꾼다
+                .with(request -> {
+                    request.setRequestedSessionId(session.getId());
+                    request.setRequestedSessionIdValid(true);
+                    return request;
+                }));
     }
 
     private MockHttpSession loggedIn(String username, String password) throws Exception {
