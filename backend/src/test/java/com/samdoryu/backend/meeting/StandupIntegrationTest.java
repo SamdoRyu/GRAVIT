@@ -18,6 +18,15 @@ import com.samdoryu.backend.instructor.domain.InstructorAssignment;
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
 import com.samdoryu.backend.meeting.domain.Standup;
 import com.samdoryu.backend.meeting.repository.StandupRepository;
+import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionState;
+import com.samdoryu.backend.sync.domain.Task;
+import com.samdoryu.backend.sync.domain.TaskAssignee;
+import com.samdoryu.backend.sync.domain.TaskClosedReason;
+import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionRepository;
+import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
+import com.samdoryu.backend.sync.repository.TaskRepository;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
@@ -62,6 +71,9 @@ class StandupIntegrationTest {
     @Autowired MemberRepository members;
     @Autowired InstructorAssignmentRepository instructorAssignments;
     @Autowired StandupRepository standups;
+    @Autowired TaskRepository tasks;
+    @Autowired TaskAssigneeRepository taskAssignees;
+    @Autowired SubmissionRepository submissions;
 
     private Workspace ws;
     private Workspace otherWs;
@@ -216,5 +228,87 @@ class StandupIntegrationTest {
                 .content("{\"content\":\"CI가 실패해요\",\"fromStandupId\":\"" + standupId + "\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.fromStandupId").value(standupId));
+    }
+
+    // ---- #34 "어제 한 일" 미리 채우기 -----------------------------------------------------------------
+
+    /** 2026-11-05의 전날 = 한국 시간 11월 4일 = UTC 11-03T15:00 이상 11-04T15:00 미만. */
+    private static final LocalDate PREFILL_DATE = LocalDate.parse("2026-11-05");
+    private static final Instant LONG_AGO = Instant.parse("2026-11-01T00:00:00Z");
+    private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
+
+    private Task issue(int number, Instant closedAt) {
+        return tasks.saveAndFlush(Task.builder().workspace(ws).githubIssueNumber(number).title("이슈 " + number)
+                .state(TaskState.CLOSED).closedReason(TaskClosedReason.COMPLETED).labelsJson("[]")
+                .githubCreatedAt(LONG_AGO).githubUpdatedAt(closedAt).closedAt(closedAt).stateChangedAt(closedAt)
+                .syncedAt(closedAt).build());
+    }
+
+    private Submission pr(int number, Member author, long authorGithubId, Instant createdAt, Instant mergedAt,
+            String reviewsJson) {
+        return submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(number).title("PR " + number)
+                .authorGithubUserId(authorGithubId).authorMember(author)
+                .state(mergedAt == null ? SubmissionState.OPEN : SubmissionState.MERGED).headSha(SHA)
+                .reviewRequestsJson("[]").reviewsJson(reviewsJson).labelsJson("[]").githubCreatedAt(createdAt)
+                .githubUpdatedAt(createdAt).mergedAt(mergedAt).closedAt(mergedAt).stateChangedAt(createdAt)
+                .syncedAt(createdAt).build());
+    }
+
+    private static String review(long githubUserId, String login, String submittedAt) {
+        return "{\"reviewerGithubUserId\":" + githubUserId + ",\"reviewerGithubLogin\":\"" + login
+                + "\",\"state\":\"approved\",\"submittedAt\":\"" + submittedAt + "\"}";
+    }
+
+    /** 내가 연 PR · 머지된 내 PR · 내가 제출한 리뷰 · 내가 담당자인 이슈의 닫힘 — 전날 한국 시간 하루 안만, 시각 순. */
+    @Test
+    void prefillCollectsMyGithubActivityOfThePreviousKstDay() throws Exception {
+        pr(15, alice, 1001L, Instant.parse("2026-11-04T03:00:00Z"), null, "[]");
+        pr(16, alice, 1001L, LONG_AGO, Instant.parse("2026-11-04T14:59:59Z"), "[]"); // 한국 시간 11-04 23:59:59
+        pr(17, bob, 1002L, Instant.parse("2026-11-04T01:00:00Z"), null, "[" // 밥의 PR — 밥이 연 것은 빠진다
+                + review(1001L, "alice", "2026-11-04T06:30:00Z") + ","
+                + review(1001L, "alice", "2026-11-03T14:59:00Z") + "," // 한국 시간 11-03 — 빠진다
+                + review(1002L, "bob", "2026-11-04T07:00:00Z") + "]");
+        pr(18, alice, 1001L, Instant.parse("2026-11-04T15:00:00Z"), null, "[]"); // 한국 시간 11-05 00:00 — 빠진다
+        taskAssignees.saveAndFlush(new TaskAssignee(issue(12, Instant.parse("2026-11-04T09:00:00Z")), alice, LONG_AGO));
+        taskAssignees.saveAndFlush(new TaskAssignee(issue(13, Instant.parse("2026-11-04T10:00:00Z")), bob, LONG_AGO));
+        em.clear();
+
+        String response = mvc.perform(get(base(ws) + "/" + PREFILL_DATE + "/mine/prefill").session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.date").value("2026-11-05"))
+                .andExpect(jsonPath("$.items.length()").value(4))
+                .andExpect(jsonPath("$.items[0].kind").value("pr_opened"))
+                .andExpect(jsonPath("$.items[0].githubNumber").value(15))
+                .andExpect(jsonPath("$.items[0].title").value("PR 15"))
+                .andExpect(jsonPath("$.items[1].kind").value("review_submitted"))
+                .andExpect(jsonPath("$.items[1].githubNumber").value(17))
+                .andExpect(jsonPath("$.items[2].kind").value("issue_closed"))
+                .andExpect(jsonPath("$.items[2].githubNumber").value(12))
+                .andExpect(jsonPath("$.items[3].kind").value("pr_merged"))
+                .andExpect(jsonPath("$.items[3].githubNumber").value(16))
+                .andExpect(jsonPath("$.items[3].occurredAt").value("2026-11-04T14:59:59Z"))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("meeting", "standup-prefill.json"), actual);
+        ContractShape.assertCommonRules(actual);
+    }
+
+    @Test
+    void prefillWithoutActivityIsEmpty() throws Exception {
+        mvc.perform(get(base(ws) + "/" + PREFILL_DATE + "/mine/prefill").session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void prefillIsForTeamMembersWithAValidDate() throws Exception {
+        mvc.perform(get(base(ws) + "/" + PREFILL_DATE + "/mine/prefill").session(instructorSession))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        mvc.perform(get(base(ws) + "/11-05/mine/prefill").session(aliceSession))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+        mvc.perform(get(base(otherWs) + "/" + PREFILL_DATE + "/mine/prefill").session(aliceSession))
+                .andExpect(status().isNotFound());
     }
 }

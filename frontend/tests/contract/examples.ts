@@ -17,6 +17,7 @@ import type {
   MeetingDto,
   PageResponse,
   StandupDto,
+  StandupPrefill,
   TimelineEntry,
   WorkspaceSnapshot,
 } from '../../src/data/types'
@@ -106,6 +107,17 @@ export const standupExample = {
   blockers: '로그아웃 뒤에도 세션이 남아요',
   updatedAt: '2026-11-05T00:30:00Z',
 } satisfies StandupDto
+
+// contract/examples/meeting/standup-prefill.json — CONTRACTS_API.md 「12」
+export const standupPrefillExample = {
+  date: '2026-11-05',
+  items: [
+    { kind: 'commit', title: '세션 만료 처리', githubNumber: null, occurredAt: '2026-11-04T02:10:00Z' },
+    { kind: 'pr_opened', title: 'feat(auth): GitHub 로그인', githubNumber: 15, occurredAt: '2026-11-04T03:00:00Z' },
+    { kind: 'review_submitted', title: 'feat(sync): 동기화 상태', githubNumber: 14, occurredAt: '2026-11-04T06:30:00Z' },
+    { kind: 'issue_closed', title: 'GitHub 로그인', githubNumber: 12, occurredAt: '2026-11-04T09:00:00Z' },
+  ],
+} satisfies StandupPrefill
 
 // contract/examples/report/timeline-page.json — CONTRACTS_API.md 「15」
 export const timelinePageExample = {
@@ -310,6 +322,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
   'meeting/meeting.json': meetingExample,
+  'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,

@@ -513,6 +513,17 @@ export interface StandupDto {
   blockers: string | null
   updatedAt: Instant
 }
+/** {date}의 전날(한국 시간) 내 GitHub 활동 — "어제 한 일" 미리 채우기 (FR-MTG-01) */
+export interface StandupPrefill {
+  date: LocalDate
+  items: {
+    kind: 'commit' | 'pr_opened' | 'pr_merged' | 'issue_closed' | 'review_submitted'
+    title: string
+    /** 이슈 · PR 번호 (커밋은 null) */
+    githubNumber: number | null
+    occurredAt: Instant
+  }[]
+}
 
 // ---- 「15」 개인 API — 학습 타임라인 ------------------------------------------
 
