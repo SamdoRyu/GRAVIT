@@ -4,8 +4,8 @@
 # 아래 규칙은 마지막에 맞는 줄이 이긴다. PR 작성자 본인은 GitHub이 리뷰어에서 자동으로 뺀다.
 # "Require review from Code Owners"는 켜지 않았다 — 머지 조건은 승인 1명 + CI(main 보호 규칙)다.
 #
-# 역할 (2026-11-03 실제 4명)
-#   A 총괄 · 기획 · 백엔드 일부(help)   @wol20670
+# 역할 (2026-11-03 실제 4명, 백엔드 재배분 2026-11-05)
+#   A 총괄 · 기획 · 백엔드 일부(help · meeting · 회고 리포트 · Snapshot)   @wol20670
 #   B 백엔드 전담                        @yang7493
 #   C 프론트 3D                          @FG-Kaki
 #   D 프론트 HUD · DataSource            @JHee0209
@@ -15,6 +15,7 @@
 *                                                    @wol20670 @yang7493 @FG-Kaki @JHee0209
 /backend/                                            @yang7493 @wol20670
 /backend/src/main/java/com/samdoryu/backend/help/    @wol20670 @yang7493
+/backend/src/main/java/com/samdoryu/backend/meeting/ @wol20670 @yang7493
 /frontend/                                           @FG-Kaki @JHee0209
 /contract/                                           @yang7493 @wol20670 @FG-Kaki @JHee0209
 /docs/                                               @wol20670 @yang7493
