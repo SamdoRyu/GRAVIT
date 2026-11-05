@@ -402,6 +402,19 @@ export interface AgendaItemCreateRequest {
   /** 혼자 결론 못 낸 이유, 0~2000자 */
   unresolvedReason: string | null
 }
+export interface DecisionRequest {
+  /** 1~2000자 */
+  conclusion: string
+  /** 배운 점, 0~2000자 */
+  learning: string | null
+  /** PR 안건이면 필수, 아니면 null */
+  prDecision: 'revise_and_reevaluate' | 'merge_as_is' | 'close_pr' | null
+  /** 더 알아볼 사람 (FR-LRN-12) */
+  followUpAssigneeMemberId: Id | null
+  followUpDueDate: LocalDate | null
+  /** 다룬 회의 */
+  meetingId: Id | null
+}
 
 export interface AgendaItemDto {
   id: Id
