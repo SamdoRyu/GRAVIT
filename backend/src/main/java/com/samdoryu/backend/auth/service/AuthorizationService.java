@@ -72,6 +72,21 @@ public class AuthorizationService {
         return new WorkspaceAccess(id, principal.userId(), membership.role(), membership.memberId());
     }
 
+    /**
+     * 공용 컨벤션 라이브러리 등록 · 수정(CONTRACTS.md 「6」 · CONTRACTS_API 「17」 · FR-LIB-01) — 사무실 경로 밖이라 검사 순서 2가 없다.
+     * 실제 GitHub 강사 계정(허용 목록이고 지금 지정된 사무실이 하나 이상 — {@code MeResponse.isInstructor}와 같은 재료)만.
+     * 심사용 계정(데이터 격리 — P15) · 학생 · 그 밖의 로그인 사용자는 {@code forbidden_role}. 지정은 요청마다 DB에서 확인한다.
+     */
+    public AppPrincipal requireConventionLibraryEditor() {
+        AppPrincipal principal = currentPrincipal();
+        if (principal.accountType() != AccountType.GITHUB
+                || !isAllowlistedInstructor(principal)
+                || !instructorAssignmentService.hasAnyCurrentAssignment(principal.githubUserId())) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        return principal;
+    }
+
     private boolean isAllowlistedInstructor(AppPrincipal principal) {
         return appProperties.isAllowlistedInstructor(principal.githubUserId());
     }
