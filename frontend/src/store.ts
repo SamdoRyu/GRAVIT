@@ -360,7 +360,9 @@ export const useOffice = create<OfficeState>((set, get) => {
         scheduleOfficeReload(gen)
         break
       case 'connection':
-        // 다시 연결되면 놓친 알림을 재생하지 않으므로 Snapshot을 다시 읽는다 (CONTRACTS_API.md 「6」)
+        // 상단 바 · 오프라인 안내가 읽는 연결 상태. 다시 연결되면 놓친 알림을 재생하지 않으므로 Snapshot을 다시 읽는다
+        // (CONTRACTS_API.md 「6」)
+        set({ connection: c.status })
         if (c.status === 'online') scheduleOfficeReload(gen)
         break
     }
@@ -415,7 +417,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeSource = null
       officeLoadPending = false
       syncDuringLoad = null
-      if (get().office || get().officeSelection) set({ office: null, officeSelection: null })
+      if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null })
     },
     officeSelection: null,
     selectInOffice: (officeSelection) => set(officeSelection ? { officeSelection, selection: null } : { officeSelection }),
