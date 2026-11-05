@@ -38,6 +38,14 @@ public class AgendaItemController {
         return agendaItemService.create(access.workspaceId(), memberId, request);
     }
 
+    /** 팀원 — 올린 사람만. 강사 · 다른 팀원은 {@code forbidden_role}. */
+    @PostMapping("/{agendaItemId}/withdraw")
+    public AgendaItemDto withdraw(@PathVariable String workspaceId, @PathVariable String agendaItemId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        access.requireTeamMember();
+        return agendaItemService.withdraw(access, Ids.fromPath(agendaItemId));
+    }
+
     /** 팀원 — 올린 사람이 아니어도 된다. 강사는 {@code forbidden_role}. */
     @PostMapping("/{agendaItemId}/decision")
     public AgendaItemDto decide(@PathVariable String workspaceId, @PathVariable String agendaItemId,

@@ -52,7 +52,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #37 결정 기록 — 실제 Security · MVC · MySQL(CONTRACTS_API 「10」 decision). 테스트마다 트랜잭션을 되돌린다.
+ * #37 결정 기록 · #33 거두기 — 실제 Security · MVC · MySQL(CONTRACTS_API 「10」 decision · withdraw).
+ * 테스트마다 트랜잭션을 되돌린다.
  * 서버 {@code Instant.now()}와 비교되는 값(회차 닫힘 · 도움 요청 닫힘 CHECK)은 과거 시각으로 만든다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/meeting/agenda-item.json}(결정 있음).
  */
@@ -86,6 +87,7 @@ class AgendaDecisionIntegrationTest {
     private Member bob;
     private Member otherWsMember;
     private Submission pr;
+    private MockHttpSession aliceSession;
     private MockHttpSession bobSession;
     private MockHttpSession instructorSession;
 
@@ -105,6 +107,8 @@ class AgendaDecisionIntegrationTest {
                 .reviewRequestsJson("[]").reviewsJson("[]").labelsJson("[]").githubCreatedAt(PAST)
                 .githubUpdatedAt(PAST).stateChangedAt(PAST).syncedAt(PAST).build());
 
+        aliceSession = TestLogin.githubUser(aliceUser.getId(), 1001L)
+                .member(ws.getId(), alice.getId(), WorkspaceRole.REPO_ADMIN).session();
         // 밥이 결정한다 — 올린 사람(앨리스)이 아니어도 된다.
         bobSession = TestLogin.githubUser(bobUser.getId(), 1002L)
                 .member(ws.getId(), bob.getId(), WorkspaceRole.PARTICIPANT)
@@ -124,13 +128,22 @@ class AgendaDecisionIntegrationTest {
 
     private ResultActions decide(Workspace workspace, MockHttpSession session, AgendaItem item, String body)
             throws Exception {
+        return action(workspace, session, item, "decision", body);
+    }
+
+    private ResultActions withdraw(Workspace workspace, MockHttpSession session, AgendaItem item) throws Exception {
+        return action(workspace, session, item, "withdraw", null);
+    }
+
+    private ResultActions action(Workspace workspace, MockHttpSession session, AgendaItem item, String action,
+            String body) throws Exception {
         String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
         String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
         return mvc.perform(post("/api/workspaces/" + Ids.toApi(workspace.getId()) + "/agenda-items/"
-                + Ids.toApi(item.getId()) + "/decision").session(session)
+                + Ids.toApi(item.getId()) + "/" + action).session(session)
                 .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
                 .header(HttpHeaders.ORIGIN, ORIGIN)
-                .contentType(MediaType.APPLICATION_JSON).content(body));
+                .contentType(MediaType.APPLICATION_JSON).content(body == null ? "" : body));
     }
 
     private static String body(String prDecision, String followUpId, String meetingId) {
@@ -281,5 +294,64 @@ class AgendaDecisionIntegrationTest {
     void instructorCannotDecide() throws Exception {
         decide(ws, instructorSession, other(), body(null, null, null)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+    }
+
+    // --- #33 거두기 ---
+
+    @Test
+    void raiserWithdrawsBeforeMeeting() throws Exception {
+        AgendaItem item = other();
+
+        String response = withdraw(ws, aliceSession, item)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("withdrawn"))
+                .andExpect(jsonPath("$.decision").value(nullValue()))
+                .andReturn().getResponse().getContentAsString();
+
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("meeting", "agenda-item.json"), actual);
+        ContractShape.assertCommonRules(actual);
+
+        em.flush();
+        em.clear();
+        // 행은 지우지 않는다 — 거둔 안건은 결정할 수 없다
+        assertThat(agendaItems.findById(item.getId()).orElseThrow().getStatus()).isEqualTo(AgendaStatus.WITHDRAWN);
+        decide(ws, bobSession, item, body(null, null, null)).andExpect(status().isConflict());
+    }
+
+    /** 「10」 — 올린 사람이 아님 · 강사 403. 안건은 그대로. */
+    @Test
+    void onlyRaiserMayWithdraw() throws Exception {
+        AgendaItem item = other();
+        withdraw(ws, bobSession, item).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        withdraw(ws, instructorSession, item).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+
+        em.flush();
+        em.clear();
+        assertThat(agendaItems.findById(item.getId()).orElseThrow().getStatus()).isEqualTo(AgendaStatus.CONFIRMED);
+    }
+
+    @Test
+    void withdrawNotConfirmedIs409() throws Exception {
+        AgendaItem withdrawn = other();
+        withdraw(ws, aliceSession, withdrawn).andExpect(status().isOk());
+        withdraw(ws, aliceSession, withdrawn).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+
+        AgendaItem discussed = other();
+        decide(ws, bobSession, discussed, body(null, null, null)).andExpect(status().isOk());
+        withdraw(ws, aliceSession, discussed).andExpect(status().isConflict());
+    }
+
+    /** IDOR — 다른 사무실 안건을 내 사무실 경로로 거두면 404. */
+    @Test
+    void withdrawAgendaOfAnotherWorkspaceIs404() throws Exception {
+        AgendaItem elsewhere = agendaItems.saveAndFlush(
+                AgendaItem.withoutSource(otherWs, AgendaKind.OTHER, "남의 안건", null, null, null, otherWsMember, PAST));
+
+        withdraw(ws, bobSession, elsewhere).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
     }
 }
