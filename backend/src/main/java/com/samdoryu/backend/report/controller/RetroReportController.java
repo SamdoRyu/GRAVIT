@@ -4,6 +4,7 @@ import com.samdoryu.backend.auth.service.AuthorizationService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.report.dto.ReportCreateRequest;
+import com.samdoryu.backend.report.dto.ReportLearningRequest;
 import com.samdoryu.backend.report.dto.RetroReportDto;
 import com.samdoryu.backend.report.dto.RetroReportSummary;
 import com.samdoryu.backend.report.service.RetroReportService;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -53,5 +55,14 @@ public class RetroReportController {
             @PathVariable String reportId) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return retroReportService.get(access, Ids.fromPath(memberId), Ids.fromPath(reportId));
+    }
+
+    /** 본인만. */
+    @PutMapping("/{reportId}/learning")
+    public RetroReportDto writeLearning(@PathVariable String workspaceId, @PathVariable String memberId,
+            @PathVariable String reportId, @Valid @RequestBody ReportLearningRequest request) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return retroReportService.writeLearning(access, Ids.fromPath(memberId), Ids.fromPath(reportId),
+                request.learning());
     }
 }
