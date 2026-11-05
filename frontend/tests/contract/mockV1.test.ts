@@ -404,3 +404,56 @@ describe('mock v1 — 동기화', () => {
     team.unsubscribe()
   })
 })
+
+describe('mock v1 — 팀 설정 (#38)', () => {
+  /** 내가 R2인 사무실을 하나 연다 */
+  async function adminWorkspace(source: ReturnType<typeof make>) {
+    return (await source.openWorkspace(openRequest())).id
+  }
+
+  it('getSettings — Snapshot의 settings와 같고, 들어갈 수 없는 사무실은 not_found', async () => {
+    const source = make('github')
+    assert.deepEqual(await source.getSettings(TEAM_WS), (await source.load(TEAM_WS)).settings)
+    await rejectsCode(make('review').getSettings(TEAM_WS), 'not_found')
+  })
+
+  it('updateSettings — R2는 전체를 바꾸고, Snapshot에 남고, changed(settings) 알림이 온다', async () => {
+    const source = make('github')
+    const id = await adminWorkspace(source)
+    const c = collect(source, id)
+    const next = { projectStartDate: '2026-11-06', projectEndDate: '2026-11-20', specDocumentPath: 'docs/spec.md', reviewWaitHours: 24, noCommitHours: 72 }
+    assert.deepEqual(await source.updateSettings(id, { ...next, extra: 'x' } as typeof next), next, '계약의 칸만 저장한다')
+    assert.deepEqual((await source.load(id)).settings, next)
+    await c.until((cs) => cs.some((x) => x.type === 'changed' && x.resources.includes('settings')))
+    c.unsubscribe()
+  })
+
+  it('updateSettings — 끝이 시작보다 빠름 · 없는 날짜 · 범위 밖 기준 시간 · 빈 경로는 invalid, 값은 그대로', async () => {
+    const source = make('github')
+    const id = await adminWorkspace(source)
+    const before = await source.getSettings(id)
+    await rejectsCode(source.updateSettings(id, { ...before, projectStartDate: '2026-11-17', projectEndDate: '2026-11-04' }), 'invalid')
+    await rejectsCode(source.updateSettings(id, { ...before, projectEndDate: '2026-02-30' }), 'invalid')
+    await rejectsCode(source.updateSettings(id, { ...before, reviewWaitHours: 0 }), 'invalid')
+    await rejectsCode(source.updateSettings(id, { ...before, noCommitHours: 721 }), 'invalid')
+    await rejectsCode(source.updateSettings(id, { ...before, reviewWaitHours: 1.5 }), 'invalid')
+    await rejectsCode(source.updateSettings(id, { ...before, specDocumentPath: '' }), 'invalid')
+    assert.deepEqual(await source.getSettings(id), before)
+  })
+
+  it('updateSettings — 하루짜리 기간(시작 = 끝)은 된다', async () => {
+    const source = make('github')
+    const id = await adminWorkspace(source)
+    const before = await source.getSettings(id)
+    const saved = await source.updateSettings(id, { ...before, projectStartDate: '2026-11-10', projectEndDate: '2026-11-10' })
+    assert.equal(saved.projectEndDate, '2026-11-10')
+  })
+
+  it('updateSettings — R2가 아니면 forbidden_role, 들어갈 수 없는 사무실은 not_found', async () => {
+    const source = make('github') // 팀 사무실(ws_1)에서는 참여자
+    const before = await source.getSettings(TEAM_WS)
+    await rejectsCode(source.updateSettings(TEAM_WS, { ...before, projectEndDate: '2026-12-01' }), 'forbidden_role')
+    assert.deepEqual(await source.getSettings(TEAM_WS), before)
+    await rejectsCode(make('review').updateSettings(TEAM_WS, before), 'not_found')
+  })
+})

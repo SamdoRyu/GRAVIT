@@ -4,7 +4,8 @@
 // 로그인 여부(unauthorized)와 "내가 들어갈 수 있는 사무실"(not_found)은 지킨다.
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
-import type { Change, Id, Instant, MeResponse, OpenWorkspaceRequest, RepositoryChoice, SyncStatus, Viewer, WorkspaceSnapshot } from '../../types'
+import { SETTINGS_MSG, SPEC_PATH_MAX_LENGTH, settingsError } from '../../rules/period'
+import type { Change, Id, Instant, MeResponse, OpenWorkspaceRequest, RepositoryChoice, SyncStatus, TeamSettings, Viewer, WorkspaceSnapshot } from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
 import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockSession, type MockState, type MockWorkspace } from './seed'
 
@@ -13,7 +14,6 @@ export type { MockSession } from './seed'
 export const V1_STORAGE_KEY = 'gravit.mock.v1'
 const GITHUB_LOGIN_URL = '/oauth2/authorization/github'
 const DEFAULT_SYNC_DURATION_MS = 800
-const SPEC_PATH_MAX_LENGTH = 300
 /** 동기화가 끝났을 때 다시 읽으라고 알리는 자원 */
 const SYNCED_RESOURCES = ['members', 'tasks', 'submissions'] as const
 
@@ -25,9 +25,8 @@ const MSG = {
   alreadyOpen: '이미 열린 사무실이에요',
   syncRunning: '이미 동기화 중이에요',
   invalidRequest: '요청 내용이 올바르지 않아요',
-  invalidDate: '날짜 형식이 올바르지 않아요',
-  endBeforeStart: '끝 날짜는 시작 날짜보다 빠를 수 없어요',
-  invalidSpecPath: `명세 문서 경로는 1~${SPEC_PATH_MAX_LENGTH}자로 입력해 주세요`,
+  notSettingsAdmin: '레포 관리자만 팀 설정을 바꿀 수 있어요',
+  ...SETTINGS_MSG,
 } as const
 
 export interface V1MockOptions {
@@ -274,6 +273,25 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): DataSource {
       await wait()
       return structuredClone(accessible(workspaceId, requireUser()).snapshot.sync)
     },
+
+    async getSettings(workspaceId) {
+      await wait()
+      return structuredClone(accessible(workspaceId, requireUser()).snapshot.settings)
+    },
+
+    async updateSettings(workspaceId, settings) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      // R2만 — 화면이 편집 버튼을 R2에게만 보이므로 mock도 같은 흐름을 지킨다
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(MSG.notSettingsAdmin, 'forbidden_role')
+      const error = settingsError(settings)
+      if (error) throw new DataError(error, 'invalid')
+      ws.snapshot.settings = pickSettings(settings)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['settings'] })
+      return structuredClone(ws.snapshot.settings)
+    },
   }
 }
 
@@ -293,6 +311,17 @@ function validateOpenRequest(r: OpenWorkspaceRequest): void {
   if (r.projectEndDate < r.projectStartDate) throw new DataError(MSG.endBeforeStart, 'invalid')
   if (r.specDocumentPath !== null && (typeof r.specDocumentPath !== 'string' || r.specDocumentPath.length < 1 || r.specDocumentPath.length > SPEC_PATH_MAX_LENGTH)) {
     throw new DataError(MSG.invalidSpecPath, 'invalid')
+  }
+}
+
+/** 전체 교체 — 계약의 칸만, 계약 순서대로 저장한다(요청에 다른 칸이 섞여 와도 남기지 않는다) */
+function pickSettings(s: TeamSettings): TeamSettings {
+  return {
+    projectStartDate: s.projectStartDate,
+    projectEndDate: s.projectEndDate,
+    specDocumentPath: s.specDocumentPath,
+    reviewWaitHours: s.reviewWaitHours,
+    noCommitHours: s.noCommitHours,
   }
 }
 

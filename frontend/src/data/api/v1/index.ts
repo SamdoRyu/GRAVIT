@@ -14,6 +14,7 @@ import type {
   RepositoryChoiceResponse,
   SnapshotResource,
   SyncStatus,
+  TeamSettings,
   WorkspaceListItem,
   WorkspaceSnapshot,
   WorkspaceSummary,
@@ -308,6 +309,9 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
 
     requestSync: async (workspaceId) => json<SyncStatus>(await write('POST', `${workspacePath(workspaceId)}/sync`)),
     getSyncStatus: async (workspaceId) => json<SyncStatus>(await read(`${workspacePath(workspaceId)}/sync-status`)),
+
+    getSettings: async (workspaceId) => json<TeamSettings>(await read(`${workspacePath(workspaceId)}/settings`)),
+    updateSettings: async (workspaceId, settings) => json<TeamSettings>(await write('PUT', `${workspacePath(workspaceId)}/settings`, settings)),
 
     close() {
       for (const s of streams.values()) {

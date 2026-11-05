@@ -3,7 +3,7 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, Change, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, Workspace, WorkspaceSnapshot } from './data/types'
+import type { Activity, Change, DemoChange, ConnectionStatus, Id, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -18,6 +18,8 @@ export type Dialog =
   | { kind: 'confirmReset' }
   | { kind: 'startMeeting' }
   | { kind: 'endMeeting'; meetingId: Id }
+  /** v1 사무실의 프로젝트 기간 (#38 — FR-PLAN-01, R2만) */
+  | { kind: 'projectPeriod' }
 
 /** Where a dragged task would land if released now. Set by whoever is under the pointer. */
 export type DropTarget =
@@ -78,6 +80,11 @@ interface OfficeState {
   openOffice: (source: DataSource, workspaceId: Id) => Promise<void>
   /** 구독을 끊고 office를 비운다 */
   closeOffice: () => void
+  /**
+   * 팀 설정을 바꾼다(PUT W/settings — R2만). 성공하면 snapshot.settings를 응답으로 바꾸고 true,
+   * 실패하면 마지막 값을 그대로 두고 사유를 알림으로 보인 뒤 false.
+   */
+  updateOfficeSettings: (settings: TeamSettings) => Promise<boolean>
 
   // ---- view state ----
   selection: Selection | null
@@ -348,6 +355,22 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeLoadPending = false
       syncDuringLoad = null
       if (get().office) set({ office: null })
+    },
+    updateOfficeSettings: async (settings) => {
+      const src = officeSource
+      const office = get().office
+      if (!src || !office) return false
+      const gen = officeGen
+      try {
+        const saved = await src.updateSettings(office.workspaceId, settings)
+        // 그 사이 사무실을 닫거나 바꿨으면 버린다
+        const current = get().office
+        if (gen === officeGen && current?.snapshot) set({ office: { ...current, snapshot: { ...current.snapshot, settings: saved } } })
+        return true
+      } catch (e) {
+        fail(e)
+        return false
+      }
     },
 
     selection: null,

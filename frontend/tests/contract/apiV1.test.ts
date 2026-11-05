@@ -101,10 +101,12 @@ async function startFake(): Promise<Fake> {
       res.writeHead(204)
       return res.end()
     }
-    const ws = /^\/api\/workspaces\/([^/]+)\/(snapshot|sync-status|sync|events)$/.exec(path)
+    const ws = /^\/api\/workspaces\/([^/]+)\/(snapshot|sync-status|sync|events|settings)$/.exec(path)
     if (ws) {
       const [, , what] = ws
       if (r.method === 'GET' && what === 'snapshot') return sendJson(res, 200, workspaceSnapshotExample)
+      if (r.method === 'GET' && what === 'settings') return sendJson(res, 200, workspaceSnapshotExample.settings)
+      if (r.method === 'PUT' && what === 'settings') return sendJson(res, 200, JSON.parse(r.body))
       if (r.method === 'GET' && what === 'sync-status') return sendJson(res, 200, sync('idle'))
       if (r.method === 'POST' && what === 'sync') return sendJson(res, 202, sync('running'))
       if (r.method === 'GET' && what === 'events') {
@@ -226,6 +228,26 @@ describe('v1 api — 쓰기 · CSRF', () => {
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '강사는 동기화할 수 없어요'))
     await rejectsWith(api.requestSync('3'), 'forbidden_role', '강사는 동기화할 수 없어요')
     assert.equal(fake.requests.length, 1)
+  })
+
+  it('팀 설정 — GET · PUT W/settings, PUT은 전체를 JSON 본문으로 보내고 400 · 403을 그대로 돌려준다 (#38)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    const next = { ...workspaceSnapshotExample.settings, projectEndDate: '2026-11-20' }
+    assert.deepEqual(await api.getSettings('3'), workspaceSnapshotExample.settings)
+    assert.deepEqual(await api.updateSettings('3', next), next)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      ['GET /api/workspaces/3/settings -', 'PUT /api/workspaces/3/settings tok-1'],
+    )
+    assert.deepEqual(JSON.parse(fake.requests[1].body), next)
+    assert.match(fake.requests[1].contentType ?? '', /^application\/json/)
+
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '끝 날짜는 시작 날짜보다 빠를 수 없어요'))
+    await rejectsWith(api.updateSettings('3', { ...next, projectEndDate: '2026-11-01' }), 'invalid', '끝 날짜는 시작 날짜보다 빠를 수 없어요')
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자만 바꿀 수 있어요'))
+    await rejectsWith(api.updateSettings('3', next), 'forbidden_role', '레포 관리자만 바꿀 수 있어요')
   })
 })
 
