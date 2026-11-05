@@ -6,8 +6,10 @@ import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
+import com.samdoryu.backend.report.domain.DecisionCardCells;
 import com.samdoryu.backend.report.domain.ReportKind;
 import com.samdoryu.backend.report.domain.RetroReport;
+import com.samdoryu.backend.report.dto.DecisionCardDto;
 import com.samdoryu.backend.report.dto.RetroReportDto;
 import com.samdoryu.backend.report.dto.RetroReportSummary;
 import com.samdoryu.backend.report.repository.RetroReportRepository;
@@ -46,13 +48,16 @@ public class RetroReportService {
     private final WorkspaceService workspaceService;
     private final SyncedItemService syncedItemService;
     private final AgendaItemService agendaItemService;
+    private final DecisionCardService decisionCardService;
 
     public RetroReportService(RetroReportRepository retroReportRepository, WorkspaceService workspaceService,
-            SyncedItemService syncedItemService, AgendaItemService agendaItemService) {
+            SyncedItemService syncedItemService, AgendaItemService agendaItemService,
+            DecisionCardService decisionCardService) {
         this.retroReportRepository = retroReportRepository;
         this.workspaceService = workspaceService;
         this.syncedItemService = syncedItemService;
         this.agendaItemService = agendaItemService;
+        this.decisionCardService = decisionCardService;
     }
 
     /** {@code GET W/members/{memberId}/reports} — createdAt 내림차순. 본인 · 지정된 강사. */
@@ -70,7 +75,7 @@ public class RetroReportService {
         Member member = workspaceService.requireMember(access.workspaceId(), memberId);
         access.requireSelf(memberId);
         RetroReport report = retroReportRepository.save(new RetroReport(member, kind, Instant.now()));
-        return toDto(access.workspaceId(), report);
+        return toDto(access, report);
     }
 
     /** {@code GET W/members/{memberId}/reports/{reportId}} — 본인 · 지정된 강사. 다른 팀원의 리포트 ID면 404. */
@@ -80,7 +85,7 @@ public class RetroReportService {
         access.requireSelfOrInstructor(memberId);
         RetroReport report = retroReportRepository.findByIdAndMemberId(reportId, memberId)
                 .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-        return toDto(access.workspaceId(), report);
+        return toDto(access, report);
     }
 
     /**
@@ -94,7 +99,7 @@ public class RetroReportService {
         RetroReport report = retroReportRepository.findByIdAndMemberId(reportId, memberId)
                 .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
         report.writeLearning(learning);
-        return toDto(access.workspaceId(), report);
+        return toDto(access, report);
     }
 
     /**
@@ -107,7 +112,7 @@ public class RetroReportService {
         return anonymize(toMarkdown(report), workspaceService.allMembers(access.workspaceId()));
     }
 
-    // ponytail: 활동 분포 · 결정 카드는 아직 늘 빈 목록이라 싣지 않는다 — 활동 기록 · #62가 채울 때 여기에 칸을 더한다
+    // ponytail: 활동 분포는 아직 늘 빈 목록이라 싣지 않는다 — 활동 기록이 채울 때 여기에 칸을 더한다
     private static String toMarkdown(RetroReportDto report) {
         StringBuilder md = new StringBuilder();
         md.append("# ").append(report.kind() == ReportKind.FINAL ? "최종" : "중간").append(" 회고 리포트\n\n")
@@ -140,7 +145,31 @@ public class RetroReportService {
         if (report.instructorFeedbacks().isEmpty()) {
             md.append(NONE).append('\n');
         }
+        md.append("\n## 기술 결정 카드\n\n");
+        for (DecisionCardDto card : report.decisionCards()) {
+            md.append("### 확인한 카드 — ").append(card.confirmedAt()).append("\n\n");
+            cellLines(card.cells()).forEach(line -> md.append(line).append('\n'));
+            card.followUpQuestions().forEach(question -> md.append("- ").append(question.createdAt())
+                    .append(" 강사 꼬리질문: ").append(question.body()).append('\n'));
+            md.append('\n');
+        }
+        if (report.decisionCards().isEmpty()) {
+            md.append(NONE).append('\n');
+        }
         return md.toString();
+    }
+
+    /** 값이 있는 칸만 "- 칸 이름: 값", 여러 줄 값은 목록 안으로 들여 쓴다. 칸 이름은 CONTRACTS_API 「15」 DecisionCardCells 주석. */
+    private static List<String> cellLines(DecisionCardCells cells) {
+        String[][] named = {
+                {"무엇을 하려 했나", cells.goal()}, {"처음 택한 방법", cells.initialApproach()},
+                {"받은 평가", cells.feedbackReceived()}, {"회의에서 정한 것", cells.meetingDecision()},
+                {"최종적으로 바꾼 것", cells.finalChange()}, {"왜 그렇게 결정했나", cells.rationale()},
+                {"막혔던 순간", cells.blockedMoment()}, {"내가 배운 점", cells.learning()}, {"원본", cells.source()}};
+        return Stream.of(named)
+                .filter(cell -> cell[1] != null && !cell[1].isBlank())
+                .map(cell -> "- " + cell[0] + ": " + cell[1].replace("\n", "\n  "))
+                .toList();
     }
 
     /**
@@ -169,8 +198,12 @@ public class RetroReportService {
                 id -> "팀원 " + (char) ('A' + labelByMemberId.size())));
     }
 
-    /** 계산 칸 — 활동 분포(활동 기록 기능 전)와 결정 카드(#62 전)는 아직 빈 목록이다. */
-    private RetroReportDto toDto(Long workspaceId, RetroReport report) {
+    /**
+     * 계산 칸 — 활동 분포(활동 기록 기능 전)는 아직 빈 목록이다. 결정 카드는 본인이 확인한 것만(P11), 카드 목록 순서(createdAt
+     * 내림차순) 그대로 — 카드 읽기 검사(본인 · 지정된 강사)는 리포트 읽기와 같다.
+     */
+    private RetroReportDto toDto(WorkspaceAccess access, RetroReport report) {
+        Long workspaceId = access.workspaceId();
         String me = Ids.toApi(report.getMember().getId());
         // ponytail: 사무실의 이슈 · PR · 안건 전부를 읽어 본인 것을 거른다 — 팀 레포 규모면 충분, 커지면 팀원 조건 쿼리로
         List<TaskDto> myIssues = syncedItemService.listTasks(workspaceId).stream()
@@ -198,11 +231,14 @@ public class RetroReportService {
                 .filter(label -> label.startsWith(AREA_LABEL_PREFIX))
                 .distinct().sorted().toList();
 
+        List<DecisionCardDto> confirmedCards = decisionCardService.list(access, report.getMember().getId()).stream()
+                .filter(DecisionCardDto::confirmed).toList();
+
         String summary = "맡은 이슈 %d개(닫힘 %d) · 작성한 PR %d개(머지 %d) · 올린 안건 %d건(결론 %d)".formatted(
                 myIssues.size(), myIssues.stream().filter(issue -> issue.state() == TaskState.CLOSED).count(),
                 myPrs.size(), myPrs.stream().filter(pr -> pr.state() == SubmissionState.MERGED).count(),
                 myAgenda.size(), agendaResults.size());
         return new RetroReportDto(Ids.toApi(report.getId()), report.getKind(), report.getCreatedAt(), me, summary,
-                areaLabels, report.getLearning(), agendaResults, feedbacks, List.of(), List.of());
+                areaLabels, report.getLearning(), agendaResults, feedbacks, List.of(), confirmedCards);
     }
 }
