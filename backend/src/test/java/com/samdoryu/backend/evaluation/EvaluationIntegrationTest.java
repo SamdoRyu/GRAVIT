@@ -277,25 +277,17 @@ class EvaluationIntegrationTest {
         assertThat(evaluations.findByRoundIdOrderByIdAsc(currentRound.getId())).isEmpty();
     }
 
+    /** 평가 값 · 회차 ID 검사. 이유 검사(빈 이유 · 200자 초과 → 400)는 #20. */
     @Test
-    void reasonIsRequiredForBothVerdictsAndInputIsValidated() throws Exception {
-        evaluate(ws, pr, bobSession, body(currentRound, "recommend", "   "))
+    void verdictAndRoundIdAreValidated() throws Exception {
+        evaluate(ws, pr, bobSession, body(currentRound, "clean", "좋아요"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("invalid"));
-        evaluate(ws, pr, bobSession, body(currentRound, "not_recommend", ""))
-                .andExpect(status().isBadRequest());
-        evaluate(ws, pr, bobSession, body(currentRound, "recommend", "가".repeat(201)))
-                .andExpect(status().isBadRequest());
-        evaluate(ws, pr, bobSession, "{\"roundId\":\"" + Ids.toApi(currentRound.getId())
-                + "\",\"verdict\":\"recommend\"}")
-                .andExpect(status().isBadRequest());
-        evaluate(ws, pr, bobSession, body(currentRound, "clean", "좋아요"))
-                .andExpect(status().isBadRequest());
         evaluate(ws, pr, bobSession, "{\"roundId\":\"abc\",\"verdict\":\"recommend\",\"reason\":\"좋아요\"}")
                 .andExpect(status().isBadRequest());
-        // 앞뒤 공백을 뺀 200자는 된다
-        evaluate(ws, pr, bobSession, body(currentRound, "recommend", " " + "가".repeat(200) + " "))
-                .andExpect(status().isOk());
+        evaluate(ws, pr, bobSession, "{\"verdict\":\"recommend\",\"reason\":\"좋아요\"}")
+                .andExpect(status().isBadRequest());
+        assertThat(evaluations.findByRoundIdOrderByIdAsc(currentRound.getId())).isEmpty();
     }
 
     @Test
