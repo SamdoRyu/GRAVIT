@@ -1,41 +1,71 @@
-// Meeting dialogs: start, end (decide per agenda task) and the read-only minutes list. OWNER: ui-builder.
+// Meeting dialogs over the open v1 office (CONTRACTS_API.md 「10」 · #102 T5-c-2). OWNER: C.
+// Start: attendees (may be none — FR-MTG-05) and the confirmed agenda; the raiser can withdraw an item before it is decided.
+// End: record a decision per agenda item (conclusion · learning · PR decision · follow-up), then end with notes. Items left
+// undecided stay on the agenda for the next meeting. The PR decision is a record only — merging or closing happens on GitHub.
+// History: ended meetings with the decisions made in them.
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import type { AgendaOutcome, Id, Meeting, Member, TaskStatus } from '../data/types'
-import { STATUSES, STATUS_META } from '../data/meta'
-import { taskKey } from '../data/selectors'
-import { ongoingMeeting, useOffice } from '../store'
-import { Avatar, AssigneeChip, Empty, Field, PriorityDot } from './common'
+import { blankToNull, decisionError, DECISION_TEXT_MAX, MEETING_NOTES_MAX, meetingEndError } from '../data/rules/meeting'
+import type { AgendaItemDto, Id, MeetingDto, MemberDto, WorkspaceSnapshot } from '../data/types'
+import { useOffice } from '../store'
+import { Empty, Field } from './common'
 import { Modal } from './Dialogs'
-import { cssVars, formatClock, formatDate, formatDuration, localDateOf } from './format'
-import { useAgendaTasks, useMemberList } from './hooks'
+import { formatClock, formatDate, formatDuration, localDateOf } from './format'
 import { Icon } from './icons'
+import {
+  AGENDA_KIND_LABEL,
+  canRunMeeting,
+  canWithdraw,
+  confirmedAgenda,
+  decidedIn,
+  endedMeetings,
+  ongoingMeetingOf,
+  PR_DECISION_LABEL,
+  prDecisionsFor,
+  sourceText,
+  type PrDecision,
+} from './meetingView'
+import { GithubLink, MemberAvatar } from './officeParts'
 import { useUi } from './uiState'
 
 function close() {
   useOffice.getState().openDialog(null)
 }
 
+const useSnapshot = () => useOffice((s) => s.office?.snapshot ?? null)
+const currentMembers = (snapshot: WorkspaceSnapshot) => snapshot.members.filter((m) => m.removedAt === null)
+const memberName = (snapshot: WorkspaceSnapshot, id: Id | null) => (id === null ? null : (snapshot.members.find((m) => m.id === id)?.displayName ?? '알 수 없는 팀원'))
+
+/** One agenda line: kind · source · title · who raised it */
+function AgendaLine({ item, snapshot }: { item: AgendaItemDto; snapshot: WorkspaceSnapshot }) {
+  return (
+    <>
+      <span className="agenda-kind">{AGENDA_KIND_LABEL[item.kind]}</span>
+      {item.source && <span className="card-key">{sourceText(snapshot, item)}</span>}
+      <span className="mini-title" title={item.title}>
+        {item.title}
+      </span>
+      <span className="dim small agenda-by">{memberName(snapshot, item.raisedByMemberId)}</span>
+    </>
+  )
+}
+
 // ---- Start -------------------------------------------------------------------
 
 export function StartMeetingDialog() {
-  const members = useMemberList()
-  const projects = useOffice((s) => s.projects)
-  const live = useOffice((s) => ongoingMeeting(s.meetings))
-  const agenda = useAgendaTasks()
-  const [title, setTitle] = useState('팀 회의')
-  // Away / on-break members are shown but not pre-selected.
-  const [picked, setPicked] = useState<Set<Id>>(() => new Set(members.filter((m) => m.presence === 'working' || m.presence === 'meeting').map((m) => m.id)))
-  const [submitted, setSubmitted] = useState(false)
+  const snapshot = useSnapshot()
+  const live = snapshot ? ongoingMeetingOf(snapshot) : null
+  const members = useMemo(() => (snapshot ? currentMembers(snapshot) : []), [snapshot])
+  const [picked, setPicked] = useState<Set<Id>>(() => new Set(members.map((m) => m.id)))
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (live) close()
+    if (live) close() // someone else started one meanwhile: the top bar shows it
   }, [live])
 
-  const name = title.trim()
-  const titleError = name === '' ? '회의 이름을 입력해 주세요' : name.length > 60 ? '이름은 60자 이하로 써 주세요' : ''
+  if (!snapshot) return null
+  const agenda = confirmedAgenda(snapshot)
+  const allowed = canRunMeeting(snapshot.viewer)
   const attendeeIds = members.filter((m) => picked.has(m.id)).map((m) => m.id)
-  const attendeeError = attendeeIds.length === 0 ? '참석자를 한 명 이상 골라 주세요' : ''
   const allOn = members.length > 0 && attendeeIds.length === members.length
 
   const toggle = (id: Id) =>
@@ -48,12 +78,10 @@ export function StartMeetingDialog() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
-    if (titleError || attendeeError || busy) return
+    if (busy || !allowed) return
     setBusy(true)
     const st = useOffice.getState()
-    const meeting = await st.startMeeting({ title: name, attendeeIds })
-    if (meeting) {
+    if (await st.startOfficeMeeting(attendeeIds)) {
       st.toast('good', '회의를 시작했어요')
       close()
     } else {
@@ -62,16 +90,14 @@ export function StartMeetingDialog() {
   }
 
   return (
-    <Modal title="회의 시작" onClose={close} width={520}>
+    <Modal title="회의 시작" onClose={close} width={540}>
       <form onSubmit={submit} noValidate>
         <div className="modal-body">
-          <Field label="회의 이름" error={submitted || name.length > 60 ? titleError : ''}>
-            <input className="select" type="text" data-autofocus value={title} maxLength={80} placeholder="예: 주간 싱크" onChange={(e) => setTitle(e.target.value)} />
-          </Field>
-
           <div className="fld">
             <div className="fld-row">
-              <span className="fld-label">참석자 {attendeeIds.length}/{members.length}명</span>
+              <span className="fld-label">
+                참석자 {attendeeIds.length}/{members.length}명
+              </span>
               {members.length > 0 && (
                 <button type="button" className="link-btn" onClick={() => setPicked(allOn ? new Set() : new Set(members.map((m) => m.id)))}>
                   {allOn ? '모두 해제' : '모두 선택'}
@@ -79,64 +105,53 @@ export function StartMeetingDialog() {
               )}
             </div>
             {members.length === 0 ? (
-              <p className="dim small">팀원이 없어요. 팀원을 먼저 추가해 주세요.</p>
+              <p className="dim small">아직 팀원이 없어요.</p>
             ) : (
               <div className="fchips" role="group" aria-label="참석자">
                 {members.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    aria-pressed={picked.has(m.id)}
-                    className={`fchip fchip-lg${picked.has(m.id) ? ' is-on' : ''}${m.presence === 'away' ? ' is-away' : ''}`}
-                    style={cssVars({ '--c': m.color })}
-                    title={m.presence === 'working' ? m.role : `${m.role ? `${m.role} · ` : ''}${m.presence === 'away' ? '자리 비움' : m.presence === 'break' ? '휴식 중' : '회의 중'}`}
-                    onClick={() => toggle(m.id)}
-                  >
-                    <Avatar member={m} size={16} />
-                    {m.name}
-                    {m.presence === 'away' && <span className="chip-note">자리 비움</span>}
+                  <button key={m.id} type="button" aria-pressed={picked.has(m.id)} className={`fchip fchip-lg${picked.has(m.id) ? ' is-on' : ''}`} onClick={() => toggle(m.id)}>
+                    <MemberAvatar member={m} size={16} />
+                    {m.displayName}
                   </button>
                 ))}
               </div>
             )}
-            {submitted && attendeeError && <em className="fld-error">{attendeeError}</em>}
+            <p className="dim small">참석자 없이도 시작할 수 있어요</p>
           </div>
 
           <div className="fld">
-            <span className="fld-label">안건 {agenda.length}개 · 우선순위 순</span>
+            <span className="fld-label">안건 {agenda.length}개 · 올린 순서</span>
             {agenda.length === 0 ? (
               <p className="agenda-empty">아직 안건이 없어요.</p>
             ) : (
-              <ul className="agenda-list">
-                {agenda.map((t) => (
-                  <li key={t.id}>
-                    <PriorityDot priority={t.priority} />
-                    <span className="card-key">{taskKey(t, projects[t.projectId]?.key)}</span>
-                    <span className="mini-title" title={t.title}>
-                      {t.title}
-                    </span>
-                    <AssigneeChip memberId={t.assigneeId} showName={false} />
-                    <button
-                      type="button"
-                      className="btn btn-icon btn-ghost btn-xs"
-                      aria-label={`${t.title} 안건에서 내리기`}
-                      title="안건에서 내리기"
-                      onClick={() => void useOffice.getState().setAgenda(t.id, false)}
-                    >
-                      <Icon name="close" size={13} />
-                    </button>
+              <ul className="agenda-list" aria-label="안건">
+                {agenda.map((a) => (
+                  <li key={a.id}>
+                    <AgendaLine item={a} snapshot={snapshot} />
+                    {canWithdraw(snapshot.viewer, a) && (
+                      <button
+                        type="button"
+                        className="btn btn-icon btn-ghost btn-xs"
+                        aria-label={`${a.title} 안건 거두기`}
+                        title="안건 거두기 (올린 사람만)"
+                        onClick={() => void useOffice.getState().withdrawAgendaItem(a.id)}
+                      >
+                        <Icon name="close" size={13} />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            <p className="dim small">작업 상자를 회의실 테이블로 끌어다 놓으면 안건이 돼요</p>
+            <p className="dim small">이슈 상자 · PR 삼각기둥을 회의실로 끌어 안건을 올려요</p>
           </div>
+          {!allowed && <p className="notice notice-warn">강사는 회의를 시작할 수 없어요.</p>}
         </div>
         <footer className="modal-foot">
           <button type="button" className="btn" onClick={close}>
             취소
           </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || members.length === 0}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !allowed} data-autofocus>
             회의 시작
           </button>
         </footer>
@@ -147,78 +162,123 @@ export function StartMeetingDialog() {
 
 // ---- End ---------------------------------------------------------------------
 
-type Choice = 'keep' | 'assign' | 'status' | 'backlog'
+/** The decision form of one agenda item (POST agenda-items/{id}/decision) */
+function DecisionForm({ item, meeting, snapshot, members }: { item: AgendaItemDto; meeting: MeetingDto; snapshot: WorkspaceSnapshot; members: MemberDto[] }) {
+  const [conclusion, setConclusion] = useState('')
+  const [learning, setLearning] = useState('')
+  const [prDecision, setPrDecision] = useState<PrDecision | null>(null)
+  const [followUp, setFollowUp] = useState('')
+  const [followUpDue, setFollowUpDue] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const choices = prDecisionsFor(snapshot, item)
+  const pr = item.source?.type === 'submission' ? snapshot.submissions.find((s) => s.id === item.source!.id) : undefined
 
-interface Decision {
-  pick: Choice
-  /** '' = not chosen yet (placeholder). */
-  memberId: string
-  /** '' = not chosen yet (placeholder). */
-  status: TaskStatus | ''
+  const request = {
+    conclusion,
+    learning: blankToNull(learning),
+    prDecision,
+    followUpAssigneeMemberId: followUp === '' ? null : followUp,
+    followUpDueDate: followUpDue === '' ? null : followUpDue,
+    meetingId: meeting.id,
+  }
+  const error = decisionError(request, item.kind)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setSubmitted(true)
+    if (error || busy) return
+    setBusy(true)
+    const saved = await useOffice.getState().recordAgendaDecision(item.id, { ...request, conclusion: conclusion.trim() })
+    if (!saved) setBusy(false) // on success the item leaves the confirmed list and this form unmounts
+  }
+
+  return (
+    <form className="decision" onSubmit={submit} noValidate aria-label={`${item.title} 결정`}>
+      <Field label="결론" error={submitted && !conclusion.trim() ? '결론을 적어 주세요' : ''}>
+        <textarea className="select" rows={2} value={conclusion} maxLength={DECISION_TEXT_MAX} placeholder="무엇으로 정했는지" onChange={(e) => setConclusion(e.target.value)} />
+      </Field>
+      {item.kind === 'pr' && (
+        <div className="fld">
+          <span className="fld-label">PR 결정</span>
+          <div className="seg" role="radiogroup" aria-label={`${item.title} PR 결정`}>
+            {choices.map((d) => (
+              <button key={d} type="button" role="radio" aria-checked={prDecision === d} className={prDecision === d ? 'is-on' : ''} onClick={() => setPrDecision(d)}>
+                {PR_DECISION_LABEL[d]}
+              </button>
+            ))}
+          </div>
+          <span className="dim small">
+            기록만 남아요 — 실제 머지 · 닫기는 GitHub에서 해요{prDecision === 'revise_and_reevaluate' ? ' · 새 평가 회차가 열려요' : ''}
+          </span>
+          {pr?.htmlUrl && <GithubLink href={pr.htmlUrl} label={`GitHub에서 PR #${pr.githubPrNumber} 열기`} text={`PR #${pr.githubPrNumber} 열기`} />}
+          {submitted && error && prDecision === null && <em className="fld-error">{error}</em>}
+        </div>
+      )}
+      <Field label="배운 점 (선택)">
+        <textarea className="select" rows={2} value={learning} maxLength={DECISION_TEXT_MAX} placeholder="팀이 이번에 배운 것" onChange={(e) => setLearning(e.target.value)} />
+      </Field>
+      <div className="decision-follow">
+        <Field label="더 알아볼 사람 (선택)">
+          <select className="select select-sm" value={followUp} onChange={(e) => setFollowUp(e.target.value)}>
+            <option value="">없음</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="기한 (선택)">
+          <input className="select select-sm" type="date" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} />
+        </Field>
+      </div>
+      {submitted && error && (item.kind !== 'pr' || prDecision !== null) && conclusion.trim() !== '' && (
+        <em className="fld-error" role="alert">
+          {error}
+        </em>
+      )}
+      <div className="decision-foot">
+        <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+          결정 기록
+        </button>
+      </div>
+    </form>
+  )
 }
 
-const PICKS: { id: Choice; label: string }[] = [
-  { id: 'keep', label: '보류' },
-  { id: 'assign', label: '담당 지정' },
-  { id: 'status', label: '상태 변경' },
-  { id: 'backlog', label: '백로그로' },
-]
-
 export function EndMeetingDialog({ meetingId }: { meetingId: Id }) {
-  const meeting = useOffice((s) => s.meetings[meetingId])
-  const tasks = useOffice((s) => s.tasks)
-  const projects = useOffice((s) => s.projects)
-  const members = useMemberList()
+  const snapshot = useSnapshot()
+  // The top bar passes the ongoing meeting's id; fall back to the ongoing one if that id is not a v1 meeting.
+  const meeting = snapshot ? (snapshot.meetings.find((m) => m.id === meetingId) ?? ongoingMeetingOf(snapshot)) : null
   const [notes, setNotes] = useState('')
-  const [decisions, setDecisions] = useState<Record<Id, Partial<Decision>>>({})
+  const [open, setOpen] = useState<Id | null>(null)
   const [busy, setBusy] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  /** True while our own endMeeting call is in flight, so its store update isn't mistaken for "ended elsewhere". */
+  /** True while our own end call is in flight, so its Snapshot update isn't mistaken for "ended elsewhere". */
   const endingHere = useRef(false)
 
   const ongoing = meeting?.status === 'ongoing'
   useEffect(() => {
     if (ongoing) return
-    if (!endingHere.current) useOffice.getState().toast('info', '다른 곳에서 회의가 끝났어요')
+    if (!endingHere.current) useOffice.getState().toast('info', '회의가 이미 끝났어요')
     close()
   }, [ongoing])
 
-  const rows = useMemo(() => (meeting ? meeting.agendaTaskIds.map((id) => tasks[id]).filter((t) => !!t) : []), [meeting, tasks])
-
-  if (!meeting) return null
-
-  const resolve = (taskId: Id): Decision => {
-    const d = decisions[taskId] ?? {}
-    return { pick: d.pick ?? 'keep', memberId: d.memberId ?? '', status: d.status ?? '' }
-  }
-  const patch = (taskId: Id, p: Partial<Decision>) => setDecisions((d) => ({ ...d, [taskId]: { ...d[taskId], ...p } }))
-
-  // A pick only counts as a decision once it differs from what the task already has.
-  const outcomes: AgendaOutcome[] = []
-  const errors: Record<Id, string> = {}
-  for (const t of rows) {
-    const d = resolve(t.id)
-    if (d.pick === 'assign') {
-      if (d.memberId && !members.some((m) => m.id === d.memberId)) errors[t.id] = '선택한 팀원이 더 이상 없어요. 다시 골라 주세요'
-      else if (d.memberId && d.memberId !== t.assigneeId) outcomes.push({ taskId: t.id, action: 'assign', memberId: d.memberId })
-    } else if (d.pick === 'status') {
-      if (d.status && d.status !== t.status) outcomes.push({ taskId: t.id, action: 'status', status: d.status })
-    } else if (d.pick === 'backlog') {
-      outcomes.push({ taskId: t.id, action: 'backlog' })
-    }
-  }
-  const hasError = Object.keys(errors).length > 0
+  if (!snapshot || !meeting) return null
+  const agenda = confirmedAgenda(snapshot)
+  const decided = decidedIn(snapshot, meeting)
+  const members = currentMembers(snapshot)
+  const allowed = canRunMeeting(snapshot.viewer)
+  const notesError = meetingEndError({ notes: blankToNull(notes) })
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
-    if (busy || hasError) return
+    if (busy || notesError || !allowed) return
     setBusy(true)
     endingHere.current = true
     const st = useOffice.getState()
-    const ok = await st.endMeeting(meeting.id, { notes: notes.trim(), outcomes })
-    if (ok) {
-      st.toast('good', outcomes.length > 0 ? `회의를 마쳤어요 · 결정 ${outcomes.length}건 적용` : '회의를 마쳤어요')
+    if (await st.endOfficeMeeting(meeting.id, blankToNull(notes))) {
+      st.toast('good', decided.length > 0 ? `회의를 마쳤어요 · 결정 ${decided.length}건` : '회의를 마쳤어요')
       close()
     } else {
       endingHere.current = false
@@ -227,182 +287,137 @@ export function EndMeetingDialog({ meetingId }: { meetingId: Id }) {
   }
 
   return (
-    <Modal title={`회의 종료 · ${meeting.title}`} onClose={close} width={580}>
-      <form onSubmit={submit}>
-        <div className="modal-body">
-          {rows.length === 0 ? (
-            <p className="agenda-empty">안건이 없었어요. 메모만 남기고 마칠 수 있어요.</p>
+    <Modal title={`회의 종료 · ${formatClock(meeting.startedAt)} 시작`} onClose={close} width={600}>
+      <div className="modal-body">
+        <div className="fld">
+          <span className="fld-label">결정할 안건 {agenda.length}개</span>
+          {agenda.length === 0 ? (
+            <p className="agenda-empty">결정할 안건이 없어요.</p>
           ) : (
-            <ul className="outcomes">
-              {rows.map((t) => {
-                const d = resolve(t.id)
-                const same = (d.pick === 'assign' && d.memberId !== '' && d.memberId === t.assigneeId) || (d.pick === 'status' && d.status !== '' && d.status === t.status)
-                return (
-                  <li key={t.id} className="outcome">
-                    <div className="outcome-top">
-                      <PriorityDot priority={t.priority} />
-                      <span className="card-key">{taskKey(t, projects[t.projectId]?.key)}</span>
-                      <span className="mini-title" title={t.title}>
-                        {t.title}
-                      </span>
-                      <AssigneeChip memberId={t.assigneeId} />
-                    </div>
-                    <div className="outcome-ctl">
-                      <div className="seg" role="radiogroup" aria-label={`${t.title} 결정`}>
-                        {PICKS.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            role="radio"
-                            aria-checked={d.pick === p.id}
-                            className={d.pick === p.id ? 'is-on' : ''}
-                            onClick={() => patch(t.id, { pick: p.id })}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
-                      {d.pick === 'assign' && (
-                        <select
-                          className={`select select-sm${errors[t.id] ? ' is-invalid' : ''}`}
-                          aria-label="담당자"
-                          aria-invalid={!!errors[t.id]}
-                          value={members.some((m) => m.id === d.memberId) ? d.memberId : ''}
-                          onChange={(e) => patch(t.id, { memberId: e.target.value })}
-                        >
-                          <option value="">담당자 선택</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {d.pick === 'status' && (
-                        <select className="select select-sm" aria-label="상태" value={d.status} onChange={(e) => patch(t.id, { status: e.target.value as TaskStatus })}>
-                          <option value="">상태 선택</option>
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {STATUS_META[s].label}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {same && <span className="dim small">지금과 같아서 결정으로 세지 않아요</span>}
-                    </div>
-                    {errors[t.id] && (
-                      <em className="fld-error" role="alert">
-                        {errors[t.id]}
-                      </em>
+            <ul className="outcomes" aria-label="결정할 안건">
+              {agenda.map((a) => (
+                <li key={a.id} className="outcome">
+                  <div className="outcome-top">
+                    <AgendaLine item={a} snapshot={snapshot} />
+                    {allowed && (
+                      <button type="button" className="btn btn-sm" aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)}>
+                        {open === a.id ? '접기' : '결정하기'}
+                      </button>
                     )}
-                  </li>
-                )
-              })}
+                  </div>
+                  {open === a.id && <DecisionForm item={a} meeting={meeting} snapshot={snapshot} members={members} />}
+                </li>
+              ))}
             </ul>
           )}
-          <Field label="회의 메모">
-            <textarea className="select" rows={3} value={notes} maxLength={2000} placeholder="결정 배경이나 다음 할 일을 남겨 보세요 (선택)" onChange={(e) => setNotes(e.target.value)} />
-          </Field>
-          {submitted && hasError && <p className="notice notice-warn">담당자를 다시 골라 주세요.</p>}
+          {agenda.length > 0 && <p className="dim small">결정하지 않은 안건은 다음 회의로 넘어가요</p>}
         </div>
-        <footer className="modal-foot">
-          <button type="button" className="btn" onClick={close}>
-            취소
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={busy || hasError} data-autofocus>
-            {outcomes.length > 0 ? `회의 종료 · 결정 ${outcomes.length}건 적용` : '회의 종료'}
-          </button>
-        </footer>
-      </form>
+
+        {decided.length > 0 && (
+          <div className="fld">
+            <span className="fld-label">이번 회의에서 결정 {decided.length}건</span>
+            <ul className="minutes-decisions" aria-label="이번 회의 결정">
+              {decided.map((a) => (
+                <DecisionLine key={a.id} item={a} snapshot={snapshot} />
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <form id="end-meeting" onSubmit={submit} noValidate>
+          <Field label="회의록 (선택)" error={notesError ?? ''}>
+            <textarea className="select" rows={3} value={notes} maxLength={MEETING_NOTES_MAX} placeholder="결정 배경이나 다음 할 일을 남겨 보세요" onChange={(e) => setNotes(e.target.value)} />
+          </Field>
+        </form>
+        {!allowed && <p className="notice notice-warn">강사는 결정을 기록하거나 회의를 마칠 수 없어요.</p>}
+      </div>
+      <footer className="modal-foot">
+        <button type="button" className="btn" onClick={close}>
+          닫기
+        </button>
+        <button type="submit" form="end-meeting" className="btn btn-primary" disabled={busy || !!notesError || !allowed}>
+          회의 종료
+        </button>
+      </footer>
     </Modal>
   )
 }
 
 // ---- History (read-only) -----------------------------------------------------
 
-function outcomeText(o: AgendaOutcome, members: Record<Id, Member>): string {
-  switch (o.action) {
-    case 'assign':
-      return `${members[o.memberId]?.name ?? '팀원'} 님에게 배정`
-    case 'status':
-      return `${STATUS_META[o.status].label}(으)로 변경`
-    case 'backlog':
-      return '백로그로 이동'
-    case 'keep':
-      return '보류'
-  }
+/** A decided item: source · title, conclusion, PR decision, learning, follow-up */
+function DecisionLine({ item, snapshot }: { item: AgendaItemDto; snapshot: WorkspaceSnapshot }) {
+  const d = item.decision
+  const follow = d ? memberName(snapshot, d.followUpAssigneeMemberId) : null
+  return (
+    <li>
+      <div className="outcome-top">
+        <span className="agenda-kind">{AGENDA_KIND_LABEL[item.kind]}</span>
+        {item.source && <span className="card-key">{sourceText(snapshot, item)}</span>}
+        <span className="mini-title">{item.title}</span>
+        {d?.prDecision && <span className="agenda-kind">{PR_DECISION_LABEL[d.prDecision]}</span>}
+      </div>
+      {d && <p className="minutes-notes">{d.conclusion}</p>}
+      {d?.learning && <p className="dim small">배운 점 · {d.learning}</p>}
+      {follow && (
+        <p className="dim small">
+          더 알아볼 사람 · {follow}
+          {d?.followUpDueDate ? ` · ${formatDate(d.followUpDueDate)}까지` : ''}
+        </p>
+      )}
+    </li>
+  )
 }
 
-function MeetingRecord({ meeting }: { meeting: Meeting }) {
-  const members = useOffice((s) => s.members)
-  const tasks = useOffice((s) => s.tasks)
-  const projects = useOffice((s) => s.projects)
-  const decided = meeting.outcomes.filter((o) => o.action !== 'keep')
-  const kept = meeting.agendaTaskIds.length - decided.length
-  const who = meeting.attendeeIds.map((id) => members[id]).filter((m) => !!m)
+function MeetingRecord({ meeting, snapshot }: { meeting: MeetingDto; snapshot: WorkspaceSnapshot }) {
+  const decided = decidedIn(snapshot, meeting)
+  const who = meeting.attendeeMemberIds.map((id) => snapshot.members.find((m) => m.id === id)).filter((m): m is MemberDto => !!m)
   return (
     <li className="minutes">
       <div className="minutes-head">
-        <strong>{meeting.title}</strong>
+        <strong>{formatDate(localDateOf(meeting.startedAt))} 회의</strong>
         <span className="dim">
-          {formatDate(localDateOf(meeting.startedAt))} · {formatClock(meeting.startedAt)} · {formatDuration(meeting.startedAt, meeting.endedAt)}
+          {formatClock(meeting.startedAt)} · {formatDuration(meeting.startedAt, meeting.endedAt)}
         </span>
       </div>
       <div className="minutes-who">
         {who.length === 0 ? (
-          <span className="dim small">참석자 {meeting.attendeeIds.length}명</span>
+          <span className="dim small">참석자 {meeting.attendeeMemberIds.length}명</span>
         ) : (
           who.map((m) => (
-            <span key={m.id} className="fchip is-on" style={cssVars({ '--c': m.color })}>
-              <Avatar member={m} size={14} />
-              {m.name}
+            <span key={m.id} className="fchip is-on">
+              <MemberAvatar member={m} size={14} />
+              {m.displayName}
             </span>
           ))
         )}
       </div>
-      <div className="small dim">
-        안건 {meeting.agendaTaskIds.length}개{decided.length > 0 ? ` · 결정 ${decided.length}건` : ''}
-        {kept > 0 ? ` · 보류 ${kept}건` : ''}
-      </div>
+      <div className="small dim">결정 {decided.length}건</div>
       {decided.length > 0 && (
         <ul className="minutes-decisions">
-          {decided.map((o) => {
-            const t = tasks[o.taskId]
-            return (
-              <li key={o.taskId}>
-                <span className="card-key">{t ? taskKey(t, projects[t.projectId]?.key) : '삭제됨'}</span>
-                <span className="mini-title">{t?.title ?? '삭제된 작업'}</span>
-                <span className="dim">{outcomeText(o, members)}</span>
-              </li>
-            )
-          })}
+          {decided.map((a) => (
+            <DecisionLine key={a.id} item={a} snapshot={snapshot} />
+          ))}
         </ul>
       )}
-      {meeting.notes.trim() !== '' && <p className="minutes-notes">{meeting.notes}</p>}
+      {meeting.notes && meeting.notes.trim() !== '' && <p className="minutes-notes">{meeting.notes}</p>}
     </li>
   )
 }
 
 export function MeetingHistoryDialog() {
-  const meetings = useOffice((s) => s.meetings)
-  const ended = useMemo(
-    () =>
-      Object.values(meetings)
-        .filter((m) => m.status === 'ended')
-        .sort((a, b) => (b.endedAt ?? b.startedAt).localeCompare(a.endedAt ?? a.startedAt))
-        .slice(0, 10),
-    [meetings],
-  )
+  const snapshot = useSnapshot()
+  const ended = useMemo(() => (snapshot ? endedMeetings(snapshot) : []), [snapshot])
   const onClose = () => useUi.getState().setHistoryOpen(false)
   return (
     <Modal title="회의록" onClose={onClose} width={560}>
       <div className="modal-body">
-        {ended.length === 0 ? (
+        {!snapshot || ended.length === 0 ? (
           <Empty icon="meeting" title="아직 회의록이 없어요" hint="회의를 시작하고 마치면 여기에 기록돼요." />
         ) : (
           <ul className="minutes-list">
             {ended.map((m) => (
-              <MeetingRecord key={m.id} meeting={m} />
+              <MeetingRecord key={m.id} meeting={m} snapshot={snapshot} />
             ))}
           </ul>
         )}

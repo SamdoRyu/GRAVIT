@@ -1,80 +1,100 @@
-// 6. Agenda + meeting (demo data): put a task on the agenda, start a meeting, end it with one assignment, one kept item
-// and notes -> store/server state and the 회의록 entry. The 3D view now shows the v1 office and is read-only
-// (#102 T5-c-2), so the task goes on the agenda through the store, not by dropping a box on the meeting table.
-import { callStore, expect, openApp, serverWorkspace, seedTask, taskByTitle, test } from './fixtures'
+// 6. Meeting on the v1 office (CONTRACTS_API.md 「10」 · #102 T5-c-2): with an issue and a PR on the agenda, start a meeting
+// from the top bar, record a decision for the PR (re-evaluate → a new evaluation round), leave the issue undecided, end with
+// notes → the meeting is in the minutes with that decision, and the issue stays on the agenda for the next meeting.
+// Items are raised through the store (dragging shapes to the bridge comes with #26 · #30).
+import type { Page } from '@playwright/test'
+import { callStore, expect, openApp, readStore, test } from './fixtures'
 
-test('agenda, meeting start and end with outcomes and minutes', async ({ page, source, api }) => {
-  await openApp(page, source, { scene: false })
-  const task = await seedTask(page, { title: 'E2E 안건 작업', status: 'todo', priority: 'urgent' })
-
-  // The seed already has two agenda tasks; drop a third box on the meeting table.
-  const seeded = await page.evaluate(async () => {
-    const { useOffice } = await import(/* @vite-ignore */ ('/src/store.ts' as string))
-    return (Object.values(useOffice.getState().tasks) as { id: string; title: string; onAgenda: boolean }[]).filter((t) => t.onAgenda).map((t) => t.title)
+/** An open issue and an open PR from the page's Snapshot */
+async function sources(page: Page) {
+  return page.evaluate(async () => {
+    const storePath = '/src/store.ts'
+    const { useOffice } = await import(/* @vite-ignore */ storePath)
+    const snap = useOffice.getState().office.snapshot
+    const t = snap.tasks.find((x: { state: string }) => x.state === 'open')
+    const p = snap.submissions.find((x: { state: string; currentRound: unknown }) => x.state === 'open' && x.currentRound)
+    return t && p ? { taskId: t.id as string, prId: p.id as string, prRound: p.currentRound.roundNumber as number } : null
   })
-  expect(seeded).toHaveLength(2)
-  await callStore(page, 'setAgenda', task.id, true)
-  await expect.poll(async () => (await taskByTitle(page, 'E2E 안건 작업')).onAgenda).toBe(true)
-  if (source === 'api') await expect.poll(async () => (await serverWorkspace(api)).tasks.find((t) => t.id === task.id)?.onAgenda).toBe(true)
-  await expect(page.getByRole('button', { name: /^회의/ }).getByText('3')).toBeVisible()
+}
 
-  // Start the meeting from the top bar.
+/** The Snapshot pieces this test checks */
+async function state(page: Page, ids: { issueItem: string; prItem: string; prId: string }) {
+  return page.evaluate(async (x) => {
+    const storePath = '/src/store.ts'
+    const { useOffice } = await import(/* @vite-ignore */ storePath)
+    const snap = useOffice.getState().office.snapshot
+    const item = (id: string) => snap.agendaItems.find((a: { id: string }) => a.id === id)
+    const meeting = snap.meetings[snap.meetings.length - 1]
+    const pr = snap.submissions.find((s: { id: string }) => s.id === x.prId)
+    return {
+      meeting: meeting && { status: meeting.status, notes: meeting.notes },
+      issue: item(x.issueItem)?.status,
+      pr: item(x.prItem) && { status: item(x.prItem).status, prDecision: item(x.prItem).decision?.prDecision ?? null },
+      round: pr?.currentRound && { number: pr.currentRound.roundNumber, reason: pr.currentRound.openedReason },
+    }
+  }, ids)
+}
+
+test('a v1 meeting: decide the PR item, leave the issue for next time, end with notes, see it in the minutes', async ({ page, source }) => {
+  await openApp(page, source, { scene: false })
+  await expect.poll(() => readStore(page, (s) => s.office?.status)).toBe('ready')
+  const src = await sources(page)
+  test.skip(src === null, 'mock seed에 열린 이슈와 회차가 있는 열린 PR이 없다')
+  const { taskId, prId, prRound } = src!
+
+  const raise = (kind: 'issue' | 'pr', sourceId: string, title: string) =>
+    callStore<{ id: string } | null>(page, 'raiseAgendaItem', { kind, sourceId, title, background: null, tried: null, unresolvedReason: null })
+  const issueItem = (await raise('issue', taskId, 'E2E 이슈 안건'))!.id
+  const prItem = (await raise('pr', prId, 'E2E PR 안건'))!.id
+  const ids = { issueItem, prItem, prId }
+
+  // Start from the top bar: both items are on the agenda.
   await page.getByRole('button', { name: /^회의/ }).click()
   const start = page.getByRole('dialog', { name: '회의 시작' })
-  await expect(start.getByText('안건 3개')).toBeVisible()
-  await start.getByPlaceholder('예: 주간 싱크').fill('E2E 주간 회의')
+  const agenda = start.getByRole('list', { name: '안건' })
+  await expect(agenda).toContainText('E2E 이슈 안건')
+  await expect(agenda).toContainText('E2E PR 안건')
   await start.getByRole('button', { name: '회의 시작' }).click()
   await expect(start).toBeHidden()
-  const live = page.getByRole('status').filter({ hasText: 'E2E 주간 회의' })
-  await expect(live).toBeVisible()
-  const ongoing = await page.evaluate(async () => {
-    const { useOffice, ongoingMeeting } = await import(/* @vite-ignore */ ('/src/store.ts' as string))
-    const m = ongoingMeeting(useOffice.getState().meetings)
-    return m && { id: m.id, title: m.title, agenda: m.agendaTaskIds.length, attendees: m.attendeeIds.length }
-  })
-  expect(ongoing).toMatchObject({ title: 'E2E 주간 회의', agenda: 3 })
-  expect(ongoing?.attendees).toBeGreaterThan(0)
+  await expect.poll(async () => (await state(page, ids)).meeting?.status).toBe('ongoing')
 
-  // End it: assign our task to 김하늘, keep the other two, write notes.
-  await live.getByRole('button', { name: '회의 종료' }).click()
-  const end = page.getByRole('dialog', { name: /^회의 종료 · E2E 주간 회의/ })
-  const decision = end.getByRole('radiogroup', { name: 'E2E 안건 작업 결정' })
-  await decision.getByRole('radio', { name: '담당 지정' }).click()
-  await end.getByRole('combobox', { name: '담당자' }).selectOption({ label: '김하늘' })
-  for (const title of seeded) await expect(end.getByRole('radiogroup', { name: `${title} 결정` }).getByRole('radio', { name: '보류' })).toBeChecked()
-  await end.getByPlaceholder(/결정 배경/).fill('E2E 메모: 김하늘 님이 맡기로 했어요')
-  await end.getByRole('button', { name: '회의 종료 · 결정 1건 적용' }).click()
+  // End dialog (the top bar's live pill moves to v1 with D's TopBar change — open it through the store meanwhile).
+  const meetingId = await readStore(page, (s) => s.office.snapshot.meetings.find((m: { status: string }) => m.status === 'ongoing').id)
+  await callStore(page, 'openDialog', { kind: 'endMeeting', meetingId })
+  const end = page.getByRole('dialog', { name: /^회의 종료/ })
+  const toDecide = end.getByRole('list', { name: '결정할 안건' })
+  await toDecide.getByRole('listitem').filter({ hasText: 'E2E PR 안건' }).getByRole('button', { name: '결정하기' }).click()
+
+  // The PR decision is required for a PR item.
+  const form = end.getByRole('form', { name: 'E2E PR 안건 결정' })
+  await form.getByPlaceholder('무엇으로 정했는지').fill('리뷰 반영 뒤 다시 평가')
+  await form.getByRole('button', { name: '결정 기록' }).click()
+  await expect(form.getByText('PR 안건은 PR 결정을 골라 주세요')).toBeVisible()
+  await form.getByRole('radiogroup', { name: 'E2E PR 안건 PR 결정' }).getByRole('radio', { name: '고쳐서 다시 평가' }).click()
+  await form.getByPlaceholder('팀이 이번에 배운 것').fill('작은 PR이 리뷰가 빠르다')
+  await form.getByRole('button', { name: '결정 기록' }).click()
+
+  // The PR item leaves the list and shows as decided; a new evaluation round opened.
+  await expect(end.getByRole('list', { name: '이번 회의 결정' })).toContainText('리뷰 반영 뒤 다시 평가')
+  await expect(toDecide).not.toContainText('E2E PR 안건')
+  await expect.poll(async () => (await state(page, ids)).round).toEqual({ number: prRound + 1, reason: 'meeting_reevaluate' })
+
+  // End with notes, the issue undecided.
+  await end.getByLabel('회의록 (선택)').fill('E2E 회의 메모')
+  await end.getByRole('button', { name: '회의 종료' }).click()
   await expect(end).toBeHidden()
-  await expect(page.getByText('회의를 마쳤어요 · 결정 1건 적용')).toBeVisible()
+  await expect(page.getByText('회의를 마쳤어요 · 결정 1건')).toBeVisible()
+  await expect
+    .poll(() => state(page, ids))
+    .toEqual({ meeting: { status: 'ended', notes: 'E2E 회의 메모' }, issue: 'confirmed', pr: { status: 'discussed', prDecision: 'revise_and_reevaluate' }, round: { number: prRound + 1, reason: 'meeting_reevaluate' } })
 
-  // State: task assigned and off the agenda, kept ones still on it, meeting ended with notes.
-  await expect.poll(async () => (await taskByTitle(page, 'E2E 안건 작업')).assigneeId).toBe('m_1')
-  expect((await taskByTitle(page, 'E2E 안건 작업')).onAgenda).toBe(false)
-  for (const title of seeded) expect((await taskByTitle(page, title)).onAgenda).toBe(true)
-  const ended = await page.evaluate(async () => {
-    const { useOffice } = await import(/* @vite-ignore */ ('/src/store.ts' as string))
-    return (Object.values(useOffice.getState().meetings) as { title: string; status: string; notes: string; outcomes: { action: string }[] }[]).find((m) => m.title === 'E2E 주간 회의')
-  })
-  expect(ended?.status).toBe('ended')
-  expect(ended?.notes).toBe('E2E 메모: 김하늘 님이 맡기로 했어요')
-  expect(ended?.outcomes.map((o) => o.action)).toEqual(['assign']) // kept items simply carry no outcome
-  if (source === 'api') {
-    const ws = await serverWorkspace(api)
-    const m = ws.meetings.find((x) => x.title === 'E2E 주간 회의')
-    expect(m?.status).toBe('ended')
-    expect(m?.notes).toBe('E2E 메모: 김하늘 님이 맡기로 했어요')
-    expect(ws.tasks.find((t) => t.id === task.id)).toMatchObject({ assigneeId: 'm_1', onAgenda: false })
-  }
-  await expect(page.getByRole('button', { name: /^회의/ })).toBeVisible()
-
-  // The minutes list shows the entry with the decision and the notes.
+  // The minutes show the meeting with the decision and the notes.
   await page.getByRole('button', { name: '더보기' }).click()
   await page.getByRole('menuitem', { name: '회의록' }).click()
   const minutes = page.getByRole('dialog', { name: '회의록' })
-  const entry = minutes.getByRole('listitem').filter({ hasText: 'E2E 주간 회의' })
+  const entry = minutes.getByRole('listitem').filter({ hasText: 'E2E 회의 메모' }).first()
   await expect(entry).toBeVisible()
   await expect(entry.getByText('결정 1건')).toBeVisible()
-  await expect(entry.getByText('보류 2건')).toBeVisible()
-  await expect(entry.getByText('김하늘 님에게 배정')).toBeVisible()
-  await expect(entry.getByText('E2E 메모: 김하늘 님이 맡기로 했어요')).toBeVisible()
+  await expect(entry.getByText('리뷰 반영 뒤 다시 평가')).toBeVisible()
+  await expect(entry.getByText('고쳐서 다시 평가')).toBeVisible()
 })

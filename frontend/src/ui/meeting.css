@@ -28,6 +28,13 @@
 .outcome { display: grid; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
 .outcome:last-child { border-bottom: 0; }
 .outcome-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* v1 안건 · 결정 (#102 T5-c-2 — CONTRACTS_API.md 「10」) */
+.agenda-kind { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--soft); font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.agenda-by { flex: none; margin-left: auto; }
+.outcome-top .btn { flex: none; }
+.decision { display: grid; gap: 8px; padding-top: 4px; }
+.decision-follow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.decision-foot { display: flex; justify-content: flex-end; }
 .outcome-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .outcome-ctl .seg { background: var(--soft); border-radius: 10px; padding: 2px; }
 .outcome-ctl .seg button.is-on { background: #fff; box-shadow: 0 0 0 1px var(--line); }
