@@ -1,5 +1,6 @@
 package com.samdoryu.backend.meeting.service;
 
+import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
@@ -14,6 +15,8 @@ import com.samdoryu.backend.meeting.domain.PrDecision;
 import com.samdoryu.backend.meeting.dto.AgendaItemCreateRequest;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.dto.DecisionRequest;
+import com.samdoryu.backend.meeting.dto.InstructorFeedbackCreateRequest;
+import com.samdoryu.backend.meeting.dto.InstructorFeedbackDto;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.InstructorFeedbackRepository;
 import com.samdoryu.backend.meeting.repository.MeetingRepository;
@@ -166,6 +169,47 @@ public class AgendaItemService {
         }
         eventHub.publishChangeAfterCommit(workspaceId, changed.toArray(SnapshotResource[]::new));
         return AgendaItemDto.of(item, List.of());
+    }
+
+    /**
+     * 결정 기록에 강사 피드백 요청(FR-LRN-22) → {@code feedbackRequested: true}. 검사 순서는 대상(404 — 같은 사무실 것만) →
+     * {@code discussed}가 아님(409). 이미 켜져 있으면 그대로 돌려준다.
+     */
+    @Transactional
+    public AgendaItemDto requestFeedback(Long workspaceId, Long agendaItemId) {
+        AgendaItem item = requireItem(workspaceId, agendaItemId);
+        if (!item.isDiscussed()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        if (!item.isFeedbackRequested()) {
+            item.requestFeedback(Instant.now());
+            eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
+        }
+        return AgendaItemDto.of(item, instructorFeedbackRepository.findByAgendaItemIdOrderByCreatedAtAsc(item.getId()));
+    }
+
+    /**
+     * 강사 피드백(FR-LRN-22) — 결정 기록 아래 팀 전체에게 보인다. 안건 · 결정 상태는 바꾸지 않는다(SP3).
+     * 검사 순서는 대상(404 — 같은 사무실 것만) → 피드백 요청이 켜지지 않음(403 — 강사 쓰기는 요청된 건만, FR-AUTH-08).
+     *
+     * @param instructorUserId 세션 사용자(지정된 강사인지는 Controller에서 이미 확인함)
+     */
+    @Transactional
+    public InstructorFeedbackDto addInstructorFeedback(Long workspaceId, Long instructorUserId, Long agendaItemId,
+            InstructorFeedbackCreateRequest request) {
+        AgendaItem item = requireItem(workspaceId, agendaItemId);
+        if (!item.isFeedbackRequested()) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        InstructorFeedback feedback = instructorFeedbackRepository.save(new InstructorFeedback(item,
+                entityManager.getReference(AppUser.class, instructorUserId), request.body(), Instant.now()));
+        eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
+        return InstructorFeedbackDto.of(feedback);
+    }
+
+    private AgendaItem requireItem(Long workspaceId, Long agendaItemId) {
+        return agendaItemRepository.findByIdAndWorkspaceId(agendaItemId, workspaceId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
     }
 
     /** Snapshot {@code agendaItems} 조각 — 거둔 것 포함 전부, raisedAt 오름차순. 강사 피드백은 한 번에 읽어 나눈다. */

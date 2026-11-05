@@ -14,6 +14,7 @@ import type {
   HelpRequestCreateRequest,
   HelpRequestDetail,
   HelpRequestSummary,
+  InstructorFeedbackCreateRequest,
   MeResponse,
   MeetingDto,
   PageResponse,
@@ -63,6 +64,11 @@ export const decisionRequestExample = {
   followUpDueDate: '2026-11-07',
   meetingId: '5',
 } satisfies DecisionRequest
+
+// contract/examples/meeting/instructor-feedback-create-request.json — CONTRACTS_API.md 「10」
+export const instructorFeedbackCreateRequestExample = {
+  body: '401과 403을 나누는 기준을 결정 기록에 한 줄 남겨 두면 좋겠어요',
+} satisfies InstructorFeedbackCreateRequest
 
 // contract/examples/meeting/agenda-item.json — CONTRACTS_API.md 「10」
 export const agendaItemExample = {
@@ -389,6 +395,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
   'meeting/decision-request.json': decisionRequestExample,
+  'meeting/instructor-feedback-create-request.json': instructorFeedbackCreateRequestExample,
   'meeting/meeting.json': meetingExample,
   'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,
