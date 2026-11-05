@@ -4,7 +4,7 @@ import { describe, it } from 'node:test'
 import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import type { WorkspaceSnapshot } from '../../src/data/types'
-import { BADGE, buildSceneModel, isSeated } from '../../src/scene/model/buildSceneModel'
+import { BADGE, buildSceneModel, countBadge, isSeated } from '../../src/scene/model/buildSceneModel'
 
 const load = (workspaceId: string) =>
   createV1MockDataSource({ storage: createMemoryStorage(), session: 'github', latencyMs: [0, 0], now: () => new Date('2026-11-05T03:00:00Z') }).load(workspaceId)
@@ -101,7 +101,8 @@ describe('SceneModel — 이슈 · PR 상태별 자리 (#11)', () => {
   it('PR: 열림 · Draft → review, 머지 · 닫힘 → done. Draft · 미병합 종료 · 계획 안 함 배지', async () => {
     const snap = await load('ws_1')
     const pr = snap.submissions[0]
-    const submissions = (['open', 'draft', 'merged', 'closed'] as const).map((state) => ({ ...pr, id: `p_${state}`, state }))
+    // 평가 배지(#21)는 따로 본다 — 여기서는 회차 없이
+    const submissions = (['open', 'draft', 'merged', 'closed'] as const).map((state) => ({ ...pr, id: `p_${state}`, state, currentRound: null }))
     const notPlanned = { ...snap.tasks[0], id: 'x_np', state: 'closed' as const, closedReason: 'not_planned' as const }
     const model = buildSceneModel({ ...snap, submissions, tasks: [notPlanned] })
     const get = (key: string) => model.find((e) => e.key === key)
@@ -165,8 +166,8 @@ describe('SceneModel — 막힘 강조 (#23)', () => {
         { ...t, id: 'x_clear', isBlocked: false },
       ],
       submissions: [
-        { ...p, id: 'p_blocked', state: 'draft' as const, isBlocked: true },
-        { ...p, id: 'p_clear', state: 'open' as const, isBlocked: false },
+        { ...p, id: 'p_blocked', state: 'draft' as const, isBlocked: true, currentRound: null },
+        { ...p, id: 'p_clear', state: 'open' as const, isBlocked: false, currentRound: null },
       ],
     }
     const m = byKey(s)
@@ -197,7 +198,8 @@ describe('SceneModel — 막힘 강조 (#23)', () => {
     assert.ok(blocked.length > 0, 'seed에 막힌 도형 · 팀원이 있어야 한다')
     for (const e of blocked) {
       assert.deepEqual(Object.keys(e).sort(), ['badges', 'highlight', 'key', 'kind', 'placeRole', 'refId'])
-      assert.ok(e.badges.every((b) => Object.values(BADGE).includes(b as never)), `배지는 정해진 값만: ${e.badges}`)
+      // 정해진 값 또는 수 배지('recommend:2')뿐 — 문장(이유)이 끼어들지 않는다
+      assert.ok(e.badges.every((b) => Object.values(BADGE).includes(b.replace(/:\d+$/, '') as never)), `배지는 정해진 값만: ${e.badges}`)
     }
   })
 
@@ -211,5 +213,51 @@ describe('SceneModel — 막힘 강조 (#23)', () => {
       flow: { ...snap.flow, blockedMemberIds: snap.members.map((x) => x.id) },
     }
     assert.deepEqual(roles(flipped), roles(snap))
+  })
+})
+
+describe('SceneModel — 평가 결과 (#21)', () => {
+  const prBadges = (snap: WorkspaceSnapshot, id: string) => buildSceneModel(snap).find((e) => e.key === `submission:${id}`)?.badges
+
+  it('현재 회차의 추천 · 비추천 수만 배지로 — 이전 회차 · 이유 · 평가자는 없다', async () => {
+    const snap = await load('ws_1')
+    const p = snap.submissions.find((x) => x.currentRound !== null)
+    assert.ok(p?.currentRound, 'seed에 회차가 있는 PR이 있어야 한다')
+    const round = { ...p.currentRound, roundNumber: 3, recommendCount: 2, notRecommendCount: 1 }
+    const s = { ...snap, submissions: [{ ...p, id: 'p_eval', state: 'open' as const, isBlocked: false, currentRound: round }] }
+    assert.deepEqual(prBadges(s, 'p_eval'), [countBadge(BADGE.recommend, 2), countBadge(BADGE.notRecommend, 1)])
+    assert.deepEqual(countBadge(BADGE.recommend, 2), 'recommend:2')
+  })
+
+  it('0표도 그대로 보인다(회차는 열려 있음), 회차가 없으면 평가 배지가 없다', async () => {
+    const snap = await load('ws_1')
+    const p = snap.submissions.find((x) => x.currentRound !== null)
+    assert.ok(p?.currentRound)
+    const empty = { ...p.currentRound, recommendCount: 0, notRecommendCount: 0, reasons: [] }
+    const s = {
+      ...snap,
+      submissions: [
+        { ...p, id: 'p_zero', state: 'open' as const, isBlocked: false, currentRound: empty },
+        { ...p, id: 'p_none', state: 'open' as const, isBlocked: false, currentRound: null },
+      ],
+    }
+    assert.deepEqual(prBadges(s, 'p_zero'), [countBadge(BADGE.recommend, 0), countBadge(BADGE.notRecommend, 0)])
+    assert.deepEqual(prBadges(s, 'p_none'), [])
+  })
+
+  it('닫힌 PR도 마지막 회차를 보이고, 다른 배지 뒤에 붙는다', async () => {
+    const snap = await load('ws_1')
+    const p = snap.submissions.find((x) => x.currentRound !== null)
+    assert.ok(p?.currentRound)
+    const round = { ...p.currentRound, recommendCount: 1, notRecommendCount: 3 }
+    const s = { ...snap, submissions: [{ ...p, id: 'p_closed', state: 'closed' as const, isBlocked: true, currentRound: round }] }
+    assert.deepEqual(prBadges(s, 'p_closed'), [BADGE.blocked, BADGE.unmergedClosed, countBadge(BADGE.recommend, 1), countBadge(BADGE.notRecommend, 3)])
+  })
+
+  it('평가 결과는 자리(placeRole)를 바꾸지 않는다', async () => {
+    const snap = await load('ws_1')
+    const roles = (x: WorkspaceSnapshot) => buildSceneModel(x).map((e) => [e.key, e.placeRole])
+    const noRounds = { ...snap, submissions: snap.submissions.map((x) => ({ ...x, currentRound: null })) }
+    assert.deepEqual(roles(noRounds), roles(snap))
   })
 })
