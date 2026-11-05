@@ -20,8 +20,8 @@ public record FlowSummary(
         Double averageReviewWaitHours,
         LocalDate latestStandupDate) {
 
-    /** 아직 계산이 없을 때 — 각 값은 #22 · #24 등 흐름 Issue가 채운다. */
-    public static FlowSummary empty() {
-        return new FlowSummary(List.of(), List.of(), List.of(), 0, null, null);
+    /** 열린 PR 수만 있을 때 — 나머지 값은 #22 · #24 등 흐름 Issue가 채운다. */
+    public static FlowSummary openSubmissionsOnly(int openSubmissionCount) {
+        return new FlowSummary(List.of(), List.of(), List.of(), openSubmissionCount, null, null);
     }
 }

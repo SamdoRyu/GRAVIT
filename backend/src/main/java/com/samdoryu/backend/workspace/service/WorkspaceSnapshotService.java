@@ -6,7 +6,10 @@ import com.samdoryu.backend.flow.dto.FlowSummary;
 import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
 import com.samdoryu.backend.meeting.service.MeetingService;
+import com.samdoryu.backend.sync.domain.SubmissionState;
+import com.samdoryu.backend.sync.dto.SubmissionDto;
 import com.samdoryu.backend.sync.service.SyncService;
+import com.samdoryu.backend.sync.service.SyncedItemService;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.dto.MemberDto;
 import com.samdoryu.backend.workspace.dto.TeamSettingsDto;
@@ -23,8 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code GET W/snapshot} 조립(CONTRACTS_API 「5」). 다른 패키지 조각은 그 패키지 Service로만 읽는다.
- * 1단계(#103): 아직 기능이 없는 조각 — {@code tasks} · {@code submissions}(#103 2단계), {@code requirements} ·
- * {@code requirementLinks}(#14 · #18), {@code activityNotes}(FR-ACT) — 은 빈 목록, {@code flow}는 기본값이다.
+ * 아직 기능이 없는 조각 — {@code requirements} · {@code requirementLinks}(#14 · #18), {@code activityNotes}(FR-ACT) — 은
+ * 빈 목록, {@code flow}는 열린 PR 수만 채운다(나머지는 #22 · #24).
  */
 @Service
 public class WorkspaceSnapshotService {
@@ -38,18 +41,20 @@ public class WorkspaceSnapshotService {
     private final MemberRepository memberRepository;
     private final TeamSettingsRepository teamSettingsRepository;
     private final SyncService syncService;
+    private final SyncedItemService syncedItemService;
     private final AgendaItemService agendaItemService;
     private final MeetingService meetingService;
     private final HelpRequestService helpRequestService;
 
     public WorkspaceSnapshotService(WorkspaceService workspaceService, MemberRepository memberRepository,
             TeamSettingsRepository teamSettingsRepository, SyncService syncService,
-            AgendaItemService agendaItemService, MeetingService meetingService,
+            SyncedItemService syncedItemService, AgendaItemService agendaItemService, MeetingService meetingService,
             HelpRequestService helpRequestService) {
         this.workspaceService = workspaceService;
         this.memberRepository = memberRepository;
         this.teamSettingsRepository = teamSettingsRepository;
         this.syncService = syncService;
+        this.syncedItemService = syncedItemService;
         this.agendaItemService = agendaItemService;
         this.meetingService = meetingService;
         this.helpRequestService = helpRequestService;
@@ -66,22 +71,29 @@ public class WorkspaceSnapshotService {
         List<Member> members = memberRepository.findByWorkspaceId(workspaceId).stream().sorted(MEMBER_ORDER).toList();
         TeamSettingsDto settings = teamSettingsRepository.findByWorkspaceId(workspaceId).map(TeamSettingsDto::of)
                 .orElseThrow(() -> new IllegalStateException("팀 설정이 없는 사무실: " + workspaceId));
+        List<SubmissionDto> submissions = syncedItemService.listSubmissions(workspaceId);
         return new WorkspaceSnapshot(
                 WorkspaceSummary.of(workspaceService.requireWorkspace(workspaceId)),
                 viewerOf(access, members),
                 settings,
                 syncService.status(workspaceId),
                 members.stream().map(MemberDto::of).toList(),
-                List.of(),
-                List.of(),
+                syncedItemService.listTasks(workspaceId),
+                submissions,
                 List.of(),
                 List.of(),
                 agendaItemService.listAll(workspaceId),
                 meetingService.listRecent(workspaceId),
                 helpRequestService.listSummaries(workspaceId, now),
                 List.of(),
-                FlowSummary.empty(),
+                FlowSummary.openSubmissionsOnly(countOpen(submissions)),
                 now);
+    }
+
+    /** 열린 PR 수(FR-FLOW-05) — Draft도 열린 PR이다(「3」 Draft는 열린 PR + 배지). */
+    private static int countOpen(List<SubmissionDto> submissions) {
+        return (int) submissions.stream()
+                .filter(s -> s.state() == SubmissionState.OPEN || s.state() == SubmissionState.DRAFT).count();
     }
 
     /** 강사는 팀원이 아니라 {@code memberId} null · 수집 동의 false. */
