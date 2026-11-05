@@ -26,6 +26,7 @@ import type {
   OpenWorkspaceRequest,
   Reassign,
   RepositoryChoiceResponse,
+  ReviewLoginRequest,
   SyncStatus,
   Task,
   TeamSettings,
@@ -54,6 +55,11 @@ export interface DataSource {
   getMe(): Promise<MeResponse>
   /** POST /api/logout — 세션이 없어도 성공 */
   logout(): Promise<void>
+  /**
+   * POST /api/review-login — 보안 심사용 ID/PW 로그인(form). 204 + 세션. 값이 틀리면 unauthorized(어느 값인지 말하지 않음),
+   * 심사용 로그인이 꺼진 환경이면 not_found. 성공 뒤 getMe로 새 CSRF 쿠키를 받는다
+   */
+  reviewLogin(request: ReviewLoginRequest): Promise<void>
 
   /** GET /api/repositories */
   listRepositories(): Promise<RepositoryChoiceResponse>

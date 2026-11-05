@@ -1,0 +1,70 @@
+/* 사무실 밖 화면 — 로그인 · 사무실 고르기. OWNER: D. 버튼 · 입력 · 표시 태그는 hud · panel · dialogs의 것을 쓴다. */
+.entry {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: radial-gradient(1200px 600px at 20% 0%, #dfe6fb 0%, transparent 60%), radial-gradient(900px 500px at 100% 100%, #f1e6fb 0%, transparent 55%), var(--bg);
+  font-size: 13px;
+  line-height: 1.4;
+  /* .hud와 같은 토큰 — 버튼 · 입력 · 알림이 같은 모양이 되게 */
+  --fs-s: 12px;
+  --fs-m: 13px;
+  --fs-l: 15px;
+  --line: rgba(20, 30, 60, 0.09);
+  --soft: rgba(20, 30, 60, 0.05);
+  --ink-bad: #cc2f35;
+  --ink-good: #168a60;
+  --bad-soft: rgba(229, 72, 77, 0.1);
+  --good-soft: rgba(34, 176, 125, 0.12);
+}
+.entry .toasts { position: fixed; left: 16px; bottom: 16px; }
+.entry .dim { color: var(--text-dim); }
+.entry .grow { flex: 1 1 auto; }
+.entry .small { font-size: 12px; margin: 0; }
+
+.entry-card { display: grid; gap: 12px; width: min(400px, 100%); padding: 24px; border-radius: 20px; }
+.entry-wide { width: min(560px, 100%); }
+.entry-brand { display: flex; align-items: center; gap: 8px; }
+.entry-brand .brand-mark { width: 28px; height: 28px; }
+.entry-brand-name { font-size: var(--fs-l, 16px); font-weight: 700; letter-spacing: -0.02em; }
+.entry-title { margin: 4px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.entry-subtitle { margin: 0; font-size: var(--fs-m, 14px); font-weight: 600; }
+.entry-lead { margin: 0; color: var(--text-dim); line-height: 1.5; }
+.entry-github { height: 40px; font-size: 15px; }
+.entry-review { display: grid; gap: 10px; }
+.entry-or { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 12px; }
+.entry-or::before, .entry-or::after { content: ''; flex: 1; height: 1px; background: var(--line, rgba(20, 30, 60, 0.1)); }
+.entry-note { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--soft, rgba(20, 30, 60, 0.04)); color: var(--text-dim); font-size: 12px; line-height: 1.45; }
+.entry-state { margin: 0; color: var(--text-dim); text-align: center; line-height: 1.5; }
+.entry-state .btn { margin-top: 8px; }
+
+.entry-head { display: flex; align-items: center; gap: 8px; }
+.entry-me { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 13px; }
+
+.entry-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.entry-ws {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name go' 'tags go';
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel-solid);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.entry-ws:hover:not(:disabled), .entry-ws:focus-visible { box-shadow: 0 0 0 1.5px var(--accent), 0 6px 16px rgba(58, 99, 224, 0.12); transform: translateY(-1px); outline: none; }
+.entry-ws:disabled { cursor: progress; opacity: 0.7; }
+.entry-ws-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.entry-ws-tags { grid-area: tags; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.entry-ws-go { grid-area: go; color: var(--text-dim); font-size: 12px; }

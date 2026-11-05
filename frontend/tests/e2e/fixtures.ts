@@ -135,14 +135,18 @@ export async function serverTask(api: APIRequestContext, id: string): Promise<Ta
 
 // ---- opening the app ------------------------------------------------------------------------------------
 
+/** mock 팀 사무실 — 로그인돼 있으면(mock 기본) 고르기를 건너뛰고 바로 연다(진입 흐름 #64 · #68) */
+export const TEAM_WORKSPACE = 'ws_1'
+
 export function appPath(source: Source): string {
-  return source === 'api' ? '/?source=api' : '/'
+  return source === 'api' ? '/?source=api' : `/?workspace=${TEAM_WORKSPACE}`
 }
 
 /** Open the app and wait until data is loaded, the link is up (api) and the 3D scene is framed. */
 export async function openApp(page: Page, source: Source, opts: { scene?: boolean } = {}): Promise<void> {
   await page.goto(appPath(source))
   await expect.poll(() => readStore(page, (s) => s.status), { message: 'store ready' }).toBe('ready')
+  await expect.poll(() => readStore(page, (s) => s.office?.status ?? null), { message: 'office ready' }).toBe('ready')
   if (source === 'api') await expect.poll(() => readStore(page, (s) => s.connection), { message: 'api online' }).toBe('online')
   await expect(page.getByText('사무실을 여는 중…')).toBeHidden()
   if (opts.scene !== false) await waitForScene(page)
