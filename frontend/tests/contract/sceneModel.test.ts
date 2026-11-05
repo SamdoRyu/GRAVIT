@@ -16,9 +16,17 @@ describe('SceneModel — 팀원 아바타 (#10)', () => {
     const snap = await load('ws_1')
     const seated = snap.members.filter((m) => m.removedAt === null && m.deskIndex !== null)
     assert.ok(seated.length > 0, 'seed에 자리가 있는 팀원이 있어야 한다')
+    const blocked = new Set(snap.flow.blockedMemberIds)
     assert.deepEqual(
       avatars(snap),
-      seated.map((m) => ({ key: `member:${m.id}`, kind: 'avatar', refId: m.id, placeRole: `desk:${m.id}`, badges: [] })),
+      seated.map((m) => ({
+        key: `member:${m.id}`,
+        kind: 'avatar',
+        refId: m.id,
+        placeRole: `desk:${m.id}`,
+        badges: [],
+        ...(blocked.has(m.id) ? { highlight: 'blocked' } : {}),
+      })),
     )
   })
 
@@ -139,5 +147,69 @@ describe('SceneModel — 이슈 · PR 상태별 자리 (#11)', () => {
       requirementLinks: [{ id: 'l_1', requirementId: 'r_1', taskId: t.id, linkedAt: '2026-11-05T03:00:00Z' }],
     }).filter((e) => e.kind === 'issue' || e.kind === 'pr')
     assert.deepEqual(after, before)
+  })
+})
+
+describe('SceneModel — 막힘 강조 (#23)', () => {
+  const byKey = (snap: WorkspaceSnapshot) => new Map(buildSceneModel(snap).map((e) => [e.key, e]))
+
+  it('서버가 막혔다고 계산한 이슈 · PR은 blocked 강조 + 막힘 배지, 아닌 것은 둘 다 없다', async () => {
+    const snap = await load('ws_1')
+    const t = snap.tasks.find((x) => x.state === 'open')
+    const p = snap.submissions[0]
+    assert.ok(t && p)
+    const s = {
+      ...snap,
+      tasks: [
+        { ...t, id: 'x_blocked', isBlocked: true },
+        { ...t, id: 'x_clear', isBlocked: false },
+      ],
+      submissions: [
+        { ...p, id: 'p_blocked', state: 'draft' as const, isBlocked: true },
+        { ...p, id: 'p_clear', state: 'open' as const, isBlocked: false },
+      ],
+    }
+    const m = byKey(s)
+    assert.equal(m.get('task:x_blocked')?.highlight, 'blocked')
+    assert.deepEqual(m.get('task:x_blocked')?.badges, [BADGE.blocked])
+    assert.equal(m.get('submission:p_blocked')?.highlight, 'blocked')
+    assert.deepEqual(m.get('submission:p_blocked')?.badges, [BADGE.blocked, BADGE.draft])
+    for (const key of ['task:x_clear', 'submission:p_clear']) {
+      assert.equal(m.get(key)?.highlight, undefined, key)
+      assert.ok(!m.get(key)?.badges.includes(BADGE.blocked), key)
+    }
+  })
+
+  it('막힌 도형이 있는 팀원(flow.blockedMemberIds)의 아바타만 blocked 강조, 배지는 없다', async () => {
+    const snap = await load('ws_1')
+    const seated = snap.members.filter(isSeated)
+    assert.ok(seated.length >= 2)
+    const [stuck, fine] = seated
+    const m = byKey({ ...snap, flow: { ...snap.flow, blockedMemberIds: [stuck.id] } })
+    assert.equal(m.get(`member:${stuck.id}`)?.highlight, 'blocked')
+    assert.deepEqual(m.get(`member:${stuck.id}`)?.badges, [])
+    assert.equal(m.get(`member:${fine.id}`)?.highlight, undefined)
+  })
+
+  it('막혔다는 사실만 — 엔티티에 이유 문구가 없다', async () => {
+    const snap = await load('ws_1')
+    const blocked = buildSceneModel(snap).filter((e) => e.highlight === 'blocked')
+    assert.ok(blocked.length > 0, 'seed에 막힌 도형 · 팀원이 있어야 한다')
+    for (const e of blocked) {
+      assert.deepEqual(Object.keys(e).sort(), ['badges', 'highlight', 'key', 'kind', 'placeRole', 'refId'])
+      assert.ok(e.badges.every((b) => Object.values(BADGE).includes(b as never)), `배지는 정해진 값만: ${e.badges}`)
+    }
+  })
+
+  it('막힘은 자리(placeRole)를 바꾸지 않는다', async () => {
+    const snap = await load('ws_1')
+    const roles = (s: WorkspaceSnapshot) => buildSceneModel(s).map((e) => [e.key, e.placeRole])
+    const flipped = {
+      ...snap,
+      tasks: snap.tasks.map((x) => ({ ...x, isBlocked: !x.isBlocked })),
+      submissions: snap.submissions.map((x) => ({ ...x, isBlocked: !x.isBlocked })),
+      flow: { ...snap.flow, blockedMemberIds: snap.members.map((x) => x.id) },
+    }
+    assert.deepEqual(roles(flipped), roles(snap))
   })
 })
