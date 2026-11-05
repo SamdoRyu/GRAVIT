@@ -20,8 +20,8 @@ public record FlowSummary(
         Double averageReviewWaitHours,
         LocalDate latestStandupDate) {
 
-    /** 열린 PR 수만 있을 때 — 나머지 값은 #22 · #24 등 흐름 Issue가 채운다. */
-    public static FlowSummary openSubmissionsOnly(int openSubmissionCount) {
-        return new FlowSummary(List.of(), List.of(), List.of(), openSubmissionCount, null, null);
+    /** 막힌 팀원(#22)과 열린 PR 수만 있을 때 — 나머지 값은 #24 등 흐름 Issue가 채운다. */
+    public static FlowSummary blockedAndOpenCount(List<String> blockedMemberIds, int openSubmissionCount) {
+        return new FlowSummary(blockedMemberIds, List.of(), List.of(), openSubmissionCount, null, null);
     }
 }

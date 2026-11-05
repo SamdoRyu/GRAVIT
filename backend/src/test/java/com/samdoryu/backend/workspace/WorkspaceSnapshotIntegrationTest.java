@@ -226,7 +226,7 @@ class WorkspaceSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.tasks[0].priority").value("high"))
                 .andExpect(jsonPath("$.tasks[0].dueDate").value("2026-11-07"))
                 .andExpect(jsonPath("$.tasks[0].linkedSubmissionIds").value(contains(Ids.toApi(open.getId()))))
-                .andExpect(jsonPath("$.tasks[0].isBlocked").value(false))
+                // isBlocked는 응답 시각 기준이라 고정 시각 T0 데이터로는 보지 않는다 — blockedSignalUsesTeamSettings
                 .andExpect(jsonPath("$.tasks[0].htmlUrl").value("https://github.com/samdoryu/a/issues/1"))
                 .andExpect(jsonPath("$.tasks[1].id").value(Ids.toApi(second.getId())))
                 .andExpect(jsonPath("$.tasks[1].assigneeMemberIds").value(empty()))
@@ -254,6 +254,51 @@ class WorkspaceSnapshotIntegrationTest {
         ContractShape.assertCommonRules(actual);
         assertThat(actual.get("submissions").get(2).get("reviews").get(0).propertyNames())
                 .containsExactlyInAnyOrder("reviewerMemberId", "reviewerGithubLogin", "state", "submittedAt");
+    }
+
+    /**
+     * #22 막힘 신호 — 응답 시각 기준, 기준값은 팀 설정. 담당자 있는 이슈 · 리뷰 없는 열린 PR이 60시간 멈춰 있으면 기본 48시간에서
+     * 막힘이고 막힌 팀원(담당자 · 작성자)이 members 순서로 나온다. 팀 설정을 72시간으로 바꾸면 코드 수정 없이 풀린다.
+     */
+    @Test
+    void blockedSignalUsesTeamSettings() throws Exception {
+        Instant sixtyHoursAgo = Instant.now().minus(Duration.ofHours(60));
+        Task assigned = tasks.saveAndFlush(taskChangedAt(1, sixtyHoursAgo));
+        tasks.saveAndFlush(taskChangedAt(2, sixtyHoursAgo));                // 담당자 없음 — 백로그는 막히지 않는다
+        taskAssignees.saveAndFlush(new TaskAssignee(assigned, bob, T0));
+        Submission waiting = submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(5)
+                .title("PR 5").authorGithubUserId(1001L).authorGithubLogin("alice").authorMember(alice)
+                .state(SubmissionState.OPEN).headSha("0123456789abcdef0123456789abcdef01234567")
+                .reviewRequestsJson("[]").reviewsJson("[]").labelsJson("[]").githubCreatedAt(sixtyHoursAgo)
+                .githubUpdatedAt(sixtyHoursAgo).stateChangedAt(sixtyHoursAgo).syncedAt(T0).build());
+        em.clear();
+
+        mvc.perform(get(snapshotPath(ws)).session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[0].id").value(Ids.toApi(assigned.getId())))
+                .andExpect(jsonPath("$.tasks[0].isBlocked").value(true))
+                .andExpect(jsonPath("$.tasks[1].isBlocked").value(false))
+                .andExpect(jsonPath("$.submissions[0].id").value(Ids.toApi(waiting.getId())))
+                .andExpect(jsonPath("$.submissions[0].isBlocked").value(true))
+                .andExpect(jsonPath("$.flow.blockedMemberIds").value(contains(Ids.toApi(bob.getId()),
+                        Ids.toApi(alice.getId()))));
+
+        TeamSettings settings = teamSettings.findByWorkspaceId(ws.getId()).orElseThrow();
+        settings.replace(settings.getProjectStartDate(), settings.getProjectEndDate(), null, 72, 72);
+        teamSettings.saveAndFlush(settings);
+        em.clear();
+
+        mvc.perform(get(snapshotPath(ws)).session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[0].isBlocked").value(false))
+                .andExpect(jsonPath("$.submissions[0].isBlocked").value(false))
+                .andExpect(jsonPath("$.flow.blockedMemberIds").value(empty()));
+    }
+
+    private Task taskChangedAt(int number, Instant changedAt) {
+        return Task.builder().workspace(ws).githubIssueNumber(number).title("이슈 " + number)
+                .state(TaskState.OPEN).labelsJson("[]").githubCreatedAt(changedAt).githubUpdatedAt(changedAt)
+                .stateChangedAt(changedAt).syncedAt(T0).build();
     }
 
     private static Task task(Workspace workspace, int number, String labelsJson) {

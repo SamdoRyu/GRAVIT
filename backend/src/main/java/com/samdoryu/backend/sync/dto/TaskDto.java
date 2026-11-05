@@ -15,7 +15,7 @@ import java.util.List;
  * @param assigneeMemberIds 팀원인 담당자 전원 — 첫 번째가 대표 담당자
  * @param priority {@code priority:*} 라벨에서 서버가 계산(P6)
  * @param linkedSubmissionIds GitHub 공식 연결만
- * @param isBlocked 서버 계산(FR-FLOW-01) — #22 전에는 false
+ * @param isBlocked 서버 계산(FR-FLOW-01) — {@link #of}는 false로 만들고 Snapshot이 {@link #withBlocked}로 채운다
  */
 public record TaskDto(
         String id,
@@ -60,5 +60,12 @@ public record TaskDto(
                 task.getClosedAt(),
                 task.getStateChangedAt(),
                 task.getSyncedAt());
+    }
+
+    /** 막힘 계산(flow 패키지 BlockedRule)을 붙인 사본. */
+    public TaskDto withBlocked(boolean blocked) {
+        return new TaskDto(id, githubIssueNumber, title, state, closedReason, assigneeMemberIds, labels, priority,
+                dueDate, linkedSubmissionIds, blocked, htmlUrl, githubCreatedAt, githubUpdatedAt, closedAt,
+                stateChangedAt, syncedAt);
     }
 }
