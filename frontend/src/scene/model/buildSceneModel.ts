@@ -1,5 +1,5 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
-// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23)를 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
+// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21)를 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
 import type { MemberDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
 import type { PlaceRole, SceneEntity } from './types'
@@ -14,7 +14,14 @@ export const BADGE = {
   unmergedClosed: 'unmerged_closed',
   /** "계획 안 함"으로 닫힌 이슈 (구현 기본값 — 닫힘 사유로 완료 · 종료 구분) */
   notPlanned: 'not_planned',
+  /** 현재 회차 추천 수 — `countBadge(BADGE.recommend, n)` 모양으로 붙는다 (FR-LRN-03) */
+  recommend: 'recommend',
+  /** 현재 회차 비추천 수 — `countBadge(BADGE.notRecommend, n)` */
+  notRecommend: 'not_recommend',
 } as const
+
+/** 수를 담는 배지 — `<배지>:<수>`, 예: 'recommend:2'. 그리는 쪽이 모양을 정한다. */
+export const countBadge = (badge: typeof BADGE.recommend | typeof BADGE.notRecommend, count: number): string => `${badge}:${count}`
 
 const deskRole = (memberId: string): PlaceRole => `desk:${memberId}`
 
@@ -67,6 +74,10 @@ function submissionEntity(s: SubmissionDto): SceneEntity {
   if (s.isBlocked) badges.push(BADGE.blocked)
   if (s.state === 'draft') badges.push(BADGE.draft)
   if (s.state === 'closed') badges.push(BADGE.unmergedClosed)
+  // 평가 결과(FR-LRN-03): 현재 회차의 추천 · 비추천 수만. 이전 회차 · 이유 · 평가자는 담지 않는다(익명 — CONTRACTS.md 「5」).
+  // 닫힌 PR도 마지막 회차를 보인다(currentRound가 그대로 온다). 회차가 없으면 배지가 없다.
+  const round = s.currentRound
+  if (round) badges.push(countBadge(BADGE.recommend, round.recommendCount), countBadge(BADGE.notRecommend, round.notRecommendCount))
   return { key: `submission:${s.id}`, kind: 'pr', refId: s.id, placeRole: submissionPlaceRole(s), badges, ...blockedHighlight(s.isBlocked) }
 }
 
