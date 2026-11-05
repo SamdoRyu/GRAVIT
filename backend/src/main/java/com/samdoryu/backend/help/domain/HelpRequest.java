@@ -115,4 +115,13 @@ public class HelpRequest {
         this.learning = Objects.requireNonNull(learning);
         this.closedAt = Objects.requireNonNull(closedAt);
     }
+
+    /** 전환된 안건의 결정이 기록됨(CONTRACTS_API 「10」 decision) — {@code on_agenda} → {@code ended}. */
+    public void endByAgendaDecision(Instant decidedAt) {
+        if (status != HelpRequestStatus.ON_AGENDA) {
+            throw new IllegalStateException("안건으로 옮긴 도움 요청만 회의 결정으로 끝난다");
+        }
+        this.status = HelpRequestStatus.ENDED;
+        this.closedAt = Objects.requireNonNull(decidedAt);
+    }
 }

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 사무실 종류로 어댑터를 고른다(CONTRACTS.md 「7」). 시연 사무실은 Seed 어댑터 — GitHub를 부르지 않는다.
- * 실제 GitHub 어댑터는 #69 다음 단계에서 들어온다. 그 전에 실제 사무실을 동기화하면 {@code unavailable}.
+ * 실제 사무실은 GitHub App 어댑터({@code github.app.GithubAppReader}) — App 설정이 없으면 동기화가 {@code unavailable}로 기록된다.
  */
 @Component
 public class GithubReaderSelector {

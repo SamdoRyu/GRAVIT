@@ -6,7 +6,8 @@ import { WORKLOAD_LEVELS } from '../data/meta'
 import { computeKpis } from '../data/selectors'
 import { ongoingMeeting, useOffice, type Overlay } from '../store'
 import { AnimatedNumber } from './common'
-import { cssVars, formatDuration } from './format'
+import type { FlowSummary } from '../data/types'
+import { cssVars, finiteOrNull, formatDuration, formatHours } from './format'
 import { useNow, useProjectList } from './hooks'
 import { Icon } from './icons'
 import { useUi } from './uiState'
@@ -74,6 +75,36 @@ function imbalanceLabel(v: number) {
   return { text: '쏠림', tone: 'bad' as const }
 }
 
+/**
+ * v1 팀 지표 (FR-FLOW-05) — 서버가 계산한 팀 단위 값(Snapshot `flow`)만 보인다.
+ * 사람별 값 · 순위 · 비교는 두지 않는다 (FR-FLOW-06).
+ */
+function TeamMetrics({ flow }: { flow: FlowSummary | null }) {
+  // flow가 없음 = 사무실을 읽는 중이거나 첫 읽기에 실패 — 데모 숫자 대신 빈 값을 보인다
+  const open = finiteOrNull(flow?.openSubmissionCount)
+  const wait = finiteOrNull(flow?.averageReviewWaitHours)
+  return (
+    <div className="kpis">
+      <Kpi label="열린 PR" hint={open === null ? '사무실 데이터를 아직 받지 못했어요' : '지금 열려 있는 PR 수예요 — 팀 전체 값'}>
+        {open === null ? <NoValue /> : <AnimatedNumber value={open} />}
+      </Kpi>
+      <Kpi label="평균 리뷰 대기" hint={wait === null ? '아직 계산할 리뷰가 없어요' : 'PR이 리뷰를 기다린 평균 시간이에요 — 팀 전체 값'}>
+        {wait === null ? <NoValue /> : formatHours(wait)}
+      </Kpi>
+    </div>
+  )
+}
+
+/** 값 없음 — 화면에는 "—", 화면 낭독기에는 "값 없음" */
+function NoValue() {
+  return (
+    <>
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">값 없음</span>
+    </>
+  )
+}
+
 function KpiRow() {
   const tasks = useOffice((s) => s.tasks)
   const members = useOffice((s) => s.members)
@@ -84,10 +115,10 @@ function KpiRow() {
     })),
   )
   const kpis = useMemo(() => computeKpis(tasks, members), [tasks, members])
-  const busiest = kpis.busiestId ? members[kpis.busiestId] : undefined
   const memberCount = Object.keys(members).length
   const imb = imbalanceLabel(kpis.imbalance)
-  const balanceHint = `업무 편중도: ${imb.text}${busiest && imb.tone !== 'good' ? ` · 가장 바쁜 팀원 ${busiest.name} 님` : ''}`
+  // 특정 팀원 이름(가장 바쁜 팀원)은 보이지 않는다 — 사람별 비교 금지 (FR-FLOW-06, #24)
+  const balanceHint = `업무 편중도: ${imb.text}`
 
   return (
     <div className="kpis">
@@ -354,6 +385,8 @@ export function TopBar() {
   )
   const status = useOffice((s) => s.status)
   const connection = useOffice((s) => s.connection)
+  const officeOpen = useOffice((s) => s.office !== null)
+  const flow = useOffice((s) => s.office?.snapshot?.flow ?? null)
   return (
     <div className="hud-top">
       <div className="top-head">
@@ -365,7 +398,8 @@ export function TopBar() {
           <span className="brand-name">팀 오피스</span>
           {connection !== null && <span className="badge-server">서버</span>}
         </div>
-        <KpiRow />
+        {/* v1 사무실을 열었으면(읽는 중 · 실패 포함) 팀 지표, 아니면 아직 데모 지표 (화면이 v1으로 옮겨 가면 KpiRow를 지운다) */}
+        {officeOpen ? <TeamMetrics flow={flow} /> : <KpiRow />}
         <SyncStatus />
         {canDemo && (
           <label className="demo" title="데모 모드 · 팀원 자동 활동">

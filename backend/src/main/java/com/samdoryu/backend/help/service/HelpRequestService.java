@@ -120,6 +120,14 @@ public class HelpRequestService {
         return HelpRequestSummary.of(helpRequest, now);
     }
 
+    /** 안건 결정과 같은 트랜잭션에서 부른다(meeting 패키지). 안건은 이미 같은 사무실 것으로 찾은 것이다. */
+    @Transactional
+    public void endByAgendaDecision(Long workspaceId, Long helpRequestId, Instant decidedAt) {
+        helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, workspaceId)
+                .orElseThrow(() -> new IllegalStateException("안건의 도움 요청이 이 사무실에 없음"))
+                .endByAgendaDecision(decidedAt);
+    }
+
     /** 도움이 된 코멘트 — 이 글의 코멘트이고, 강사 답변 · 요청자 본인 코멘트가 아니어야 한다. 아니면 {@code invalid}. */
     private HelpComment requireHelpfulComment(HelpRequest helpRequest, Long commentId) {
         HelpComment comment = helpCommentRepository.findByIdAndHelpRequestId(commentId, helpRequest.getId())

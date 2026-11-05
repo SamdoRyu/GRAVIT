@@ -21,6 +21,7 @@ import com.samdoryu.backend.sync.service.SyncedItemService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * PR 평가 · 평가 회차(CONTRACTS_API 「9」, CONTRACTS.md 「3」 평가 회차 · 「5」 익명성 · FR-LRN-01 · 02).
  * <ul>
- *   <li>회차는 동기화가 연다 — 이 Issue(#19)는 새 PR의 1회차({@code new_pr})만. 새 커밋 · 회의 재평가 회차는 #46.</li>
+ *   <li>회차는 동기화가 연다 — 이 Issue(#19)는 새 PR의 1회차({@code new_pr})만. 새 커밋 회차는 #46, 회의 재평가 회차는 #37.</li>
  *   <li>평가자는 1인 1회 · 작성자 제외 검사와 {@code myEvaluation}을 고르는 데만 쓰고 어느 응답에도 담지 않는다.</li>
  * </ul>
  * 인가 검사 순서 1 · 2는 Controller가 끝낸 뒤 부른다. 여기서는 순서 3(대상 404) → 4(역할 403) → 5(작성자 403 · 상태 409)를 본다.
@@ -75,6 +76,20 @@ public class EvaluationRoundService {
         }
         evaluationRoundRepository.save(
                 new EvaluationRound(submission, 1, submission.getHeadSha(), RoundOpenedReason.NEW_PR, now));
+    }
+
+    /**
+     * 회의 결정 {@code revise_and_reevaluate}(FR-LRN-06) — 그때의 {@code headSha}로 새 회차를 열고 이전 회차를 닫는다.
+     * 안건 결정과 같은 트랜잭션에서 부른다. 회차가 아직 없으면 1회차다.
+     */
+    @Transactional
+    public void openMeetingReevaluateRound(Submission submission, Instant now) {
+        Optional<EvaluationRound> current = evaluationRoundRepository
+                .findFirstBySubmissionIdOrderByRoundNumberDesc(submission.getId());
+        current.filter(round -> round.getClosedAt() == null).ifPresent(round -> round.close(now));
+        int next = current.map(round -> round.getRoundNumber() + 1).orElse(1);
+        evaluationRoundRepository.save(new EvaluationRound(submission, next, submission.getHeadSha(),
+                RoundOpenedReason.MEETING_REEVALUATE, now));
     }
 
     /** {@code GET W/submissions/{id}/rounds} — 접근 가능한 사람 전부. 회차 번호 내림차순(현재 회차가 처음). */

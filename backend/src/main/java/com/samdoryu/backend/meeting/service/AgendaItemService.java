@@ -4,20 +4,28 @@ import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
+import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.domain.AgendaItem;
+import com.samdoryu.backend.meeting.domain.AgendaKind;
 import com.samdoryu.backend.meeting.domain.InstructorFeedback;
+import com.samdoryu.backend.meeting.domain.Meeting;
+import com.samdoryu.backend.meeting.domain.PrDecision;
 import com.samdoryu.backend.meeting.dto.AgendaItemCreateRequest;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
+import com.samdoryu.backend.meeting.dto.DecisionRequest;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.InstructorFeedbackRepository;
+import com.samdoryu.backend.meeting.repository.MeetingRepository;
 import com.samdoryu.backend.realtime.SnapshotResource;
 import com.samdoryu.backend.realtime.WorkspaceEventHub;
 import com.samdoryu.backend.sync.domain.Submission;
 import com.samdoryu.backend.sync.service.SyncedItemService;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
+import com.samdoryu.backend.workspace.service.WorkspaceService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,18 +41,26 @@ public class AgendaItemService {
 
     private final AgendaItemRepository agendaItemRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
+    private final MeetingRepository meetingRepository;
     private final SyncedItemService syncedItemService;
     private final EvaluationRoundService evaluationRoundService;
+    private final HelpRequestService helpRequestService;
+    private final WorkspaceService workspaceService;
     private final WorkspaceEventHub eventHub;
     private final EntityManager entityManager;
 
     public AgendaItemService(AgendaItemRepository agendaItemRepository,
-            InstructorFeedbackRepository instructorFeedbackRepository, SyncedItemService syncedItemService,
-            EvaluationRoundService evaluationRoundService, WorkspaceEventHub eventHub, EntityManager entityManager) {
+            InstructorFeedbackRepository instructorFeedbackRepository, MeetingRepository meetingRepository,
+            SyncedItemService syncedItemService, EvaluationRoundService evaluationRoundService,
+            HelpRequestService helpRequestService, WorkspaceService workspaceService, WorkspaceEventHub eventHub,
+            EntityManager entityManager) {
         this.agendaItemRepository = agendaItemRepository;
         this.instructorFeedbackRepository = instructorFeedbackRepository;
+        this.meetingRepository = meetingRepository;
         this.syncedItemService = syncedItemService;
         this.evaluationRoundService = evaluationRoundService;
+        this.helpRequestService = helpRequestService;
+        this.workspaceService = workspaceService;
         this.eventHub = eventHub;
         this.entityManager = entityManager;
     }
@@ -81,6 +97,53 @@ public class AgendaItemService {
         };
         agendaItemRepository.save(item);
         eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.AGENDA_ITEMS);
+        return AgendaItemDto.of(item, List.of());
+    }
+
+    /**
+     * 결정 기록(FR-MTG-04) → {@code discussed}. 올린 사람이 아니어도 된다. 검사 순서는 대상(404 — 같은 사무실 것만) →
+     * {@code confirmed}가 아님(409) → PR 결정이 종류와 맞지 않음 · 후속 담당자가 지금 팀원이 아님(400) → 다룬 회의(404).
+     * 같은 트랜잭션에서 {@code revise_and_reevaluate}면 새 평가 회차를, 도움 요청 안건이면 그 도움 요청을 {@code ended}로.
+     *
+     * @param decidedByMemberId 세션 사용자의 그 사무실 팀원 ID(강사는 Controller에서 이미 거부됨)
+     */
+    @Transactional
+    public AgendaItemDto decide(Long workspaceId, Long decidedByMemberId, Long agendaItemId, DecisionRequest request) {
+        AgendaItem item = agendaItemRepository.findByIdAndWorkspaceId(agendaItemId, workspaceId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        if (!item.isConfirmed()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        if ((request.prDecision() != null) != (item.getKind() == AgendaKind.PR)) {
+            throw new ApiException(ErrorCode.INVALID, "PR 안건은 PR 결정을 골라야 하고, 다른 안건에는 PR 결정이 없어요");
+        }
+        Member followUpAssignee = null;
+        if (request.followUpAssigneeMemberId() != null) {
+            Long followUpId = Ids.fromBody(request.followUpAssigneeMemberId());
+            followUpAssignee = workspaceService.currentMembers(workspaceId).stream()
+                    .filter(member -> member.getId().equals(followUpId)).findFirst()
+                    .orElseThrow(() -> new ApiException(ErrorCode.INVALID, "후속 담당자는 이 사무실의 지금 팀원이어야 해요"));
+        }
+        Meeting meeting = request.meetingId() == null ? null
+                : meetingRepository.findByIdAndWorkspaceId(Ids.fromBody(request.meetingId()), workspaceId)
+                        .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        Instant now = Instant.now();
+        item.decide(request.conclusion(), request.learning(), request.prDecision(), followUpAssignee,
+                request.followUpDueDate(), meeting, entityManager.getReference(Member.class, decidedByMemberId), now);
+
+        List<SnapshotResource> changed = new ArrayList<>(List.of(SnapshotResource.AGENDA_ITEMS));
+        if (meeting != null) {
+            changed.add(SnapshotResource.MEETINGS); // discussedAgendaItemIds
+        }
+        if (request.prDecision() == PrDecision.REVISE_AND_REEVALUATE) {
+            evaluationRoundService.openMeetingReevaluateRound(item.getSourceSubmission(), now);
+            changed.add(SnapshotResource.SUBMISSIONS); // currentRound
+        }
+        if (item.getKind() == AgendaKind.HELP_REQUEST) {
+            helpRequestService.endByAgendaDecision(workspaceId, item.getSourceHelpRequestId(), now);
+            changed.add(SnapshotResource.HELP_REQUESTS);
+        }
+        eventHub.publishChangeAfterCommit(workspaceId, changed.toArray(SnapshotResource[]::new));
         return AgendaItemDto.of(item, List.of());
     }
 
