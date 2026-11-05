@@ -1,6 +1,5 @@
 // Every issue / PR of the open v1 office as one persistent box (keyed by SceneEntity key), placed by its SceneModel role.
 import { useMemo, useRef, type ReactElement } from 'react'
-import type { Priority } from '../data/types'
 import { useOffice } from '../store'
 import { TaskBox } from './TaskBox'
 import { useToday } from './signals'
@@ -24,13 +23,11 @@ export function TaskBoxes() {
     return next
   }, [scene, snapshot])
 
-  /** key → what the box shows that the SceneModel doesn't carry (colour, overdue glow) */
-  const looks = useMemo(() => {
-    const m = new Map<string, { priority: Priority | null; overdue: boolean }>()
-    if (!snapshot) return m
-    for (const t of snapshot.tasks) m.set(`task:${t.id}`, { priority: t.priority, overdue: t.state === 'open' && t.dueDate !== null && t.dueDate < today })
-    for (const s of snapshot.submissions) m.set(`submission:${s.id}`, { priority: s.priority, overdue: false })
-    return m
+  /** Issues past their due date (P14 마감) — the one thing the box shows that the SceneModel doesn't carry */
+  const overdue = useMemo(() => {
+    const keys = new Set<string>()
+    for (const t of snapshot?.tasks ?? []) if (t.state === 'open' && t.dueDate !== null && t.dueDate < today) keys.add(`task:${t.id}`)
+    return keys
   }, [snapshot, today])
 
   if (!scene) return null
@@ -44,8 +41,7 @@ export function TaskBoxes() {
   for (const e of scene.entities) {
     const slot = slots.get(e.key)
     if (!slot) continue
-    const look = looks.get(e.key)
-    items.push(<TaskBox key={e.key} entity={e} slot={slot} priority={look?.priority ?? null} overdue={look?.overdue ?? false} pop={popped.current.get(e.key) ?? false} />)
+    items.push(<TaskBox key={e.key} entity={e} slot={slot} overdue={overdue.has(e.key)} pop={popped.current.get(e.key) ?? false} />)
   }
   return <>{items}</>
 }
