@@ -50,6 +50,20 @@ class MeetingContractTest {
     }
 
     @Test
+    void standupExampleRoundTrips() throws IOException {
+        assertRoundTrip("standup.json", StandupDto.class);
+    }
+
+    @Test
+    void standupTextsAreAtMost2000AndYesterdayIsRequiredButMayBeEmpty() {
+        assertThat(VALIDATOR.validate(new StandupSaveRequest(null, null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new StandupSaveRequest("a".repeat(2001), null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new StandupSaveRequest("", "a".repeat(2001)))).hasSize(1);
+        assertThat(VALIDATOR.validate(new StandupSaveRequest("", null))).isEmpty();
+        assertThat(VALIDATOR.validate(new StandupSaveRequest("a".repeat(2000), "a".repeat(2000)))).isEmpty();
+    }
+
+    @Test
     void enumsUseContractJsonValues() {
         assertThat(MAPPER.writeValueAsString(AgendaKind.values()))
                 .isEqualTo("[\"issue\",\"pr\",\"help_request\",\"learning\",\"other\"]");
