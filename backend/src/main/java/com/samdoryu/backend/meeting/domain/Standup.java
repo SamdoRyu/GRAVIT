@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -27,6 +28,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Standup {
+
+    /** 스탠드업 날짜의 기준 — 한국 시간 달력 날짜(CONTRACTS.md 「1」 [구현 기본값]). */
+    public static final ZoneId DATE_ZONE = ZoneId.of("Asia/Seoul");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -16,6 +16,7 @@ import type {
   MeResponse,
   MeetingDto,
   PageResponse,
+  StandupDto,
   TimelineEntry,
   WorkspaceSnapshot,
 } from '../../src/data/types'
@@ -95,6 +96,16 @@ export const meetingExample = {
   notes: '실패 응답 모양은 계약대로 맞추기로 함',
   discussedAgendaItemIds: ['21'],
 } satisfies MeetingDto
+
+// contract/examples/meeting/standup.json — CONTRACTS_API.md 「12」
+export const standupExample = {
+  id: '31',
+  memberId: '2',
+  date: '2026-11-05',
+  yesterday: '로그인 세션 붙임 (#12)',
+  blockers: '로그아웃 뒤에도 세션이 남아요',
+  updatedAt: '2026-11-05T00:30:00Z',
+} satisfies StandupDto
 
 // contract/examples/report/timeline-page.json — CONTRACTS_API.md 「15」
 export const timelinePageExample = {
@@ -299,6 +310,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
   'meeting/agenda-item.json': agendaItemExample,
   'meeting/meeting.json': meetingExample,
+  'meeting/standup.json': standupExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
 }

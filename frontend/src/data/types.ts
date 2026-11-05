@@ -502,6 +502,18 @@ export interface HelpCommentDto {
   createdAt: Instant
 }
 
+// ---- 「12」 스탠드업 ----------------------------------------------------------
+
+export interface StandupDto {
+  id: Id
+  memberId: Id
+  /** 한국 시간 기준 날짜 */
+  date: LocalDate
+  yesterday: string
+  blockers: string | null
+  updatedAt: Instant
+}
+
 // ---- 「15」 개인 API — 학습 타임라인 ------------------------------------------
 
 export type TimelineKind =
