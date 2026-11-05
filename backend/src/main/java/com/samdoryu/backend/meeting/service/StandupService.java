@@ -54,6 +54,16 @@ public class StandupService {
     }
 
     /**
+     * 한 팀원의 스탠드업 전부, 날짜 오름차순 — 기술 결정 카드의 "막혔던 순간" 재료(#62 · FR-REP-07). 읽기 전용, API로 직접 내보내지 않는다.
+     * 인가 검사(본인)는 부르는 쪽이 끝낸 뒤 부른다.
+     */
+    @Transactional(readOnly = true)
+    public List<StandupDto> listByMember(Long workspaceId, Long memberId) {
+        return standupRepository.findByWorkspaceIdAndMemberIdOrderByDateAsc(workspaceId, memberId).stream()
+                .map(StandupDto::of).toList();
+    }
+
+    /**
      * {@code GET W/standups/{date}/mine/prefill}(FR-MTG-01) — {@code date}의 전날(한국 시간 하루) 내 GitHub 활동을 동기화
      * 데이터에서 모은다. 내가 연 PR · 머지된 내 PR · 내가 제출한 리뷰 · 내가 담당자인 이슈의 닫힘.
      * <ul>

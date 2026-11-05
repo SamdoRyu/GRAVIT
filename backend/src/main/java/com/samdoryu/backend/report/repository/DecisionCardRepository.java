@@ -12,5 +12,6 @@ public interface DecisionCardRepository extends JpaRepository<DecisionCard, Long
 
     boolean existsByMemberIdAndSubmissionId(Long memberId, Long submissionId);
 
-    List<DecisionCard> findByMemberIdOrderByCreatedAtDesc(Long memberId);
+    /** {@code GET W/members/{memberId}/decision-cards} — createdAt 내림차순, 같으면 나중에 만든 것 먼저. */
+    List<DecisionCard> findByMemberIdOrderByCreatedAtDescIdDesc(Long memberId);
 }
