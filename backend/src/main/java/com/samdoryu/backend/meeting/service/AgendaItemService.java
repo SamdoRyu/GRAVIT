@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -176,6 +177,27 @@ public class AgendaItemService {
         return agendaItemRepository.findByWorkspaceIdOrderByRaisedAtAscIdAsc(workspaceId).stream()
                 .map(item -> AgendaItemDto.of(item, feedbacks.getOrDefault(item.getId(), List.of())))
                 .toList();
+    }
+
+    /**
+     * 도움 요청 → 안건 전환(CONTRACTS_API 「11」 to-agenda, FR-LRN-18 · 19) → {@code help_request} 종류 {@code confirmed} 안건.
+     * 도움 요청의 검사(404 → 요청자 403 → 상태 409)와 {@code on_agenda} 전환이 안건 생성과 한 트랜잭션이다.
+     * 동시에 두 번 전환하면 안건 유일 제약(도움 요청당 하나)이 막는다 → {@code conflict}.
+     */
+    @Transactional
+    public AgendaItemDto createFromHelpRequest(WorkspaceAccess access, Long helpRequestId, String title) {
+        helpRequestService.moveToAgenda(access, helpRequestId);
+        AgendaItem item = AgendaItem.forHelpRequest(entityManager.getReference(Workspace.class, access.workspaceId()),
+                helpRequestId, title, entityManager.getReference(Member.class, access.requireTeamMember()),
+                Instant.now());
+        try {
+            agendaItemRepository.saveAndFlush(item);
+        } catch (DataIntegrityViolationException e) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.AGENDA_ITEMS,
+                SnapshotResource.HELP_REQUESTS);
+        return AgendaItemDto.of(item, List.of());
     }
 
     /** 이슈 · PR 안건의 원본 ID — 없으면 {@code invalid}(종류와 원본이 맞지 않음). */

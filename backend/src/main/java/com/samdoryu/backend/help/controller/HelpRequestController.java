@@ -9,7 +9,10 @@ import com.samdoryu.backend.help.dto.HelpRequestCloseRequest;
 import com.samdoryu.backend.help.dto.HelpRequestCreateRequest;
 import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
+import com.samdoryu.backend.help.dto.HelpRequestToAgendaRequest;
 import com.samdoryu.backend.help.service.HelpRequestService;
+import com.samdoryu.backend.meeting.dto.AgendaItemDto;
+import com.samdoryu.backend.meeting.service.AgendaItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,10 +30,13 @@ public class HelpRequestController {
 
     private final AuthorizationService authorizationService;
     private final HelpRequestService helpRequestService;
+    private final AgendaItemService agendaItemService;
 
-    public HelpRequestController(AuthorizationService authorizationService, HelpRequestService helpRequestService) {
+    public HelpRequestController(AuthorizationService authorizationService, HelpRequestService helpRequestService,
+            AgendaItemService agendaItemService) {
         this.authorizationService = authorizationService;
         this.helpRequestService = helpRequestService;
+        this.agendaItemService = agendaItemService;
     }
 
     /** 접근 — 팀원 · 지정된 강사. */
@@ -72,5 +78,17 @@ public class HelpRequestController {
     public HelpRequestSummary requestInstructor(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return helpRequestService.requestInstructor(access, Ids.fromPath(helpRequestId));
+    }
+
+    /**
+     * 팀원 — 요청자만(그 밖의 팀원 · 강사는 {@code forbidden_role}). 직접 전환과 48시간 후보 확정이 같은 API다.
+     * 안건은 meeting 패키지가 만든다 — 도움 요청 {@code on_agenda} 전환과 한 트랜잭션.
+     */
+    @PostMapping("/{helpRequestId}/to-agenda")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AgendaItemDto toAgenda(@PathVariable String workspaceId, @PathVariable String helpRequestId,
+            @Valid @RequestBody HelpRequestToAgendaRequest request) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return agendaItemService.createFromHelpRequest(access, Ids.fromPath(helpRequestId), request.title());
     }
 }

@@ -554,4 +554,121 @@ class HelpRequestIntegrationTest {
         requestInstructor(ws, elsewhere, aliceSession).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("not_found"));
     }
+
+    // ---- #51 안건으로 전환 ------------------------------------------------------------------------
+
+    private ResultActions toAgenda(Workspace workspace, HelpRequest helpRequest, MockHttpSession session, String title)
+            throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post(base(workspace) + "/" + Ids.toApi(helpRequest.getId()) + "/to-agenda")
+                .session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"" + title + "\"}"));
+    }
+
+    /** 전환 → 안건(confirmed) + 도움 요청 on_agenda(한 트랜잭션). 그 안건을 결정하면 도움 요청은 ended. */
+    @Test
+    void requesterConvertsToAgendaThenDecisionEndsIt() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "세션이 끊겨요", null, T0));
+
+        String response = toAgenda(ws, helpRequest, aliceSession, "세션 끊김")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.kind").value("help_request"))
+                .andExpect(jsonPath("$.status").value("confirmed"))
+                .andExpect(jsonPath("$.title").value("세션 끊김"))
+                .andExpect(jsonPath("$.source.type").value("help_request"))
+                .andExpect(jsonPath("$.source.id").value(Ids.toApi(helpRequest.getId())))
+                .andExpect(jsonPath("$.raisedByMemberId").value(Ids.toApi(alice.getId())))
+                .andExpect(jsonPath("$.decision").value(nullValue()))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(ContractShape.readExample("meeting", "agenda-item.json"), actual);
+        ContractShape.assertCommonRules(actual);
+        String agendaItemId = actual.get("id").asString();
+
+        flushAndClear();
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.status").value("on_agenda"))
+                .andExpect(jsonPath("$.agendaItemId").value(agendaItemId))
+                .andExpect(jsonPath("$.isAgendaCandidate").value(false));
+
+        String token = csrfToken();
+        mvc.perform(post("/api/workspaces/" + Ids.toApi(ws.getId()) + "/agenda-items/" + agendaItemId + "/decision")
+                .session(bobSession).cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"conclusion\":\"SameSite=Lax로 맞춘다\",\"learning\":null,\"prDecision\":null,"
+                        + "\"followUpAssigneeMemberId\":null,\"followUpDueDate\":null,\"meetingId\":null}"))
+                .andExpect(status().isOk());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.ENDED);
+    }
+
+    /** 48시간 후보 확정도 같은 API — discussing도 전환된다. 후보 표시는 사라진다. */
+    @Test
+    void agendaCandidateInDiscussionIsConfirmedTheSameWay() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "배포가 안 돼요", null,
+                Instant.now().minus(Duration.ofHours(49))));
+        comment(ws, helpRequest, bobSession, "로그 볼게요").andExpect(status().isCreated());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.isAgendaCandidate").value(true));
+
+        toAgenda(ws, helpRequest, aliceSession, "배포 실패").andExpect(status().isCreated());
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.ON_AGENDA);
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.isAgendaCandidate").value(false));
+    }
+
+    /** 「11」 — 요청자가 아님 · 강사 403. 아무것도 만들지 않는다. */
+    @Test
+    void onlyRequesterCanConvert() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        toAgenda(ws, helpRequest, bobSession, "남의 글").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        toAgenda(ws, helpRequest, instructorSession, "강사").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+        assertThat(agendaItems.count()).isZero();
+    }
+
+    /** open · discussing 밖(이미 전환 · 해결 · 끝남)은 409. 두 번째 안건은 생기지 않는다. */
+    @Test
+    void convertingOutsideOpenOrDiscussingIs409() throws Exception {
+        HelpRequest converted = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        toAgenda(ws, converted, aliceSession, "첫 전환").andExpect(status().isCreated());
+        toAgenda(ws, converted, aliceSession, "두 번째").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+
+        HelpRequest resolved = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        setColumn(resolved, "status = 'RESOLVED'");
+        HelpRequest ended = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        setColumn(ended, "status = 'ENDED'");
+        toAgenda(ws, resolved, aliceSession, "해결됨").andExpect(status().isConflict());
+        toAgenda(ws, ended, aliceSession, "끝남").andExpect(status().isConflict());
+
+        assertThat(agendaItems.count()).isEqualTo(1);
+    }
+
+    @Test
+    void titleMustBe1To100Chars() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+
+        toAgenda(ws, helpRequest, aliceSession, "").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+        toAgenda(ws, helpRequest, aliceSession, "a".repeat(101)).andExpect(status().isBadRequest());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    /** IDOR — 다른 사무실의 도움 요청을 내 사무실 경로로 전환하면 404. */
+    @Test
+    void convertingHelpRequestOfAnotherWorkspaceIs404() throws Exception {
+        HelpRequest elsewhere = helpRequests.saveAndFlush(new HelpRequest(otherWs, aliceElsewhere, "질문", null, T0));
+
+        toAgenda(ws, elsewhere, aliceSession, "남의 사무실").andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        assertThat(agendaItems.count()).isZero();
+    }
 }
