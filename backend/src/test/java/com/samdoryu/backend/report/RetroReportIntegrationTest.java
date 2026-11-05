@@ -58,6 +58,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -438,29 +439,50 @@ class RetroReportIntegrationTest {
 
     // ---- #43 본인과 강사만 — 해제된 강사 404 ----------------------------------------------------------
 
+    private ResultActions send(MockHttpServletRequestBuilder request, MockHttpSession session, String body)
+            throws Exception {
+        String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
+        return mvc.perform(request.session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
     /**
-     * 강사 지정은 요청마다 DB에서 본다(FR-REP-06 · P13) — 같은 세션이어도 해제 뒤에는 리포트 경로 전부 사무실째 404,
-     * 다시 지정하면 다시 읽는다. 다른 학생 403은 위 #40 · #42 테스트가 본다.
+     * 강사 지정은 요청마다 DB에서 본다(FR-REP-06 · P13) — 같은 세션이어도 해제 뒤에는 리포트 · 결정 카드(#62) 경로 전부 사무실째 404,
+     * 다시 지정하면 다시 읽는다. 다른 학생 403은 위 #40 · #42 테스트와 {@code DecisionCardIntegrationTest}가 본다.
      */
     @Test
     void unassignedInstructorGets404OnEveryReportRoute() throws Exception {
         RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
         String path = base(alice) + "/" + report.getId();
+        Submission merged = pr(5, "[]", alice, 1001L, true);
+        DecisionCard card = card(alice, merged, null, "배운 점");
+        String cardsPath = base(alice).replace("/reports", "/decision-cards");
         mvc.perform(get(path).session(instructorSession)).andExpect(status().isOk());
+        mvc.perform(get(cardsPath).session(instructorSession)).andExpect(status().isOk());
 
         instructorAssignments.findByInstructorGithubUserIdAndUnassignedAtIsNull(INSTRUCTOR_GITHUB_ID)
                 .forEach(assignment -> assignment.unassign(T0.plusSeconds(60)));
         em.flush();
 
-        for (String read : new String[] {base(alice), path, path + "/markdown"}) {
+        for (String read : new String[] {base(alice), path, path + "/markdown", cardsPath}) {
             mvc.perform(get(read).session(instructorSession)).andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.error.code").value("not_found"));
         }
         create(base(alice), instructorSession, "final").andExpect(status().isNotFound());
         writeLearning(path, instructorSession, "{\"learning\":\"해제된 강사\"}").andExpect(status().isNotFound());
+        send(post(cardsPath), instructorSession, "{\"submissionId\":\"" + Ids.toApi(merged.getId()) + "\"}")
+                .andExpect(status().isNotFound());
+        send(put(cardsPath + "/" + Ids.toApi(card.getId())), instructorSession,
+                "{\"cells\":{\"learning\":\"해제된 강사\"},\"confirmed\":false}")
+                .andExpect(status().isNotFound());
 
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, alice.getUser(),
                 T0.plusSeconds(120)));
         mvc.perform(get(path + "/markdown").session(instructorSession)).andExpect(status().isOk());
+        mvc.perform(get(cardsPath).session(instructorSession)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
     }
 }

@@ -2,6 +2,7 @@ package com.samdoryu.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,15 +51,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
  * #29 사람별 평가 합계 없음 · 평가자 익명(FR-LRN-09 · CONTRACTS.md 「5」 익명성) — 실제 Security · MVC · MySQL.
- * 캐럴이 평가한 뒤, 평가가 실리는 지금 있는 응답(회차 목록 · Snapshot의 현재 회차 · 안건 · 회고 리포트 JSON · 마크다운)을
- * 작성자 · 다른 팀원 · 강사로 읽어 캐럴을 가리키는 값(로그인 · 이름 · GitHub 사용자 ID · 팀원 ID · 사용자 ID)이 없는지 본다.
- * Snapshot의 팀원 명단({@code members})은 평가와 무관한 명단이라 뺀다. 타임라인 · 결정 카드 · 강사 요청함은 그 API가 생길 때 더한다.
+ * 캐럴이 평가한 뒤, 평가가 실리는 지금 있는 응답(회차 목록 · Snapshot의 현재 회차 · 안건 · 기술 결정 카드 · 회고 리포트 JSON ·
+ * 마크다운)을 작성자 · 다른 팀원 · 강사로 읽어 캐럴을 가리키는 값(로그인 · 이름 · GitHub 사용자 ID · 팀원 ID · 사용자 ID)이 없는지 본다.
+ * Snapshot의 팀원 명단({@code members})은 평가와 무관한 명단이라 뺀다. 타임라인 · 강사 요청함은 그 API가 생길 때 더한다.
  * 사람별 합계 · 순위 필드 이름은 {@link NoRankingFieldsTest}가 본다.
  */
 @SpringBootTest(properties = {
@@ -110,10 +113,7 @@ class EvaluatorAnonymityIntegrationTest {
         carol = members.saveAndFlush(Member.collaborator(ws, carolUser, 2, false, T0));
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, aliceUser, T0));
 
-        pr = submissions.saveAndFlush(Submission.builder().workspace(ws).githubPrNumber(5).title("PR 5")
-                .authorGithubUserId(1001L).authorMember(alice).state(SubmissionState.OPEN).headSha(SHA)
-                .reviewRequestsJson("[]").reviewsJson("[]").labelsJson("[]").githubCreatedAt(T0)
-                .githubUpdatedAt(T0).stateChangedAt(T0).syncedAt(T0).build());
+        pr = submissions.saveAndFlush(prValues(null));
         round = rounds.saveAndFlush(new EvaluationRound(pr, 1, SHA, RoundOpenedReason.NEW_PR, T0));
 
         aliceSession = TestLogin.githubUser(aliceUser.getId(), 1001L)
@@ -125,18 +125,28 @@ class EvaluatorAnonymityIntegrationTest {
         instructorSession = TestLogin.githubUser(instructorUser.getId(), INSTRUCTOR_GITHUB_ID).session();
     }
 
+    /** 앨리스의 PR 5 — {@code mergedAt}이 없으면 열림, 있으면 머지(동기화로 덮어쓸 임시 값). */
+    private Submission prValues(Instant mergedAt) {
+        return Submission.builder().workspace(ws).githubPrNumber(5).title("PR 5")
+                .authorGithubUserId(1001L).authorMember(alice)
+                .state(mergedAt == null ? SubmissionState.OPEN : SubmissionState.MERGED).headSha(SHA)
+                .reviewRequestsJson("[]").reviewsJson("[]").labelsJson("[]").githubCreatedAt(T0)
+                .githubUpdatedAt(T0).mergedAt(mergedAt).closedAt(mergedAt)
+                .stateChangedAt(mergedAt == null ? T0 : mergedAt).syncedAt(T0).build();
+    }
+
     @Test
     void noResponseCarriesTheEvaluator() throws Exception {
         String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
         String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
         String workspacePath = "/api/workspaces/" + Ids.toApi(ws.getId());
-        mvc.perform(put(workspacePath + "/submissions/" + Ids.toApi(pr.getId()) + "/evaluations/mine")
-                        .session(carolSession).cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
-                        .header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"roundId\":\"" + Ids.toApi(round.getId())
-                                + "\",\"verdict\":\"not_recommend\",\"reason\":\"세션 만료 처리가 빠졌어요\"}"))
+        send(put(workspacePath + "/submissions/" + Ids.toApi(pr.getId()) + "/evaluations/mine"), carolSession, token,
+                "{\"roundId\":\"" + Ids.toApi(round.getId())
+                        + "\",\"verdict\":\"not_recommend\",\"reason\":\"세션 만료 처리가 빠졌어요\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notRecommendCount").value(1));
+        // 카드는 머지 · 닫힌 PR로만 만든다 — 평가 뒤 머지된 것으로 동기화
+        submissions.findById(pr.getId()).orElseThrow().overwriteFrom(prValues(T0.plusSeconds(150)));
 
         AgendaItem agenda = AgendaItem.forSubmission(ws, pr, round.getId(), "PR 5 비추천 이유 논의", null, null, null,
                 alice, T0.plusSeconds(60));
@@ -144,6 +154,21 @@ class EvaluatorAnonymityIntegrationTest {
                 T0.plusSeconds(120));
         agendaItems.saveAndFlush(agenda);
         RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0.plusSeconds(180)));
+        em.flush();
+        em.clear();
+
+        // 앨리스가 카드를 만들면 받은 평가 칸에 이유가 옮겨지고(평가자 없음), 배운 점을 써서 확인하면 리포트에도 실린다
+        String cardsPath = workspacePath + "/members/" + Ids.toApi(alice.getId()) + "/decision-cards";
+        ObjectNode card = (ObjectNode) ContractShape.readTree(send(post(cardsPath), aliceSession, token,
+                "{\"submissionId\":\"" + Ids.toApi(pr.getId()) + "\"}")
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(card.get("cells").get("feedbackReceived").asString()).contains("세션 만료 처리가 빠졌어요");
+        assertNoEvaluator(card);
+        ((ObjectNode) card.get("cells")).put("learning", "만료 처리를 먼저 정한다");
+        send(put(cardsPath + "/" + card.get("id").asString()), aliceSession, token,
+                "{\"cells\":" + card.get("cells") + ",\"confirmed\":true}")
+                .andExpect(status().isOk());
         em.flush();
         em.clear();
 
@@ -161,11 +186,24 @@ class EvaluatorAnonymityIntegrationTest {
             assertNoEvaluator(snapshot);
         }
         for (MockHttpSession reader : List.of(aliceSession, instructorSession)) {
-            assertNoEvaluator(ContractShape.readTree(read(reportPath, reader)));
+            String cardsJson = read(cardsPath, reader);
+            assertThat(cardsJson).contains("세션 만료 처리가 빠졌어요");
+            assertNoEvaluator(ContractShape.readTree(cardsJson));
+
+            JsonNode reportJson = ContractShape.readTree(read(reportPath, reader));
+            assertThat(reportJson.get("decisionCards")).hasSize(1);
+            assertNoEvaluator(reportJson);
             String markdown = read(reportPath + "/markdown", reader);
-            assertThat(markdown).contains("세션 만료를 고친 뒤 머지").doesNotContain("carol", "캐럴",
-                    String.valueOf(EVALUATOR_GITHUB_ID));
+            assertThat(markdown).contains("세션 만료를 고친 뒤 머지", "세션 만료 처리가 빠졌어요")
+                    .doesNotContain("carol", "캐럴", String.valueOf(EVALUATOR_GITHUB_ID));
         }
+    }
+
+    private ResultActions send(MockHttpServletRequestBuilder request, MockHttpSession session, String token,
+            String body) throws Exception {
+        return mvc.perform(request.session(session).cookie(new Cookie("XSRF-TOKEN", token))
+                .header("X-XSRF-TOKEN", token).header(HttpHeaders.ORIGIN, ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private String read(String path, MockHttpSession session) throws Exception {
