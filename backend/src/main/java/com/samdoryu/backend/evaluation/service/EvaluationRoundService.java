@@ -105,14 +105,13 @@ public class EvaluationRoundService {
 
     /**
      * {@code PUT W/submissions/{id}/evaluations/mine} — 내 평가를 처음이면 만들고, 있으면 고친다(1인 1회).
-     * 회차 ID 형식 {@code invalid} → PR 없음 {@code not_found} → 강사 · 작성자 {@code forbidden_role} →
-     * 닫힌 PR · 현재 회차가 아님 {@code conflict}. 이유 검사({@code invalid})는 #20 — 그 전에는 {@link Evaluation}이
-     * 1~200자가 아닌 이유를 저장하지 않는다.
+     * 이유 · 회차 ID 형식 {@code invalid} → PR 없음 {@code not_found} → 강사 · 작성자 {@code forbidden_role} →
+     * 닫힌 PR · 현재 회차가 아님 {@code conflict}.
      */
     @Transactional
     public EvaluationRoundDto evaluate(WorkspaceAccess access, Long submissionId, EvaluateRequest request,
             Instant now) {
-        String reason = request.reason();
+        String reason = requireReason(request.reason());
         Long roundId = Ids.fromBody(request.roundId());
         Submission submission = syncedItemService.requireSubmission(access.workspaceId(), submissionId);
         access.requireTeamMember();
@@ -141,6 +140,15 @@ public class EvaluationRoundService {
         eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.SUBMISSIONS);
         return EvaluationRoundDto.of(round, evaluationRepository.findByRoundIdOrderByIdAsc(round.getId()),
                 access.userId(), true);
+    }
+
+    /** 앞뒤 공백을 뺀 뒤 1~200자(FR-LRN-02) — 추천 · 비추천 모두 이유 필수. */
+    private static String requireReason(String reason) {
+        String trimmed = reason == null ? "" : reason.strip();
+        if (trimmed.isEmpty() || trimmed.length() > Evaluation.MAX_REASON_LENGTH) {
+            throw new ApiException(ErrorCode.INVALID, "이유는 1~" + Evaluation.MAX_REASON_LENGTH + "자로 적어 주세요");
+        }
+        return trimmed;
     }
 
     private Map<Long, List<Evaluation>> evaluationsByRound(List<EvaluationRound> rounds) {
