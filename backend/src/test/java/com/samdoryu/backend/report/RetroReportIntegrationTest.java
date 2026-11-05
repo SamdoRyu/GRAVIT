@@ -385,4 +385,32 @@ class RetroReportIntegrationTest {
                         + "/reports/" + report.getId() + "/markdown").session(aliceSession))
                 .andExpect(status().isNotFound());
     }
+
+    // ---- #43 본인과 강사만 — 해제된 강사 404 ----------------------------------------------------------
+
+    /**
+     * 강사 지정은 요청마다 DB에서 본다(FR-REP-06 · P13) — 같은 세션이어도 해제 뒤에는 리포트 경로 전부 사무실째 404,
+     * 다시 지정하면 다시 읽는다. 다른 학생 403은 위 #40 · #42 테스트가 본다.
+     */
+    @Test
+    void unassignedInstructorGets404OnEveryReportRoute() throws Exception {
+        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        String path = base(alice) + "/" + report.getId();
+        mvc.perform(get(path).session(instructorSession)).andExpect(status().isOk());
+
+        instructorAssignments.findByInstructorGithubUserIdAndUnassignedAtIsNull(INSTRUCTOR_GITHUB_ID)
+                .forEach(assignment -> assignment.unassign(T0.plusSeconds(60)));
+        em.flush();
+
+        for (String read : new String[] {base(alice), path, path + "/markdown"}) {
+            mvc.perform(get(read).session(instructorSession)).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("not_found"));
+        }
+        create(base(alice), instructorSession, "final").andExpect(status().isNotFound());
+        writeLearning(path, instructorSession, "{\"learning\":\"해제된 강사\"}").andExpect(status().isNotFound());
+
+        instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, alice.getUser(),
+                T0.plusSeconds(120)));
+        mvc.perform(get(path + "/markdown").session(instructorSession)).andExpect(status().isOk());
+    }
 }
