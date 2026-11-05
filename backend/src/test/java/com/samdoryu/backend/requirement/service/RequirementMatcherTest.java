@@ -117,6 +117,64 @@ class RequirementMatcherTest {
     }
 
     @Test
+    void aNewSourceKeyAndAKeylessHeadingWithTheSameTitleAreADuplicateWhenACandidateExists() {
+        // CONTRACTS.md 「3」 2026-11-05 — 예전에는 둘 다 새로 만들고 기존 것을 missing으로 보냈다가,
+        // 다음 동기화에서 원본 ID 쪽이 새 요구사항과 짝지어지며 결과가 뒤집혔다
+        Requirement docs = existing(null, "문서 정리", 0);
+        String markdown = "## FR-DOC-01 문서 정리\n## 문서 정리\n";
+
+        Plan plan = plan(markdown, docs);
+
+        assertThat(plan.needsReview()).containsExactly(docs);
+        assertThat(plan.created()).isEmpty();
+        assertThat(plan.matched()).isEmpty();
+        assertThat(plan.missing()).isEmpty();
+        assertThat(plan.warnings()).containsExactly(
+                SpecWarning.duplicateTitle("FR-DOC-01 문서 정리"), SpecWarning.duplicateTitle("문서 정리"));
+
+        // 문서를 고치기 전까지 다음 동기화도 같은 결과 — 뒤집히지 않는다
+        docs.markUnmatched(com.samdoryu.backend.requirement.domain.RequirementStatus.NEEDS_REVIEW);
+        Plan again = plan(markdown, docs);
+        assertThat(again.needsReview()).containsExactly(docs);
+        assertThat(again.created()).isEmpty();
+        assertThat(again.matched()).isEmpty();
+    }
+
+    @Test
+    void twoDifferentNewSourceKeysWithTheSameTitleAreADuplicateWhenACandidateExists() {
+        Requirement docs = existing(null, "문서 정리", 0);
+
+        Plan plan = plan("## FR-DOC-01 문서 정리\n## FR-DOC-02 문서 정리\n", docs);
+
+        assertThat(plan.needsReview()).containsExactly(docs);
+        assertThat(plan.created()).isEmpty();
+        assertThat(plan.warnings()).containsExactly(
+                SpecWarning.duplicateTitle("FR-DOC-01 문서 정리"), SpecWarning.duplicateTitle("FR-DOC-02 문서 정리"));
+    }
+
+    @Test
+    void differentSourceKeysWithTheSameTitleAreEachCreatedWithoutACandidate() {
+        Plan plan = plan("## FR-DOC-01 문서 정리\n## FR-DOC-02 문서 정리\n");
+
+        assertThat(plan.created()).extracting(Heading::sourceKey).containsExactly("FR-DOC-01", "FR-DOC-02");
+        assertThat(plan.needsReview()).isEmpty();
+        assertThat(plan.warnings()).isEmpty();
+    }
+
+    @Test
+    void aTitleAlreadyPairedBySourceKeyDoesNotCountAsADuplicate() {
+        // ①에서 원본 ID로 짝을 찾은 제목은 ② 판단에 들어가지 않는다 — 남은 같은 제목 하나는 후보가 없어 새로 만든다
+        Requirement keyed = existing("FR-DOC-01", "문서 정리", 0);
+
+        Plan plan = plan("## FR-DOC-01 문서 정리\n## 문서 정리\n", keyed);
+
+        assertThat(plan.matched()).containsOnlyKeys(keyed);
+        assertThat(plan.created()).extracting(Heading::sourceKey, Heading::title)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(null, "문서 정리"));
+        assertThat(plan.warnings()).isEmpty();
+    }
+
+    @Test
     void needsReviewResolvesOnceTheDocumentIsFixed() {
         Requirement login = existing("FR-AUTH-01", "로그인", 0);
         login.markUnmatched(com.samdoryu.backend.requirement.domain.RequirementStatus.NEEDS_REVIEW);

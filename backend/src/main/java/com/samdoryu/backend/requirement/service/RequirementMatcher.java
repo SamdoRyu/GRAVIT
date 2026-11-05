@@ -23,8 +23,15 @@ import java.util.stream.Collectors;
  *   <li>④ 짝이 안 된 기존 요구사항은 {@code missing}.</li>
  * </ol>
  * 모호하면 연결하지 않는다: 같은 원본 ID가 두 번 이상이면 그 제목들은 가져오지 않고 기존 것은 {@code needs_review}.
- * 원본 ID 없는 같은 제목이 두 번 이상이거나 같은 제목의 기존 후보가 둘 이상이면 그 제목들은 매칭 · 생성하지 않고 후보는
- * {@code needs_review}. 기존 요구사항은 상태와 상관없이 매칭 대상이다.
+ * 같은 제목(duplicate_title)은 아래 셋 중 하나면 그 제목들을 매칭 · 생성하지 않고 그 제목의 기존 후보는 {@code needs_review}:
+ * <ul>
+ *   <li>원본 ID 없는 같은 제목이 문서에 두 번 이상</li>
+ *   <li>같은 제목의 기존 후보가 둘 이상</li>
+ *   <li>①에서 짝을 못 찾은 같은 제목이 문서에 두 번 이상(원본 ID 유무 무관)이고 그 제목의 기존 후보가 있음 — 새 원본 ID가 붙은
+ *       제목과 없는 제목이 같이 나오면 어느 쪽이 기존 것인지 모른다. 그대로 두면 이번엔 둘 다 새로 만들고 다음 동기화에서
+ *       원본 ID 쪽이 짝을 가져가 결과가 뒤집힌다(CONTRACTS.md 「3」 2026-11-05)</li>
+ * </ul>
+ * 원본 ID가 서로 다른 같은 제목은 기존 후보가 없으면 각각 새로 만든다. 기존 요구사항은 상태와 상관없이 매칭 대상이다.
  */
 final class RequirementMatcher {
 
@@ -84,7 +91,8 @@ final class RequirementMatcher {
                     .filter(r -> Objects.equals(r.getTitle(), group.getKey()))
                     .toList();
             long keyless = sameTitle.stream().filter(h -> h.sourceKey() == null).count();
-            if (keyless > 1 || sameTitleCandidates.size() > 1) {
+            boolean ambiguousWithCandidate = sameTitle.size() > 1 && !sameTitleCandidates.isEmpty();
+            if (keyless > 1 || sameTitleCandidates.size() > 1 || ambiguousWithCandidate) {
                 sameTitle.forEach(h -> warnings.add(
                         new PositionedWarning(h.position(), SpecWarning.duplicateTitle(h.heading()))));
                 needsReview.addAll(sameTitleCandidates);
