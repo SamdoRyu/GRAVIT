@@ -6,6 +6,8 @@ import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.meeting.dto.AgendaItemCreateRequest;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.dto.DecisionRequest;
+import com.samdoryu.backend.meeting.dto.InstructorFeedbackCreateRequest;
+import com.samdoryu.backend.meeting.dto.InstructorFeedbackDto;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -53,5 +55,24 @@ public class AgendaItemController {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         Long memberId = access.requireTeamMember();
         return agendaItemService.decide(access.workspaceId(), memberId, Ids.fromPath(agendaItemId), request);
+    }
+
+    /** 팀원 — 결정 기록에 강사 피드백 요청(FR-LRN-22). 강사는 {@code forbidden_role}. */
+    @PostMapping("/{agendaItemId}/feedback-request")
+    public AgendaItemDto requestFeedback(@PathVariable String workspaceId, @PathVariable String agendaItemId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        access.requireTeamMember();
+        return agendaItemService.requestFeedback(access.workspaceId(), Ids.fromPath(agendaItemId));
+    }
+
+    /** 지정된 강사(R4)만 — 피드백 요청이 켜진 결정 기록에. 학생은 {@code forbidden_role}. */
+    @PostMapping("/{agendaItemId}/instructor-feedback")
+    @ResponseStatus(HttpStatus.CREATED)
+    public InstructorFeedbackDto addInstructorFeedback(@PathVariable String workspaceId,
+            @PathVariable String agendaItemId, @Valid @RequestBody InstructorFeedbackCreateRequest request) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        access.requireInstructor();
+        return agendaItemService.addInstructorFeedback(access.workspaceId(), access.userId(),
+                Ids.fromPath(agendaItemId), request);
     }
 }

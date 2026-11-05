@@ -452,6 +452,10 @@ export interface InstructorFeedbackDto {
   body: string
   createdAt: Instant
 }
+/** `POST W/agenda-items/{id}/instructor-feedback` — R4, 피드백 요청이 켜진 결정 기록. body 1~2000자 */
+export interface InstructorFeedbackCreateRequest {
+  body: string
+}
 export interface MeetingDto {
   id: Id
   status: 'ongoing' | 'ended'

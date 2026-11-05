@@ -168,6 +168,24 @@ public class AgendaItem {
         return status == AgendaStatus.CONFIRMED;
     }
 
+    public boolean isDiscussed() {
+        return status == AgendaStatus.DISCUSSED;
+    }
+
+    public boolean isFeedbackRequested() {
+        return feedbackRequestedAt != null;
+    }
+
+    /** 결정 기록에 강사 피드백 요청(FR-LRN-22). 이미 켜져 있으면 처음 시각을 그대로 둔다. */
+    public void requestFeedback(Instant at) {
+        if (!isDiscussed()) {
+            throw new IllegalStateException("결정 기록(discussed)에만 피드백을 요청한다");
+        }
+        if (feedbackRequestedAt == null) {
+            this.feedbackRequestedAt = Objects.requireNonNull(at);
+        }
+    }
+
     /** 회의 전 거두기(FR-LRN-14) → {@link AgendaStatus#WITHDRAWN}. 올린 사람인지는 부르는 쪽이 먼저 본다. */
     public void withdraw() {
         if (!isConfirmed()) {

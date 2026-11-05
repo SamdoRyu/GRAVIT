@@ -56,7 +56,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #37 결정 기록 · #33 거두기 · #27 재평가 뒤 이전 회차 보존 — 실제 Security · MVC · MySQL(CONTRACTS_API 「10」 decision · withdraw).
+ * #37 결정 기록 · #33 거두기 · #27 재평가 뒤 이전 회차 보존 · #57 강사 피드백 요청 · 받기 — 실제 Security · MVC · MySQL
+ * (CONTRACTS_API 「10」 decision · withdraw · feedback-request · instructor-feedback).
  * 테스트마다 트랜잭션을 되돌린다.
  * 서버 {@code Instant.now()}와 비교되는 값(회차 닫힘 · 도움 요청 닫힘 CHECK)은 과거 시각으로 만든다.
  * 계약 테스트 ② — 실제 응답 ↔ {@code contract/examples/meeting/agenda-item.json}(결정 있음).
@@ -396,5 +397,94 @@ class AgendaDecisionIntegrationTest {
 
         withdraw(ws, bobSession, elsewhere).andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("not_found"));
+    }
+
+    // ---- #57 강사 피드백 요청 · 받기 (FR-LRN-22) ----
+
+    private AgendaItem discussed() {
+        AgendaItem item = other();
+        item.decide("다음 주에 다시", null, null, null, null, null, alice, PAST);
+        return agendaItems.saveAndFlush(item);
+    }
+
+    private static String feedbackBody(String body) {
+        return "{\"body\":" + quoted(body) + "}";
+    }
+
+    /** 팀원이 요청하면 지정된 강사가 피드백을 남긴다. 다시 요청해도 처음 시각 그대로. 안건 · 결정은 바뀌지 않는다. */
+    @Test
+    void memberRequestsFeedbackAndInstructorAnswers() throws Exception {
+        AgendaItem item = discussed();
+
+        String requestedAt = action(ws, aliceSession, item, "feedback-request", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.feedbackRequested").value(true))
+                .andExpect(jsonPath("$.instructorFeedbacks.length()").value(0))
+                .andReturn().getResponse().getContentAsString();
+        String firstAt = ContractShape.readTree(requestedAt).get("feedbackRequestedAt").asString();
+
+        String response = action(ws, instructorSession, item, "instructor-feedback",
+                feedbackBody("401과 403을 나누는 기준을 남겨 두세요"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.instructor.githubLogin").value("instructor"))
+                .andExpect(jsonPath("$.body").value("401과 403을 나누는 기준을 남겨 두세요"))
+                .andReturn().getResponse().getContentAsString();
+        var actual = ContractShape.readTree(response);
+        ContractShape.assertSameShape(
+                ContractShape.readExample("meeting", "agenda-item.json").get("instructorFeedbacks").get(0), actual);
+        ContractShape.assertCommonRules(actual);
+
+        // 이미 켜져 있으면 그대로 — 피드백도 함께 보인다
+        action(ws, bobSession, item, "feedback-request", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("discussed"))
+                .andExpect(jsonPath("$.decision.conclusion").value("다음 주에 다시"))
+                .andExpect(jsonPath("$.feedbackRequestedAt").value(firstAt))
+                .andExpect(jsonPath("$.instructorFeedbacks.length()").value(1))
+                .andExpect(jsonPath("$.instructorFeedbacks[0].body").value("401과 403을 나누는 기준을 남겨 두세요"));
+    }
+
+    @Test
+    void feedbackRequestNeedsDiscussedAndATeamMember() throws Exception {
+        AgendaItem confirmed = other();
+        action(ws, aliceSession, confirmed, "feedback-request", null).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+
+        action(ws, instructorSession, discussed(), "feedback-request", null).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+    }
+
+    /** 강사 쓰기는 요청된 건만(FR-AUTH-08) — 요청 안 됨 · 학생은 403. */
+    @Test
+    void instructorFeedbackNeedsRequestAndOnlyInstructorsWrite() throws Exception {
+        AgendaItem item = discussed();
+        action(ws, instructorSession, item, "instructor-feedback", feedbackBody("미리 남김"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+
+        action(ws, aliceSession, item, "feedback-request", null).andExpect(status().isOk());
+        action(ws, bobSession, item, "instructor-feedback", feedbackBody("학생이 씀"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        action(ws, instructorSession, item, "instructor-feedback", feedbackBody(""))
+                .andExpect(status().isBadRequest());
+
+        em.flush();
+        em.clear();
+        assertThat(agendaItems.findById(item.getId()).orElseThrow().getStatus()).isEqualTo(AgendaStatus.DISCUSSED);
+    }
+
+    /** IDOR — 다른 사무실 안건을 내 사무실 경로로 부르면 404. */
+    @Test
+    void feedbackOnAgendaOfAnotherWorkspaceIs404() throws Exception {
+        AgendaItem elsewhere = AgendaItem.withoutSource(otherWs, AgendaKind.OTHER, "남의 안건", null, null, null,
+                otherWsMember, PAST);
+        elsewhere.decide("결론", null, null, null, null, null, otherWsMember, PAST);
+        elsewhere.requestFeedback(PAST);
+        agendaItems.saveAndFlush(elsewhere);
+
+        action(ws, bobSession, elsewhere, "feedback-request", null).andExpect(status().isNotFound());
+        action(ws, instructorSession, elsewhere, "instructor-feedback", feedbackBody("남의 사무실"))
+                .andExpect(status().isNotFound());
     }
 }
