@@ -5,6 +5,7 @@ import { FilterBar } from './FilterBar'
 import { Icon } from './icons'
 import { KanbanView } from './KanbanView'
 import { ListView } from './ListView'
+import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
 import { TeamView } from './TeamView'
 import { WeekView } from './WeekView'
 import { useUi, type Tab } from './uiState'
@@ -19,7 +20,11 @@ const TABS: { id: Tab; label: string }[] = [
 function Panel() {
   const tab = useUi((s) => s.tab)
   const wide = useUi((s) => s.wide)
-  const taskCount = useOffice((s) => Object.keys(s.tasks).length)
+  // v1 사무실을 열었으면(읽는 중 · 실패 포함) 칸반 · 목록은 v1 이슈 · PR(읽기 전용), 아니면 아직 데모 작업 (#102 T5-c-2)
+  const officeOpen = useOffice((s) => s.office !== null)
+  const demoTaskCount = useOffice((s) => Object.keys(s.tasks).length)
+  const boardCount = useOffice((s) => (s.office?.snapshot ? s.office.snapshot.tasks.length + s.office.snapshot.submissions.length : 0))
+  const taskCount = officeOpen ? boardCount : demoTaskCount
   const memberCount = useOffice((s) => Object.keys(s.members).length)
   const ui = useUi.getState()
 
@@ -58,10 +63,10 @@ function Panel() {
           <Icon name="chevronRight" size={16} />
         </button>
       </header>
-      {(tab === 'kanban' || tab === 'list') && <FilterBar />}
+      {(tab === 'kanban' || tab === 'list') && (officeOpen ? <OfficeBoardSearch /> : <FilterBar />)}
       <div className={`panel-body panel-${tab}${tab === 'kanban' && wide ? ' is-wide-kanban' : ''}`}>
-        {tab === 'kanban' && <KanbanView />}
-        {tab === 'list' && <ListView />}
+        {tab === 'kanban' && (officeOpen ? <OfficeKanban /> : <KanbanView />)}
+        {tab === 'list' && (officeOpen ? <OfficeList /> : <ListView />)}
         {tab === 'team' && <TeamView />}
         {tab === 'week' && <WeekView />}
       </div>

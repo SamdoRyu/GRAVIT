@@ -1,5 +1,6 @@
 // UI-only view state (panel layout etc.). Domain state stays in src/store.ts. OWNER: ui-builder.
 import { create } from 'zustand'
+import type { BoardColumn, BoardSortKey } from '../data/rules/board'
 import type { TaskStatus } from '../data/types'
 import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
@@ -45,6 +46,17 @@ interface UiState {
   toggleCollapsed: (s: TaskStatus) => void
   sort: { key: SortKey; dir: 'asc' | 'desc' }
   setSort: (key: SortKey) => void
+
+  // ---- v1 사무실 칸반 · 목록 (#102 T5-c-2) — 위 데모 칸과 따로 둔다 ----
+  /** 이슈 · PR 검색어 (칸반 · 목록 공용) */
+  boardQuery: string
+  setBoardQuery: (q: string) => void
+  /** 좁은 칸반에서 접은 열 */
+  boardCollapsed: Partial<Record<BoardColumn, boolean>>
+  toggleBoardCollapsed: (c: BoardColumn) => void
+  /** 목록 정렬. 같은 열을 다시 누르면 방향이 바뀐다 */
+  boardSort: { key: BoardSortKey; dir: 'asc' | 'desc' }
+  setBoardSort: (key: BoardSortKey) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
@@ -87,5 +99,14 @@ export const useUi = create<UiState>((set, get) => ({
   setSort: (key) => {
     const { sort } = get()
     set({ sort: sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'priority' ? 'desc' : 'asc' } })
+  },
+  boardQuery: '',
+  setBoardQuery: (boardQuery) => set({ boardQuery }),
+  boardCollapsed: { done: true },
+  toggleBoardCollapsed: (c) => set({ boardCollapsed: { ...get().boardCollapsed, [c]: !get().boardCollapsed[c] } }),
+  boardSort: { key: 'number', dir: 'asc' },
+  setBoardSort: (key) => {
+    const { boardSort } = get()
+    set({ boardSort: boardSort.key === key ? { key, dir: boardSort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' } })
   },
 }))
