@@ -116,6 +116,14 @@ public class HelpRequest {
         this.closedAt = Objects.requireNonNull(closedAt);
     }
 
+    /** 안건으로 전환(FR-LRN-19) → {@code on_agenda}. 요청자 · 상태 검사는 부르는 쪽이 먼저 한다. */
+    public void moveToAgenda() {
+        if (!status.isOpenForDiscussion()) {
+            throw new IllegalStateException("open · discussing 도움 요청만 안건으로 옮긴다");
+        }
+        this.status = HelpRequestStatus.ON_AGENDA;
+    }
+
     /** 전환된 안건의 결정이 기록됨(CONTRACTS_API 「10」 decision) — {@code on_agenda} → {@code ended}. */
     public void endByAgendaDecision(Instant decidedAt) {
         if (status != HelpRequestStatus.ON_AGENDA) {

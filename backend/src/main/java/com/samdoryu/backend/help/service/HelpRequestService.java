@@ -17,6 +17,8 @@ import com.samdoryu.backend.help.dto.HelpRequestSummary;
 import com.samdoryu.backend.help.repository.HelpCommentRepository;
 import com.samdoryu.backend.help.repository.HelpRequestRepository;
 import com.samdoryu.backend.meeting.domain.Standup;
+import com.samdoryu.backend.realtime.SnapshotResource;
+import com.samdoryu.backend.realtime.WorkspaceEventHub;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import jakarta.persistence.EntityManager;
@@ -34,12 +36,14 @@ public class HelpRequestService {
 
     private final HelpRequestRepository helpRequestRepository;
     private final HelpCommentRepository helpCommentRepository;
+    private final WorkspaceEventHub eventHub;
     private final EntityManager entityManager;
 
     public HelpRequestService(HelpRequestRepository helpRequestRepository,
-            HelpCommentRepository helpCommentRepository, EntityManager entityManager) {
+            HelpCommentRepository helpCommentRepository, WorkspaceEventHub eventHub, EntityManager entityManager) {
         this.helpRequestRepository = helpRequestRepository;
         this.helpCommentRepository = helpCommentRepository;
+        this.eventHub = eventHub;
         this.entityManager = entityManager;
     }
 
@@ -54,6 +58,7 @@ public class HelpRequestService {
                 entityManager.getReference(Workspace.class, workspaceId),
                 entityManager.getReference(Member.class, requesterMemberId),
                 request.content(), fromStandup, now));
+        eventHub.publishChangeAfterCommit(workspaceId, SnapshotResource.HELP_REQUESTS);
         return HelpRequestSummary.of(helpRequest, now);
     }
 
@@ -78,6 +83,7 @@ public class HelpRequestService {
                 authorMemberId == null ? null : entityManager.getReference(Member.class, authorMemberId),
                 request.content(), Instant.now()));
         helpRequest.onComment(access.isSelf(helpRequest.getRequester().getId()), instructorAnswer);
+        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.HELP_REQUESTS);
         return HelpCommentDto.of(comment);
     }
 
@@ -100,6 +106,7 @@ public class HelpRequestService {
                 : requireHelpfulComment(helpRequest, Ids.fromBody(request.helpfulCommentId()));
         Instant now = Instant.now();
         helpRequest.close(helpfulComment, request.learning(), now);
+        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.HELP_REQUESTS);
         return HelpRequestDetail.of(helpRequest,
                 helpCommentRepository.findByHelpRequestIdOrderByCreatedAtAscIdAsc(helpRequestId), now);
     }
@@ -117,7 +124,25 @@ public class HelpRequestService {
         }
         Instant now = Instant.now();
         helpRequest.requestInstructor(now);
+        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.HELP_REQUESTS);
         return HelpRequestSummary.of(helpRequest, now);
+    }
+
+    /**
+     * 안건으로 전환(FR-LRN-18 · 19) — 요청자만. 검사 순서는 대상(404) → 요청자(403 — 강사 포함) → 상태(409 — open ·
+     * discussing만) → {@code on_agenda}. 안건 생성과 같은 트랜잭션에서 meeting 패키지가 부른다(안건이 이 도움 요청을 가리킨다).
+     */
+    @Transactional
+    public void moveToAgenda(WorkspaceAccess access, Long helpRequestId) {
+        HelpRequest helpRequest = helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, access.workspaceId())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        if (!access.isSelf(helpRequest.getRequester().getId())) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        if (!helpRequest.getStatus().isOpenForDiscussion()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
+        helpRequest.moveToAgenda();
     }
 
     /** 안건 결정과 같은 트랜잭션에서 부른다(meeting 패키지). 안건은 이미 같은 사무실 것으로 찾은 것이다. */
