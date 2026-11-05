@@ -6,6 +6,7 @@ import { Icon } from './icons'
 import { KanbanView } from './KanbanView'
 import { ListView } from './ListView'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
+import { OfficeDetailDrawer } from './OfficeDetail'
 import { TeamView } from './TeamView'
 import { WeekView } from './WeekView'
 import { useUi, type Tab } from './uiState'
@@ -79,6 +80,7 @@ export function Rail() {
   return (
     <div className="rail">
       <DetailDrawer />
+      <OfficeDetailDrawer />
       {panelOpen ? (
         <Panel />
       ) : (

@@ -112,8 +112,7 @@
 .spill { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-s); color: var(--text-dim); white-space: nowrap; }
 .lhead .c-est { justify-content: flex-end; }
 
-/* ---- v1 칸반 · 목록 (#102 T5-c-2) — 이슈 · PR 읽기 전용, 끌기 없음 ---- */
-.card-v1 { cursor: default; }
+/* ---- v1 칸반 · 목록 (#102 T5-c-2) — 이슈 · PR 읽기 전용, 끌기 없음. 누르면 상세 ---- */
 .card-v1.is-blocked { box-shadow: inset 3px 0 0 var(--bad), 0 0 0 1px var(--line); }
 .card-v1 .card-top { flex-wrap: wrap; row-gap: 2px; }
 .kind { flex: none; padding: 0 5px; border-radius: 5px; background: var(--soft); color: var(--text-dim); font-size: 10.5px; font-weight: 600; line-height: 16px; }
@@ -131,13 +130,39 @@
 .ltable-v1.ltable-wide .lhead, .ltable-v1.ltable-wide .lrow { grid-template-columns: 72px minmax(0, 1fr) 72px 28px 140px 72px; }
 .ltable-v1 .lhead button { white-space: nowrap; }
 .ltable-v1 .c-who .avatars { overflow: hidden; max-width: 100%; }
-.lrow-v1 { cursor: default; }
 .lrow-v1 .c-who .assignee { gap: 0; }
 .lrow-v1 .l-sub { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
 .lrow-v1 .l-key { flex: none; white-space: nowrap; }
 /* 넓으면 번호는 번호 칸에 — 표시 · GitHub 링크는 제목 아래 그대로 */
 .ltable-wide .lrow-v1 .l-sub { display: flex; }
 .ltable-wide .lrow-v1 .l-key { display: none; }
+
+/* ---- v1 상세 서랍 (#102 T5-c-2) — 읽기 전용 ---- */
+.card-v1, .lrow-v1 { cursor: pointer; }
+.card-v1:focus-visible, .lrow-v1:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.detail-v1 .detail-head { flex-wrap: wrap; row-gap: 4px; }
+.detail-title { margin: 0; font-size: var(--fs-l); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.dstate { display: flex; align-items: center; gap: 8px; }
+.dsec { gap: 6px; }
+.dnote { margin: 0; }
+.people { display: flex; flex-wrap: wrap; gap: 4px; }
+.person { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 28px; padding: 2px 8px 2px 3px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: var(--fs-s); color: var(--text); }
+button.person:hover { border-color: rgba(20, 30, 60, 0.25); background: var(--soft); }
+.person.is-outside, .person.is-unknown { color: var(--text-dim); }
+.person-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-tag { flex: none; padding: 0 5px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.review-state { flex: none; padding: 0 5px; border-radius: 5px; background: var(--soft); color: var(--text-dim); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.review-approved { background: var(--good-soft); color: var(--ink-good); }
+.review-changes_requested { background: var(--bad-soft); color: var(--ink-bad); }
+.dlabels { display: flex; flex-wrap: wrap; gap: 4px; }
+.dround { margin: 0; font-size: var(--fs-s); color: var(--text-dim); }
+.dround b { color: var(--text); font-weight: 600; }
+.dtimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 4px 12px; margin: 0; font-size: var(--fs-s); }
+.dtimes div { display: grid; }
+.dtimes dt { color: var(--text-dim); }
+.dtimes dd { margin: 0; }
+.detail-v1 .detail-foot .gh-open { text-decoration: none; color: var(--accent); font-weight: 600; }
+.detail-v1 .detail-foot { flex-wrap: wrap; row-gap: 4px; padding-left: 12px; }
 
 /* ---- team ---- */
 .team { display: grid; gap: 8px; }

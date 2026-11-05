@@ -7,6 +7,15 @@ import type { Activity, Change, DemoChange, ConnectionStatus, Id, Meeting, Meeti
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
+/** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
+export type OfficeSelection = { kind: 'task' | 'submission' | 'member'; id: Id }
+
+/** 고른 것이 snapshot에 아직 있으면 그대로, 없으면 null */
+export function aliveInOffice(snapshot: WorkspaceSnapshot, sel: OfficeSelection | null): OfficeSelection | null {
+  if (!sel) return null
+  const list = sel.kind === 'task' ? snapshot.tasks : sel.kind === 'submission' ? snapshot.submissions : snapshot.members
+  return list.some((x) => x.id === sel.id) ? sel : null
+}
 export type Overlay = 'none' | 'workload' | 'deadline' | 'project'
 export type PanelView = 'kanban' | 'list'
 
@@ -90,6 +99,12 @@ interface OfficeState {
    * 실패하면 마지막 값을 그대로 두고 사유를 알림으로 보인 뒤 false.
    */
   updateOfficeSettings: (settings: TeamSettings) => Promise<boolean>
+  /**
+   * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
+   * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
+   */
+  officeSelection: OfficeSelection | null
+  selectInOffice: (s: OfficeSelection | null) => void
 
   // ---- view state ----
   selection: Selection | null
@@ -282,7 +297,8 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeLoadPending = false
       syncDuringLoad = null
       const current = get().office
-      if (current) set({ office: { ...current, status: 'ready', snapshot, error: null } })
+      // 고른 것이 새 Snapshot에서 사라졌으면(동기화로 삭제 · 팀원 제외 등) 상세를 닫는다
+      if (current) set({ office: { ...current, status: 'ready', snapshot, error: null }, officeSelection: aliveInOffice(snapshot, get().officeSelection) })
     } catch (e) {
       if (!isLatest()) return
       officeLoadPending = false
@@ -379,8 +395,10 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeSource = null
       officeLoadPending = false
       syncDuringLoad = null
-      if (get().office) set({ office: null })
+      if (get().office || get().officeSelection) set({ office: null, officeSelection: null })
     },
+    officeSelection: null,
+    selectInOffice: (officeSelection) => set(officeSelection ? { officeSelection, selection: null } : { officeSelection }),
     updateOfficeSettings: async (settings) => {
       const src = officeSource
       const office = get().office
@@ -399,7 +417,8 @@ export const useOffice = create<OfficeState>((set, get) => {
     },
 
     selection: null,
-    select: (selection) => set({ selection }),
+    // 데모 쪽을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
+    select: (selection) => set(selection ? { selection, officeSelection: null } : { selection }),
     hover: null,
     setHover: (hover) => {
       const cur = get().hover

@@ -76,6 +76,8 @@ export function Hud() {
   const offline = useOffice((s) => s.connection === 'offline')
   const dragging = useOffice((s) => s.drag !== null)
   const hasDetail = useOffice((s) => {
+    // v1 사무실 상세(#102 T5-c-2) — store가 Snapshot에 없는 선택은 비우므로 고른 것이 있으면 서랍이 있다
+    if (s.officeSelection && s.office?.snapshot) return true
     if (!s.selection) return false
     return s.selection.kind === 'task' ? !!s.tasks[s.selection.id] : !!s.members[s.selection.id]
   })
