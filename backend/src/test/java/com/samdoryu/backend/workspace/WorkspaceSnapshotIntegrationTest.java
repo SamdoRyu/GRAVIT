@@ -1,5 +1,6 @@
 package com.samdoryu.backend.workspace;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
@@ -23,6 +24,18 @@ import com.samdoryu.backend.meeting.domain.AgendaKind;
 import com.samdoryu.backend.meeting.domain.Meeting;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.MeetingRepository;
+import com.samdoryu.backend.plan.domain.TaskDueDate;
+import com.samdoryu.backend.plan.repository.TaskDueDateRepository;
+import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionIssueLink;
+import com.samdoryu.backend.sync.domain.SubmissionState;
+import com.samdoryu.backend.sync.domain.Task;
+import com.samdoryu.backend.sync.domain.TaskAssignee;
+import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionIssueLinkRepository;
+import com.samdoryu.backend.sync.repository.SubmissionRepository;
+import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
+import com.samdoryu.backend.sync.repository.TaskRepository;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.TeamSettings;
 import com.samdoryu.backend.workspace.domain.Workspace;
@@ -66,6 +79,11 @@ class WorkspaceSnapshotIntegrationTest {
     @Autowired HelpRequestRepository helpRequests;
     @Autowired AgendaItemRepository agendaItems;
     @Autowired MeetingRepository meetings;
+    @Autowired TaskRepository tasks;
+    @Autowired SubmissionRepository submissions;
+    @Autowired TaskAssigneeRepository taskAssignees;
+    @Autowired SubmissionIssueLinkRepository links;
+    @Autowired TaskDueDateRepository dueDates;
 
     private Workspace ws;
     private Workspace otherWs;
@@ -154,9 +172,10 @@ class WorkspaceSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.meetings[1].status").value("ongoing"))
                 .andExpect(jsonPath("$.meetings[1].attendeeMemberIds").value(contains(Ids.toApi(carol.getId()))))
                 .andExpect(jsonPath("$.helpRequests[*].id").value(contains(Ids.toApi(help.getId()))))
-                // 1단계 — 아직 채우지 않는 조각
+                // 이슈 · PR이 없는 사무실 — tasks · submissions는 tasksAndSubmissionsPieces
                 .andExpect(jsonPath("$.tasks").value(empty()))
                 .andExpect(jsonPath("$.submissions").value(empty()))
+                // 아직 채우지 않는 조각(#14 · #18 · FR-ACT)
                 .andExpect(jsonPath("$.requirements").value(empty()))
                 .andExpect(jsonPath("$.requirementLinks").value(empty()))
                 .andExpect(jsonPath("$.activityNotes").value(empty()))
@@ -172,6 +191,83 @@ class WorkspaceSnapshotIntegrationTest {
         ContractShape.assertSameShape(ContractShape.readExample("help", "help-request-summary.json"),
                 actual.get("helpRequests").get(0));
         ContractShape.assertCommonRules(actual);
+    }
+
+    /**
+     * #103 2단계 — tasks · submissions 조각. 정렬(번호 순), 대표 담당자 순서(GitHub 사용자 ID 작은 사람 먼저), 우선순위(가장 높은
+     * 라벨), 마감, PR–이슈 연결(양쪽), 리뷰 요청 · 리뷰의 팀원 짝짓기(팀원 아니면 빠짐 · null), 주소, 열린 PR 수(Draft 포함).
+     */
+    @Test
+    void tasksAndSubmissionsPieces() throws Exception {
+        Task second = tasks.saveAndFlush(task(ws, 2, "[]"));
+        Task first = tasks.saveAndFlush(task(ws, 1, "[\"area:auth\",\"priority:low\",\"priority:high\"]"));
+        tasks.saveAndFlush(task(otherWs, 1, "[]"));
+        taskAssignees.saveAndFlush(new TaskAssignee(first, bob, T0));
+        taskAssignees.saveAndFlush(new TaskAssignee(first, alice, T0));
+        dueDates.saveAndFlush(new TaskDueDate(first, LocalDate.of(2026, 11, 7), alice.getUser(), T0));
+        Submission open = submissions.saveAndFlush(submission(5, SubmissionState.OPEN,
+                "[{\"githubUserId\":1002,\"login\":\"bob\"},{\"githubUserId\":7777,\"login\":\"stranger\"}]",
+                "[{\"reviewerGithubUserId\":1003,\"reviewerGithubLogin\":\"carol\",\"state\":\"approved\","
+                        + "\"submittedAt\":\"2026-11-05T02:00:00Z\"},"
+                        + "{\"reviewerGithubUserId\":8888,\"reviewerGithubLogin\":\"outsider\",\"state\":\"commented\","
+                        + "\"submittedAt\":\"2026-11-05T02:10:00Z\"}]"));
+        submissions.saveAndFlush(submission(3, SubmissionState.DRAFT, "[]", "[]"));
+        submissions.saveAndFlush(submission(4, SubmissionState.CLOSED, "[]", "[]"));
+        links.saveAndFlush(new SubmissionIssueLink(open, first, "CLOSING_REFERENCE"));
+        em.clear();
+
+        String response = mvc.perform(get(snapshotPath(ws)).session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[*].githubIssueNumber").value(contains(1, 2)))
+                .andExpect(jsonPath("$.tasks[0].id").value(Ids.toApi(first.getId())))
+                .andExpect(jsonPath("$.tasks[0].assigneeMemberIds").value(contains(Ids.toApi(alice.getId()),
+                        Ids.toApi(bob.getId()))))
+                .andExpect(jsonPath("$.tasks[0].labels").value(contains("area:auth", "priority:low", "priority:high")))
+                .andExpect(jsonPath("$.tasks[0].priority").value("high"))
+                .andExpect(jsonPath("$.tasks[0].dueDate").value("2026-11-07"))
+                .andExpect(jsonPath("$.tasks[0].linkedSubmissionIds").value(contains(Ids.toApi(open.getId()))))
+                .andExpect(jsonPath("$.tasks[0].isBlocked").value(false))
+                .andExpect(jsonPath("$.tasks[0].htmlUrl").value("https://github.com/samdoryu/a/issues/1"))
+                .andExpect(jsonPath("$.tasks[1].id").value(Ids.toApi(second.getId())))
+                .andExpect(jsonPath("$.tasks[1].assigneeMemberIds").value(empty()))
+                .andExpect(jsonPath("$.tasks[1].priority").value(nullValue()))
+                .andExpect(jsonPath("$.tasks[1].dueDate").value(nullValue()))
+                .andExpect(jsonPath("$.submissions[*].githubPrNumber").value(contains(3, 4, 5)))
+                .andExpect(jsonPath("$.submissions[2].authorMemberId").value(Ids.toApi(alice.getId())))
+                .andExpect(jsonPath("$.submissions[2].state").value("open"))
+                .andExpect(jsonPath("$.submissions[2].reviewRequestedMemberIds").value(contains(Ids.toApi(bob.getId()))))
+                .andExpect(jsonPath("$.submissions[2].reviews[0].reviewerMemberId").value(Ids.toApi(carol.getId())))
+                .andExpect(jsonPath("$.submissions[2].reviews[0].state").value("approved"))
+                .andExpect(jsonPath("$.submissions[2].reviews[1].reviewerMemberId").value(nullValue()))
+                .andExpect(jsonPath("$.submissions[2].reviews[1].reviewerGithubLogin").value("outsider"))
+                .andExpect(jsonPath("$.submissions[2].linkedTaskIds").value(contains(Ids.toApi(first.getId()))))
+                .andExpect(jsonPath("$.submissions[2].suggestedReviewerMemberIds").value(empty()))
+                .andExpect(jsonPath("$.submissions[2].htmlUrl").value("https://github.com/samdoryu/a/pull/5"))
+                .andExpect(jsonPath("$.submissions[2].currentRound").value(nullValue()))
+                .andExpect(jsonPath("$.submissions[0].state").value("draft"))
+                .andExpect(jsonPath("$.flow.openSubmissionCount").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode actual = ContractShape.readTree(response);
+        // 예시의 tasks[0] · submissions[0](리뷰 요소 없음)과 같은 모양 — 리뷰 요소는 계약 GithubReviewDto 키로 본다
+        ContractShape.assertSameShape(ContractShape.readExample("workspace", "workspace-snapshot.json"), actual);
+        ContractShape.assertCommonRules(actual);
+        assertThat(actual.get("submissions").get(2).get("reviews").get(0).propertyNames())
+                .containsExactlyInAnyOrder("reviewerMemberId", "reviewerGithubLogin", "state", "submittedAt");
+    }
+
+    private static Task task(Workspace workspace, int number, String labelsJson) {
+        return Task.builder().workspace(workspace).githubIssueNumber(number).title("이슈 " + number)
+                .state(TaskState.OPEN).labelsJson(labelsJson).githubCreatedAt(T0).githubUpdatedAt(T0)
+                .stateChangedAt(T0).syncedAt(T0).build();
+    }
+
+    private Submission submission(int number, SubmissionState state, String reviewRequestsJson, String reviewsJson) {
+        return Submission.builder().workspace(ws).githubPrNumber(number).title("PR " + number)
+                .authorGithubUserId(1001L).authorGithubLogin("alice").authorMember(alice).state(state)
+                .headSha("0123456789abcdef0123456789abcdef01234567").reviewRequestsJson(reviewRequestsJson)
+                .reviewsJson(reviewsJson).labelsJson("[]").githubCreatedAt(T0).githubUpdatedAt(T0)
+                .stateChangedAt(T0).syncedAt(T0).build();
     }
 
     @Test
