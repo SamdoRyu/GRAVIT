@@ -17,7 +17,8 @@ export interface Slot {
   z: number
   rot: number
   scale: number
-  home: 'desk' | 'backlog' | 'review' | 'done'
+  /** agenda = an agenda shape on the bridge table (the original stays in its own place) */
+  home: 'desk' | 'backlog' | 'review' | 'done' | 'agenda'
 }
 
 function hash01(s: string): number {
@@ -63,14 +64,19 @@ export function recentDone(entities: readonly SceneEntity[], snapshot: Workspace
     })
 }
 
-const HOME: Record<'desk' | 'backlog' | 'review', { jitter: number; scale: number }> = {
+const HOME: Record<'desk' | 'backlog' | 'review' | 'agenda', { jitter: number; scale: number }> = {
   desk: { jitter: 0.3, scale: 1 },
   backlog: { jitter: 0.12, scale: 0.92 },
   review: { jitter: 0.12, scale: 0.92 },
+  agenda: { jitter: 0.14, scale: 0.95 },
 }
 
+/** Agenda shapes drawn as cargo (issue cube · PR prism). Help · learning · other shapes come with #47 · #31. */
+export const isAgendaCargo = (e: SceneEntity) => e.key.startsWith('agenda:') && (e.kind === 'issue' || e.kind === 'pr')
+
 /**
- * A slot for every placed issue / PR, keyed by SceneEntity key. Desk, docking bay and scanner keep the SceneModel order
+ * A slot for every placed issue / PR and every issue / PR agenda shape, keyed by SceneEntity key. Desk, docking bay, scanner
+ * and the bridge table (agenda, in raised order) keep the SceneModel order
  * (the Snapshot's: issue / PR number ascending) and stack upward when full. The archive shows the DONE_VISIBLE most recent;
  * `doneAssign` keeps which archive cell each one occupies so older ones don't shuffle when a new one arrives. `prev`
  * keeps slot object identity stable.
@@ -94,7 +100,7 @@ export function computeSlots(
   for (const e of entities) {
     if (!isCargo(e)) continue
     const role = e.placeRole
-    const home = role.startsWith('desk:') ? 'desk' : role === 'backlog' || role === 'review' ? role : null
+    const home = role.startsWith('desk:') ? 'desk' : role === 'backlog' || role === 'review' ? role : role === 'meeting' && isAgendaCargo(e) ? 'agenda' : null
     if (home === null) continue // done: below. Other roles (requirement zones, …) come with their issues.
     const i = counts.get(role) ?? 0
     counts.set(role, i + 1)

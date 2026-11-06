@@ -4,7 +4,7 @@
 // undecided stay on the agenda for the next meeting. The PR decision is a record only — merging or closing happens on GitHub.
 // History: ended meetings with the decisions made in them.
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { blankToNull, decisionError, DECISION_TEXT_MAX, MEETING_NOTES_MAX, meetingEndError } from '../data/rules/meeting'
+import { AGENDA_TEXT_MAX, AGENDA_TITLE_MAX, agendaCreateError, blankToNull, decisionError, DECISION_TEXT_MAX, MEETING_MSG, MEETING_NOTES_MAX, meetingEndError } from '../data/rules/meeting'
 import type { AgendaItemDto, Id, MeetingDto, MemberDto, WorkspaceSnapshot } from '../data/types'
 import { useOffice } from '../store'
 import { Empty, Field } from './common'
@@ -153,6 +153,98 @@ export function StartMeetingDialog() {
           </button>
           <button type="submit" className="btn btn-primary" disabled={busy || !allowed} data-autofocus>
             회의 시작
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  )
+}
+
+// ---- Raise (an issue / PR dropped on the bridge — #30 · #26) ------------------
+
+/** Puts an issue / PR on the agenda (POST agenda-items). The original stays where it is. */
+export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submission'; id: Id } }) {
+  const snapshot = useSnapshot()
+  const task = source.type === 'task' ? snapshot?.tasks.find((t) => t.id === source.id) : undefined
+  const pr = source.type === 'submission' ? snapshot?.submissions.find((s) => s.id === source.id) : undefined
+  const original = task ?? pr
+  const [title, setTitle] = useState(() => Array.from(original?.title ?? '').slice(0, AGENDA_TITLE_MAX).join(''))
+  const [background, setBackground] = useState('')
+  const [tried, setTried] = useState('')
+  const [unresolved, setUnresolved] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  if (!snapshot) return null
+  if (!original) {
+    // The issue / PR left the Snapshot (e.g. a resync) while the dialog opened
+    return (
+      <Modal title="안건 올리기" onClose={close}>
+        <div className="modal-body">
+          <p className="notice notice-warn">이 이슈 · PR을 더 찾을 수 없어요.</p>
+        </div>
+        <footer className="modal-foot">
+          <button type="button" className="btn" data-autofocus onClick={close}>
+            닫기
+          </button>
+        </footer>
+      </Modal>
+    )
+  }
+  const kind = source.type === 'task' ? 'issue' : 'pr'
+  const label = task ? `이슈 #${task.githubIssueNumber}` : `PR #${pr!.githubPrNumber}`
+  const allowed = canRunMeeting(snapshot.viewer)
+  const request = { kind, sourceId: source.id, title, background: blankToNull(background), tried: blankToNull(tried), unresolvedReason: blankToNull(unresolved) } as const
+  const error = agendaCreateError(request)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setSubmitted(true)
+    if (error || busy || !allowed) return
+    setBusy(true)
+    const st = useOffice.getState()
+    if (await st.raiseAgendaItem({ ...request, title: title.trim() })) {
+      st.toast('good', '안건을 올렸어요')
+      close()
+    } else {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="안건 올리기" onClose={close} width={520}>
+      <form onSubmit={submit} noValidate>
+        <div className="modal-body">
+          <p className="raise-source">
+            <span className="agenda-kind">{AGENDA_KIND_LABEL[kind]}</span>
+            <span className="card-key">{label}</span>
+            <span className="mini-title" title={original.title}>
+              {original.title}
+            </span>
+          </p>
+          <Field label="무엇을 이야기할까요" error={submitted && error === MEETING_MSG.agendaTitle ? error : ''}>
+            <input className="select" type="text" data-autofocus value={title} maxLength={AGENDA_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
+          </Field>
+          <Field label="배경 (선택)">
+            <textarea className="select" rows={2} value={background} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setBackground(e.target.value)} />
+          </Field>
+          <Field label="해 본 것 (선택)">
+            <textarea className="select" rows={2} value={tried} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setTried(e.target.value)} />
+          </Field>
+          <Field label="혼자 결론 못 낸 이유 (선택)">
+            <textarea className="select" rows={2} value={unresolved} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setUnresolved(e.target.value)} />
+          </Field>
+          {pr?.currentRound && <p className="dim small">지금 평가 회차({pr.currentRound.roundNumber}회차)를 함께 기억해요</p>}
+          <p className="dim small">원본 {AGENDA_KIND_LABEL[kind]}은 제자리에 그대로 있어요</p>
+          {submitted && error && error !== MEETING_MSG.agendaTitle && <p className="notice notice-warn">{error}</p>}
+          {!allowed && <p className="notice notice-warn">강사는 안건을 올릴 수 없어요.</p>}
+        </div>
+        <footer className="modal-foot">
+          <button type="button" className="btn" onClick={close}>
+            취소
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !allowed}>
+            안건 올리기
           </button>
         </footer>
       </form>

@@ -1,8 +1,8 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
-// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21)를 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
+// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26)을 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
-import type { MemberDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
-import type { PlaceRole, SceneEntity } from './types'
+import type { AgendaItemDto, AgendaKind, MemberDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
+import type { PlaceRole, SceneEntity, SceneEntityKind } from './types'
 
 /** 화면 배지 값 — 그리는 쪽이 모양을 정한다 */
 export const BADGE = {
@@ -81,6 +81,17 @@ function submissionEntity(s: SubmissionDto): SceneEntity {
   return { key: `submission:${s.id}`, kind: 'pr', refId: s.id, placeRole: submissionPlaceRole(s), badges, ...blockedHighlight(s.isBlocked) }
 }
 
+/** 안건 종류 → 회의실에 놓일 모양의 종류 (CONTRACTS.md 「8」 — 이슈 안건은 issue 모양) */
+const AGENDA_SHAPE: Record<AgendaKind, SceneEntityKind> = { issue: 'issue', pr: 'pr', help_request: 'help', learning: 'learning', other: 'other' }
+
+/**
+ * 회의실의 안건(CONTRACTS.md 「8」): 결정 전(`confirmed`) 안건마다 하나, key는 `agenda:<agendaItemId>`, 자리는 meeting.
+ * 원본 이슈 · PR의 엔티티는 따로 제자리에 있다 — 안건은 원본의 자리를 바꾸지 않는다. 결정했거나 거둔 안건은 회의실에 없다.
+ */
+function agendaEntity(a: AgendaItemDto): SceneEntity {
+  return { key: `agenda:${a.id}`, kind: AGENDA_SHAPE[a.kind], refId: a.id, placeRole: 'meeting', badges: [] }
+}
+
 export function buildSceneModel(snapshot: WorkspaceSnapshot): SceneEntity[] {
   const seatedMembers = snapshot.members.filter(isSeated)
   const seated = new Set(seatedMembers.map((m) => m.id))
@@ -89,5 +100,6 @@ export function buildSceneModel(snapshot: WorkspaceSnapshot): SceneEntity[] {
     ...seatedMembers.map((m) => avatarEntity(m, blockedMembers)),
     ...snapshot.tasks.map((t) => taskEntity(t, seated)),
     ...snapshot.submissions.map(submissionEntity),
+    ...snapshot.agendaItems.filter((a) => a.status === 'confirmed').map(agendaEntity),
   ]
 }

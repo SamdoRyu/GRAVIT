@@ -35,6 +35,7 @@
 .decision { display: grid; gap: 8px; padding-top: 4px; }
 .decision-follow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .decision-foot { display: flex; justify-content: flex-end; }
+.raise-source { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
 .outcome-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .outcome-ctl .seg { background: var(--soft); border-radius: 10px; padding: 2px; }
 .outcome-ctl .seg button.is-on { background: #fff; box-shadow: 0 0 0 1px var(--line); }

@@ -2,6 +2,7 @@
 import type { RootState } from '@react-three/fiber'
 import type { ComponentRef } from 'react'
 import type { OrbitControls } from '@react-three/drei'
+import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import type { Id } from '../data/types'
 
 export type ControlsImpl = ComponentRef<typeof OrbitControls>
@@ -24,11 +25,33 @@ export interface BoxLive {
 }
 export const boxLive = new Map<string, BoxLive>()
 
+/** Height of the plane a dragged shape follows the pointer on (just above the decks). */
+export const DRAG_Y = 1.2
+
+/**
+ * The cargo being dragged to the bridge (#30 · #26) — at most one. `x · y · z` is where it should be drawn, `overMeeting`
+ * whether letting go now would raise it as an agenda item. Only the dragging TaskBox writes it.
+ */
+export const cargoDrag: { key: string | null; x: number; y: number; z: number; overMeeting: boolean } = { key: null, x: 0, y: DRAG_Y, z: 0, overMeeting: false }
+
+/** Where the pointer (client px) meets the horizontal plane y = `planeY`, with the live camera. Null off the canvas or above the horizon. */
+export function pointerOnPlane(clientX: number, clientY: number, planeY: number): { x: number; z: number } | null {
+  const api = sceneApi.get?.()
+  if (!api) return null
+  const rect = api.gl.domElement.getBoundingClientRect()
+  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null
+  const ndc = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
+  const ray = new Raycaster()
+  ray.setFromCamera(ndc, api.camera)
+  const hit = ray.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), -planeY), new Vector3())
+  return hit ? { x: hit.x, z: hit.z } : null
+}
+
 /** The orbit controls, for code that has to reach them outside CameraRig. */
 export const cameraLock: { controls: ControlsImpl | null } = { controls: null }
 
 /** Pixels the pointer may move between pointerdown and click for it to still count as a click (not an orbit). */
-const CLICK_SLOP_PX = 4
+export const CLICK_SLOP_PX = 4
 
 /** CameraRig hooks for gestures that start on a shape: remember the camera before, undo the tiny swing after. */
 export const cameraGesture: { begin: () => void; discard: () => void } = { begin: () => {}, discard: () => {} }

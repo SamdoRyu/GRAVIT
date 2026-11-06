@@ -1,12 +1,12 @@
 // Command-bridge (meeting room) status layer of the v1 office: calm "in session" glow + sign while a meeting runs,
-// "안건 N" (confirmed agenda items) when idle. The agenda shapes on the table come with #26 · #30 · #31.
+// "안건 N" (confirmed agenda items) when idle, and the drop highlight while an issue / PR is dragged over it (#30 · #26).
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MeshBasicMaterial, type Group } from 'three'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
 import { BRIDGE, WORLD_SCALE } from '../theme/station/geometry'
-import { noRaycast } from './runtime'
+import { cargoDrag, noRaycast } from './runtime'
 import { SceneHtml } from './shared'
 
 // The bridge in world units: centre, deck and table-top heights, and the deck radius.
@@ -105,6 +105,33 @@ function SessionGlow({ on }: { on: boolean }) {
   )
 }
 
+/**
+ * Drop highlight while an issue / PR dragged over the bridge would be raised as an agenda item (#30 · #26). Reads the drag
+ * state every frame — nothing re-renders while dragging.
+ */
+function AgendaDropGlow() {
+  const group = useRef<Group>(null)
+  const k = useRef(0)
+  const mat = useMemo(() => new MeshBasicMaterial({ color: PALETTE.dropOk, transparent: true, opacity: 0, depthWrite: false }), [])
+  useEffect(() => () => mat.dispose(), [mat])
+  useFrame((_, delta) => {
+    const g = group.current
+    if (!g) return
+    const goal = cargoDrag.key !== null && cargoDrag.overMeeting ? 1 : 0
+    k.current += (goal - k.current) * (1 - Math.exp(-12 * Math.min(delta, 0.05)))
+    const vis = k.current > 0.01
+    if (g.visible !== vis) g.visible = vis
+    mat.opacity = k.current * 0.28
+  })
+  return (
+    <group ref={group} visible={false}>
+      <mesh position={[CX, FLOOR_Y + 0.03, CZ]} rotation={[-Math.PI / 2, 0, 0]} material={mat} renderOrder={3} raycast={noRaycast}>
+        <circleGeometry args={[DECK_R, 48]} />
+      </mesh>
+    </group>
+  )
+}
+
 export function MeetingRoomState() {
   const startedAt = useOffice((s) => s.office?.snapshot?.meetings.find((m) => m.status === 'ongoing')?.startedAt ?? null)
   const agendaCount = useOffice((s) => s.office?.snapshot?.agendaItems.filter((a) => a.status === 'confirmed').length ?? 0)
@@ -112,6 +139,7 @@ export function MeetingRoomState() {
     <>
       <SessionGlow on={startedAt !== null} />
       <RoomLabel live={startedAt !== null} startedAt={startedAt ?? ''} agendaCount={agendaCount} />
+      <AgendaDropGlow />
     </>
   )
 }

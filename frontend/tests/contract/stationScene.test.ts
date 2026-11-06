@@ -55,7 +55,7 @@ describe('slots — 역할 안의 순서 · 아카이브', () => {
   it('이슈 · PR마다 자리가 하나, 아바타는 없다. 열린 PR은 스캐너(review)', async () => {
     const snap = await load('ws_1')
     const slots = slotsOf(snap)
-    const cargo = stationSceneOf(snap).entities.filter((e) => e.kind === 'issue' || e.kind === 'pr')
+    const cargo = stationSceneOf(snap).entities.filter((e) => e.key.startsWith('task:') || e.key.startsWith('submission:'))
     const done = cargo.filter((e) => e.placeRole === 'done')
     assert.equal(slots.size, cargo.length - Math.max(0, done.length - DONE_VISIBLE))
     assert.ok(![...slots.keys()].some((k) => k.startsWith('member:')))
@@ -113,5 +113,39 @@ describe('slots — 역할 안의 순서 · 아카이브', () => {
     ]
     const s = { ...snap, tasks: [], submissions }
     assert.deepEqual(recentDone(stationSceneOf(s).entities, s).map((e) => e.refId), ['p_closed', 'p_new', 'p_old'])
+  })
+})
+
+describe('slots — 회의실의 안건 모양 (#30 · #26)', () => {
+  it('이슈 · PR 안건은 회의 탁자 자리(올린 순서), 원본은 제 자리 그대로, 다른 종류 안건은 아직 그리지 않는다', async () => {
+    const ds = createV1MockDataSource({ storage: createMemoryStorage(), session: 'github', latencyMs: [0, 0], now: () => new Date('2026-11-05T03:00:00Z') })
+    const before = await ds.load('ws_1')
+    const t = before.tasks.find((x) => x.state === 'open')!
+    const p = before.submissions.find((x) => x.state === 'open')!
+    const raise = (kind: 'issue' | 'pr' | 'learning', sourceId: string | null, title: string) =>
+      ds.createAgendaItem('ws_1', { kind, sourceId, title, background: null, tried: null, unresolvedReason: null })
+    const a1 = await raise('issue', t.id, '이슈 안건')
+    const a2 = await raise('pr', p.id, 'PR 안건')
+    const a3 = await raise('learning', null, '배운 점')
+    const after = await ds.load('ws_1')
+
+    const slotsOf = (snap: WorkspaceSnapshot) => {
+      const scene = stationSceneOf(snap)
+      return { scene, slots: computeSlots(scene.entities, snap, scene.layout, new Map(), new Map()) }
+    }
+    const { scene, slots } = slotsOf(after)
+    const s1 = slots.get(`agenda:${a1.id}`)
+    const s2 = slots.get(`agenda:${a2.id}`)
+    assert.equal(s1?.home, 'agenda')
+    assert.deepEqual([s1?.x, s1?.y, s1?.z], scene.layout.anchor('meeting', 0))
+    assert.deepEqual([s2?.x, s2?.y, s2?.z], scene.layout.anchor('meeting', 1))
+    assert.ok(!slots.has(`agenda:${a3.id}`), '배운 점 모양은 #31에서')
+
+    // 원본 자리는 안건을 올리기 전과 같다
+    const old = slotsOf(before).slots
+    for (const key of [`task:${t.id}`, `submission:${p.id}`]) {
+      const [x, y] = [old.get(key), slots.get(key)]
+      assert.deepEqual([y?.x, y?.y, y?.z, y?.home], [x?.x, x?.y, x?.z, x?.home], key)
+    }
   })
 })
