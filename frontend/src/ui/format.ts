@@ -1,7 +1,6 @@
 // Korean-style date / time formatting for the HUD. OWNER: ui-builder.
 import type { CSSProperties } from 'react'
-import type { Task } from '../data/types'
-import { daysUntilDue, isOpen, todayIso } from '../data/selectors'
+import { todayIso } from '../data/selectors'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -20,26 +19,6 @@ export function formatDate(iso: string): string {
 export function formatDateShort(iso: string): string {
   const dt = parseIso(iso)
   return `${dt.getMonth() + 1}/${dt.getDate()}`
-}
-
-export type Tone = 'bad' | 'warn' | 'ok' | 'dim'
-
-export interface DueInfo {
-  text: string
-  tone: Tone
-  days: number | null
-}
-
-/** Due badge text for a task: "2일 남음", "오늘", "3일 지남". */
-export function dueInfo(t: Task, today = todayIso()): DueInfo | null {
-  if (!t.dueDate) return null
-  const d = daysUntilDue(t, today)
-  if (d === null) return null
-  if (!isOpen(t)) return { text: formatDateShort(t.dueDate), tone: 'dim', days: d }
-  if (d < 0) return { text: `${-d}일 지남`, tone: 'bad', days: d }
-  if (d === 0) return { text: '오늘', tone: 'warn', days: d }
-  if (d <= 2) return { text: `${d}일 남음`, tone: 'warn', days: d }
-  return { text: `${d}일 남음`, tone: 'dim', days: d }
 }
 
 /** "방금", "3분 전", "2시간 전", "어제", "4일 전", else the date. */
