@@ -22,6 +22,7 @@ import { TextField } from './HelpBoard'
 import { useNow } from './hooks'
 import { Icon } from './icons'
 import { PR_DECISION_LABEL } from './meetingView'
+import { useUi } from './uiState'
 import './help.css'
 import './retro.css'
 
@@ -40,15 +41,17 @@ export function RetroPanel() {
   const members = useOffice((s) => s.office?.snapshot?.members ?? null)
   const viewer = useOffice((s) => s.office?.snapshot?.viewer ?? null)
   const [view, setView] = useState<View>('timeline')
-  const [picked, setPicked] = useState<Id | null>(null)
+  // 강사가 고른 팀원 — 강사 요청함(#224)도 여기로 연다. 다른 사무실에서 고른 값이면 고르기 전으로 본다
+  const retroMemberId = useUi((s) => s.retroMemberId)
 
   if (!members || !viewer) return <Empty icon="refresh" title="사무실을 불러오는 중…" />
   const instructor = viewer.role === 'instructor'
+  const picked = retroMemberId !== null && members.some((m) => m.id === retroMemberId) ? retroMemberId : null
   const memberId = instructor ? picked : viewer.memberId
 
   return (
     <div className="help retro">
-      {instructor && <MemberPicker members={members} value={picked} onChange={setPicked} />}
+      {instructor && <MemberPicker members={members} value={picked} onChange={(id) => useUi.getState().openRetroMember(id)} />}
       <div className="retro-switch" role="group" aria-label="회고 보기">
         <button type="button" className={`btn btn-sm${view === 'timeline' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'timeline'} onClick={() => setView('timeline')}>
           학습 타임라인

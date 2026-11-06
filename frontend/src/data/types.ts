@@ -714,3 +714,22 @@ export interface DecisionCardUpdateRequest {
 export interface FollowUpQuestionCreateRequest {
   body: string
 }
+
+// ---- 「16」 강사 요청함 -------------------------------------------------------
+
+/** 도움 요청 · 결정 피드백 · 꼬리질문 */
+export type InboxKind = 'help_request' | 'decision_feedback' | 'follow_up_question'
+/** `GET /api/instructor/inbox` 한 줄 — 저장하지 않는 계산 값 (FR-LRN-23) */
+export interface InboxItem {
+  kind: InboxKind
+  workspaceId: Id
+  workspaceDisplayName: string
+  /** helpRequestId · agendaItemId · cardId */
+  targetId: Id
+  /** 요청자 · 안건을 올린 사람 · 카드 주인 */
+  ownerMemberId: Id
+  title: string
+  requestedAt: Instant
+  /** 강사 답변 · 피드백 · 꼬리질문이 하나라도 있으면 그 첫 시각 */
+  answeredAt: Instant | null
+}

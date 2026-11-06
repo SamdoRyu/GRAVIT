@@ -7,6 +7,7 @@ import { EndMeetingDialog, MeetingHistoryDialog, RaiseAgendaDialog, StartMeeting
 import { ProjectPeriodDialog } from './PeriodDialog'
 import { RequirementWaitingDialog } from './RequirementWaiting'
 import { InstructorDialog } from './InstructorDialog'
+import { InstructorInboxDialog } from './InstructorInbox'
 import { useUi } from './uiState'
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -90,6 +91,8 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <RaiseAgendaDialog source={dialog.source} />
     case 'instructors':
       return <InstructorDialog />
+    case 'instructorInbox':
+      return <InstructorInboxDialog />
     case 'requirementWaiting':
       return <RequirementWaitingDialog linkTaskId={dialog.linkTaskId} />
   }

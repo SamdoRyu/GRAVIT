@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, inboxItemExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -169,6 +169,8 @@ async function startFake(): Promise<Fake> {
       res.writeHead(204)
       return res.end()
     }
+    // 「16」 강사 요청함 (#224) — answered 쿼리는 빼거나 true · false
+    if (r.method === 'GET' && /^\/api\/instructor\/inbox(\?answered=(true|false))?$/.test(path)) return sendJson(res, 200, [inboxItemExample])
     // 「8」 요구사항 연결 (#197)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
     if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
@@ -384,6 +386,20 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.assignInstructor('3', '42'), 'invalid', '승인된 강사 계정이 아니에요')
     fake.next.push((_r, res) => sendError(res, 409, 'conflict', '자기 자신은 강사로 지정할 수 없어요'))
     await rejectsWith(api.assignInstructor('3', '1001'), 'conflict', '자기 자신은 강사로 지정할 수 없어요')
+  })
+
+  it('강사 요청함 — 사무실 경로 밖 GET, answered를 빼면 쿼리 없이 · true · false는 쿼리로, CSRF 없음, 403을 그대로 (#224)', async () => {
+    fake = await startFake()
+    const api = make()
+    assert.deepEqual(await api.getInstructorInbox(), [inboxItemExample])
+    assert.deepEqual(await api.getInstructorInbox(false), [inboxItemExample])
+    assert.deepEqual(await api.getInstructorInbox(true), [inboxItemExample])
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      ['GET /api/instructor/inbox -', 'GET /api/instructor/inbox?answered=false -', 'GET /api/instructor/inbox?answered=true -'],
+    )
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '이 작업을 할 권한이 없어요'))
+    await rejectsWith(api.getInstructorInbox(), 'forbidden_role', '이 작업을 할 권한이 없어요')
   })
 
   it('요구사항 연결 — POST 본문 · DELETE 204, 경로 · CSRF, 403 · 409를 그대로 (#197)', async () => {

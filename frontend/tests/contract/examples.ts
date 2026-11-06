@@ -14,6 +14,7 @@ import type {
   HelpRequestCreateRequest,
   HelpRequestDetail,
   HelpRequestSummary,
+  InboxItem,
   InstructorAssignmentDto,
   InstructorCandidateDto,
   InstructorFeedbackCreateRequest,
@@ -411,6 +412,18 @@ export const instructorCandidateExample = {
   isAssigned: false,
 } satisfies InstructorCandidateDto
 
+// contract/examples/instructor/inbox-item.json — CONTRACTS_API.md 「16」
+export const inboxItemExample = {
+  kind: 'help_request',
+  workspaceId: '3',
+  workspaceDisplayName: 'team-samdo/gitvillage',
+  targetId: '12',
+  ownerMemberId: '2',
+  title: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
+  requestedAt: '2026-11-05T01:30:00Z',
+  answeredAt: '2026-11-05T02:40:00Z',
+} satisfies InboxItem
+
 /** contract/examples/ 기준 상대 경로 → TS 사본. 공통 JSON마다 하나씩 있어야 한다(④가 검사). */
 export const EXAMPLES: Record<string, unknown> = {
   'auth/me-response.json': meResponseExample,
@@ -421,6 +434,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-create-request.json': helpRequestCreateRequestExample,
   'help/help-request-detail.json': helpRequestDetailExample,
   'help/help-request-summary.json': helpRequestSummaryExample,
+  'instructor/inbox-item.json': inboxItemExample,
   'instructor/instructor-assignment.json': instructorAssignmentExample,
   'instructor/instructor-candidate.json': instructorCandidateExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,

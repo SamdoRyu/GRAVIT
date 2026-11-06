@@ -57,6 +57,12 @@ interface UiState {
   decisionItemId: string | null
   /** 결정 기록 탭으로 가서 그 기록을 연다(null = 목록으로). 3D 게시판(#205)도 이것으로 연다 (CONTRACTS.md 「8」 게시판) */
   openDecisionRecord: (agendaItemId: string | null) => void
+
+  // ---- 회고 탭 (#209) ----
+  /** 강사가 회고 탭에서 고른 팀원. null = 고르기 전. 지금 사무실 팀원이 아니면 화면이 고르기 전으로 본다 */
+  retroMemberId: string | null
+  /** 회고 탭으로 가서 그 팀원을 고른다(null = 고르기 전으로). 강사 요청함의 꼬리질문 항목이 연다 (#224) */
+  openRetroMember: (memberId: string | null) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
@@ -102,5 +108,10 @@ export const useUi = create<UiState>((set, get) => ({
   openDecisionRecord: (decisionItemId) => {
     if (get().tab !== 'decisions') get().setTab('decisions')
     set({ decisionItemId })
+  },
+  retroMemberId: null,
+  openRetroMember: (retroMemberId) => {
+    if (get().tab !== 'retro') get().setTab('retro')
+    set({ retroMemberId })
   },
 }))

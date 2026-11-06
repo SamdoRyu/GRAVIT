@@ -3,7 +3,7 @@
 // 사무실 데이터는 store(useOffice)가 갖고, 여기는 "누가 로그인했고 어느 사무실에 들어가는가"만 갖는다.
 import { create } from 'zustand'
 import { DataError, type DataSource } from './data/DataSource'
-import type { Id, LoginOptions, MeResponse, OpenWorkspaceRequest, RepositoryChoiceResponse, WorkspaceListItem } from './data/types'
+import type { Id, InboxItem, LoginOptions, MeResponse, OpenWorkspaceRequest, RepositoryChoiceResponse, WorkspaceListItem } from './data/types'
 import { useOffice } from './store'
 
 /** checking = 세션 확인 중, signed_out = 로그인 화면, signed_in = 사무실 고르기 또는 사무실, error = 서버에 닿지 못함 */
@@ -53,6 +53,11 @@ interface SessionState {
    * 실패하면 화면에 보일 문구(입력 칸 아래), 성공하면 null
    */
   openNewWorkspace: (request: OpenWorkspaceRequest) => Promise<string | null>
+  /**
+   * 강사 요청함(GET /api/instructor/inbox — 강사만, #224). 사무실 경로 밖이라 사무실을 열지 않아도 읽는다.
+   * answered를 빼면 전부. 실패하면 알림 후 null
+   */
+  loadInstructorInbox: (answered?: boolean) => Promise<InboxItem[] | null>
 }
 
 let source: DataSource | null = null
@@ -242,6 +247,18 @@ export const useSession = create<SessionState>((set, get) => {
       }
       await get().enterWorkspace(opened)
       return null
+    },
+
+    loadInstructorInbox: async (answered) => {
+      const src = source
+      if (!src) return null
+      try {
+        return await src.getInstructorInbox(answered)
+      } catch (e) {
+        if (isUnauthorized(e)) await refresh(null)
+        else useOffice.getState().toast('bad', messageOf(e))
+        return null
+      }
     },
   }
 })

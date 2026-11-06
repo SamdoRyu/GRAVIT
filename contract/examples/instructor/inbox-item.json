@@ -1,0 +1,10 @@
+{
+  "kind": "help_request",
+  "workspaceId": "3",
+  "workspaceDisplayName": "team-samdo/gitvillage",
+  "targetId": "12",
+  "ownerMemberId": "2",
+  "title": "OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요",
+  "requestedAt": "2026-11-05T01:30:00Z",
+  "answeredAt": "2026-11-05T02:40:00Z"
+}
