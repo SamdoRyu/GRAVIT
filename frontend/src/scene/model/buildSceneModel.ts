@@ -1,8 +1,8 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
 // 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26 · #31),
-// 요구사항 구역(#16 · #17)을 만든다.
+// 요구사항 구역(#16 · #17), 통신 허브 게시판(#205)을 만든다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
-import type { AgendaItemDto, AgendaKind, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
+import type { AgendaItemDto, AgendaKind, HelpRequestSummary, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
 import { planRequirementDeck } from './requirementDeck'
 import type { PlaceRole, SceneEntity, SceneEntityKind } from './types'
 
@@ -24,9 +24,13 @@ export const BADGE = {
   waiting: 'waiting',
   /** 대기 칸 안의 빈 구역(연결 이슈 0) 수 — 있을 때만 `countBadge(BADGE.empty, k)` */
   empty: 'empty',
+  /** 게시판: 열린 · 논의 중 도움 요청 수 — `countBadge(BADGE.help, n)` (CONTRACTS.md 「8」 게시판, 2026-11-06) */
+  help: 'help',
+  /** 게시판: 그중 48시간 안건 후보(isAgendaCandidate) 수 — 있을 때만 */
+  candidate: 'candidate',
 } as const
 
-type CountBadge = typeof BADGE.recommend | typeof BADGE.notRecommend | typeof BADGE.waiting | typeof BADGE.empty
+type CountBadge = typeof BADGE.recommend | typeof BADGE.notRecommend | typeof BADGE.waiting | typeof BADGE.empty | typeof BADGE.help | typeof BADGE.candidate
 
 /** 수를 담는 배지 — `<배지>:<수>`, 예: 'recommend:2'. 그리는 쪽이 모양을 정한다. */
 export const countBadge = (badge: CountBadge, count: number): string => `${badge}:${count}`
@@ -149,6 +153,22 @@ function requirementEntities(requirements: readonly RequirementDto[], deckOrder:
   return entities
 }
 
+export const BOARD_KEY = 'board'
+
+/**
+ * 통신 허브 게시판(CONTRACTS.md 「8」 게시판 — 2026-11-06 결정): 오브젝트 하나. 배지는 열린 · 논의 중 도움 요청 수(help:N)와 그중
+ * 48시간 안건 후보 수(candidate:k), 0이면 붙이지 않는다. 회의 결정 기록 · 강사 피드백 · 배운 점은 세지 않는다. 도움 요청마다 도형을
+ * 두지 않는다 — 내용은 HUD. 팀원 · 강사 모두 같은 값이고 사람별 값은 없다.
+ */
+function boardEntity(helpRequests: readonly HelpRequestSummary[]): SceneEntity {
+  const live = helpRequests.filter((h) => h.status === 'open' || h.status === 'discussing')
+  const candidates = live.filter((h) => h.isAgendaCandidate).length
+  const badges: string[] = []
+  if (live.length > 0) badges.push(countBadge(BADGE.help, live.length))
+  if (candidates > 0) badges.push(countBadge(BADGE.candidate, candidates))
+  return { key: BOARD_KEY, kind: 'board', refId: null, placeRole: 'board', badges }
+}
+
 /**
  * @param deckOrder 요구사항 대기 칸 교환 결과(판에 올린 요구사항 ID 목록) — 스토어가 사무실별로 내준다(CONTRACTS.md 「8」).
  * 없으면 position 순서.
@@ -163,5 +183,6 @@ export function buildSceneModel(snapshot: WorkspaceSnapshot, deckOrder: readonly
     ...snapshot.submissions.map(submissionEntity),
     ...snapshot.agendaItems.filter((a) => a.status === 'confirmed').map(agendaEntity),
     ...requirementEntities(snapshot.requirements, deckOrder),
+    boardEntity(snapshot.helpRequests),
   ]
 }

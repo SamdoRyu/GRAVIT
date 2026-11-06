@@ -1,7 +1,7 @@
 // 우주정거장 본체 — 확정 시안(public/station)의 모듈 · 통로 · 트러스를 R3F로 다시 만든 것. 소유: C.
 // 시안 단위로 그리고 WORLD_SCALE로 줄인다. 데이터 화물(이슈 · PR 등)은 여기 없다 — 장면이 ThemeLayout 자리에 그린다.
 import { useMemo } from 'react'
-import { DoubleSide, TorusGeometry } from 'three'
+import { DoubleSide, IcosahedronGeometry, OctahedronGeometry, TorusGeometry } from 'three'
 import { noRaycast } from '../../scene/runtime'
 import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
 import { Bx, COLORS, Console, CutawayModule, Glow, Rack, Thruster, Tube, basic, lam } from './parts'
@@ -79,6 +79,37 @@ function Hub() {
   )
 }
 
+/** 게시판 선반의 장식 — 시안 put('sphere' · 'octa' · 'pad'). 도움 요청 수와 상관없다(내용은 HUD — CONTRACTS.md 「8」 게시판). */
+function ShelfDecor({ y }: { y: number }) {
+  const ico = useMemo(() => new IcosahedronGeometry(1, 1), [])
+  const octa = useMemo(() => new OctahedronGeometry(0.5).scale(1, 1.4, 1), [])
+  const z = COMM_HUB.shelf.z
+  return (
+    <>
+      {[
+        [27.4, 0.7],
+        [29.6, 0.6],
+      ].map(([x, s]) => (
+        <group key={x} position={[x, y, z]}>
+          <mesh geometry={ico} scale={s * 0.52} position={[0, s * 0.56, 0]} material={lam(COLORS.cargo)} castShadow raycast={noRaycast} />
+          <mesh position={[0, s * 1.12, 0]} material={basic(0xff9d4d)} raycast={noRaycast}>
+            <sphereGeometry args={[s * 0.1, 8, 6]} />
+          </mesh>
+          <Glow color={0xffb36b} size={s * 2.6} p={[0, s * 0.6, 0]} opacity={0.3} />
+        </group>
+      ))}
+      <mesh geometry={octa} scale={0.7} position={[31.6, y + 0.7 * 0.95, z]} material={lam(COLORS.cargo, { emissive: 0x2a2030 })} castShadow raycast={noRaycast} />
+      <Glow color={0xd9c6ff} size={0.7 * 1.8} p={[31.6, y + 0.7 * 0.95, z]} opacity={0.3} />
+      <group position={[33.6, y, z]} rotation={[0, -PI / 4, 0]}>
+        <Bx s={[0.75 * 1.1, 0.075, 0.75 * 0.8]} p={[0, 0.15, 0]} c={lam(COLORS.cargo)} />
+        {[0, 1, 2].map((i) => (
+          <Bx key={i} s={[0.75 * (i === 2 ? 0.45 : 0.75), 0.015, 0.05]} p={[i === 2 ? -0.11 : 0, 0.195, -0.15 + i * 0.15]} c={basic(0x8fa4c4)} />
+        ))}
+      </group>
+    </>
+  )
+}
+
 function CommHub() {
   const y = COMM_HUB.deckY
   return (
@@ -90,6 +121,7 @@ function CommHub() {
         <Bx key={yy} s={[8.0, 0.08, 0.08]} p={[COMM_HUB.x, yy, 5.0]} c={basic(COLORS.teal)} />
       ))}
       <Bx s={[7.6, 0.1, 0.6]} p={[COMM_HUB.x, y + 0.45, COMM_HUB.shelf.z]} c={lam(COLORS.consoleTop)} />
+      <ShelfDecor y={y + 0.5} />
       <Console p={[COMM_HUB.x, y, 9.3]} ry={PI} />
       <mesh position={[39.4, HULL_Y + 5.6, COMM_HUB.z]} rotation={[PI + 0.9, 0.7, 0]} material={lam(0xf3ecdd, { side: DoubleSide })} raycast={noRaycast}>
         <sphereGeometry args={[1.5, 16, 6, 0, PI * 2, 0, 1.0]} />

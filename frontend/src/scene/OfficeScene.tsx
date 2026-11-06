@@ -8,6 +8,7 @@ import { StationSky } from '../theme/station/StationSky'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
+import { CommBoard } from './CommBoard'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
 import { podsShown } from './stationScene'
@@ -63,6 +64,7 @@ export function OfficeScene() {
         <TaskBoxes />
         <MeetingRoomState />
         <RequirementDeck />
+        <CommBoard />
         <ArchiveTag />
       </group>
       <TaskTooltip />
