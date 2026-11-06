@@ -1,6 +1,5 @@
 // Shared hooks for the HUD. OWNER: ui-builder.
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { useOffice } from '../store'
 
 /** Re-renders every `ms` so relative times stay fresh. Returns Date.now(). */
 export function useNow(ms = 30_000): number {
@@ -30,18 +29,4 @@ export function useMediaQuery(query: string): boolean {
     () => window.matchMedia(query).matches,
     () => false,
   )
-}
-
-/**
- * One permanent non-passive touchmove listener: WebKit decides scroll-blocking at touchstart, so it has
- * to exist before the finger lands. It only cancels the scroll while a drag is active.
- */
-export function useTouchDragGuard() {
-  useEffect(() => {
-    const block = (ev: TouchEvent) => {
-      if (ev.cancelable && useOffice.getState().drag) ev.preventDefault()
-    }
-    window.addEventListener('touchmove', block, { passive: false })
-    return () => window.removeEventListener('touchmove', block)
-  }, [])
 }

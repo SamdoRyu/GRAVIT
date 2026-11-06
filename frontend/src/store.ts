@@ -1,7 +1,6 @@
 // App state + actions. OWNER: D.
 // 사무실 데이터는 v1 WorkspaceSnapshot(office)이 전부다 — 쓰기는 v1 DataSource 액션이 보내고 응답을 snapshot에 반영한다.
-// 데모 모델(DemoDataSource의 작업 · 팀원 · 회의 칸과 액션)은 #102 ④에서 걷어냈다. 남은 view state(selection · hover · focus · drag)는
-// 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
+// 데모 모델과 옛 view state(데모 선택 · 카메라 이동 · 끌기)는 #102 ④에서 걷어냈다. 3D 강조는 hover(SceneModel 키), 선택은 officeSelection.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
@@ -9,7 +8,6 @@ import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
 
-export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
 /** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
 export type OfficeSelection = { kind: 'task' | 'submission' | 'member'; id: Id }
 
@@ -173,14 +171,12 @@ interface OfficeState {
   exportReportMarkdown: (memberId: Id, reportId: Id) => Promise<string | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
-   * selection(3D가 아직 읽는 옛 선택 칸)과 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
+   * Snapshot에서 사라지면 null.
    */
   officeSelection: OfficeSelection | null
   selectInOffice: (s: OfficeSelection | null) => void
 
   // ---- view state ----
-  selection: Selection | null
-  select: (s: Selection | null) => void
   /**
    * Hovered thing as its SceneModel key ('task:t_1' · 'submission:s_1' · 'agenda:a_1' · 'member:m_1') — the 3D view and the
    * weekly board highlight the same one (#102 ④ — C).
@@ -189,17 +185,6 @@ interface OfficeState {
   setHover: (key: string | null) => void
   dialog: Dialog | null
   openDialog: (d: Dialog | null) => void
-  /** Camera fly-to request. Scene resolves the target's position, then clears it. */
-  focus: { target: Selection; key: number } | null
-  focusOn: (target: Selection) => void
-  clearFocus: () => void
-
-  // ---- 끌기 상태 — 데모 패널 ↔ 3D 끌어 놓기의 흔적. 지금은 시작하는 곳이 없어 늘 null이다.
-  // 3D(CameraRig) · HUD · 단축키가 "끄는 중인가"를 읽어 남겨 둔다(#102 ④ 다음 단계에서 C와 함께 정리)
-  drag: { taskId: Id; from: 'scene' | 'panel' } | null
-  /** 끌기를 끝낸다 — 어디서든 pointerup */
-  endDrag: () => void
-  cancelDrag: () => void
 
   toasts: Toast[]
   toast: (level: Toast['level'], text: string) => void
@@ -355,7 +340,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null, requirementDeckOrder: null })
     },
     officeSelection: null,
-    selectInOffice: (officeSelection) => set(officeSelection ? { officeSelection, selection: null } : { officeSelection }),
+    selectInOffice: (officeSelection) => set({ officeSelection }),
     updateOfficeSettings: async (settings) => {
       const src = officeSource
       const office = get().office
@@ -519,18 +504,12 @@ export const useOffice = create<OfficeState>((set, get) => {
       ),
     exportReportMarkdown: (memberId, reportId) => officeRead((src, ws) => src.exportReportMarkdown(ws, memberId, reportId)),
 
-    selection: null,
-    // 옛 선택 칸을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
-    select: (selection) => set(selection ? { selection, officeSelection: null } : { selection }),
     hover: null,
     setHover: (hover) => {
       if (get().hover !== hover) set({ hover })
     },
     dialog: null,
     openDialog: (dialog) => set({ dialog }),
-    focus: null,
-    focusOn: (target) => set({ focus: { target, key: Date.now() } }),
-    clearFocus: () => set({ focus: null }),
     viewInsets: { top: 0, right: 0, bottom: 0, left: 0 },
     setViewInsets: (v) => {
       const cur = get().viewInsets
@@ -538,10 +517,6 @@ export const useOffice = create<OfficeState>((set, get) => {
       set({ viewInsets: v })
     },
 
-    drag: null,
-    // 끌어 놓기는 데모 모델의 작업 배정 · 상태 이동이었다 — v1에는 놓을 곳이 없어 비우기만 한다
-    endDrag: () => set({ drag: null }),
-    cancelDrag: () => set({ drag: null }),
 
     toasts: [],
     toast: (level, text) => {

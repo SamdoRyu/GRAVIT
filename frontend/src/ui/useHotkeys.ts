@@ -21,15 +21,13 @@ export function useHotkeys() {
       const st = useOffice.getState()
 
       if (e.key === 'Escape') {
-        if (st.drag) return // App cancels the drag
         const ui = useUi.getState()
         if (st.dialog) st.openDialog(null)
         else if (ui.panelOpen && window.matchMedia(OVERLAY_QUERY).matches) ui.setPanelOpen(false)
-        else if (st.selection) st.select(null)
         else if (st.officeSelection) st.selectInOffice(null)
         return
       }
-      if (st.dialog || st.drag || useUi.getState().historyOpen) return
+      if (st.dialog || useUi.getState().historyOpen) return
 
       if (e.code === 'KeyM') {
         e.preventDefault()
