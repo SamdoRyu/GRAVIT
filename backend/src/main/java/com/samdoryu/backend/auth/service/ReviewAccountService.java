@@ -7,6 +7,7 @@ import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.auth.repository.ReviewAccountRepository;
 import com.samdoryu.backend.auth.security.ReviewLoginProperties;
+import com.samdoryu.backend.auth.security.ReviewLoginThrottle;
 import com.samdoryu.backend.common.security.AppProperties;
 import com.samdoryu.backend.workspace.service.DemoWorkspaceService;
 import java.time.Instant;
@@ -26,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code review_account} 행은 처음 로그인할 때 만들어 앱 사용자(작성자 · 세션)를 잇는다.
  * <ul>
  *   <li>심사용 로그인이 꺼진 환경에서는 설정을 읽지 않는다 — 계정이 없다. 켜진 환경에서 설정이 틀리면 서버가 켜지지 않는다.</li>
- *   <li>실패 이유(없는 아이디 · 틀린 비밀번호 · 사용 불가)를 구분하지 않는다. 없는 아이디도 해시 비교를 한 번 해 걸리는 시간을
- *       맞춘다.</li>
+ *   <li>실패 이유(없는 아이디 · 틀린 비밀번호 · 사용 불가 · 잠김)를 구분하지 않는다. 없는 아이디 · 잠긴 계정도 해시 비교를 한 번
+ *       해 걸리는 시간을 맞춘다.</li>
+ *   <li>반복 실패 제한({@link ReviewLoginThrottle}, #165) — 여러 번 틀린 계정은 한동안 맞는 비밀번호도 받지 않는다.</li>
  *   <li>참여자 · 레포 관리자는 시연 사무실의 Seed 팀원 하나로 행동한다(세션에 역할 · 팀원). 강사(ROLE-04)는 세션에 두지 않고
  *       요청마다 {@link #isReviewInstructor}로 확인한다(CONTRACTS.md 「6」 역할 판정).</li>
  *   <li>DB의 {@code enabled}가 꺼진 계정은 설정에 있어도 로그인할 수 없다(운영자가 막은 계정).</li>
@@ -41,17 +43,19 @@ public class ReviewAccountService {
     private final AppUserRepository appUserRepository;
     private final DemoWorkspaceService demoWorkspaceService;
     private final PasswordEncoder passwordEncoder;
+    private final ReviewLoginThrottle throttle;
     private final Map<String, ReviewAccountSpec> specs;
     /** 없는 아이디일 때 비교할 해시 — 있는 아이디와 걸리는 시간을 맞춘다. */
     private final String timingDummyHash;
 
     public ReviewAccountService(ReviewAccountRepository reviewAccountRepository, AppUserRepository appUserRepository,
-            DemoWorkspaceService demoWorkspaceService, PasswordEncoder passwordEncoder, AppProperties appProperties,
-            ReviewLoginProperties reviewLoginProperties) {
+            DemoWorkspaceService demoWorkspaceService, PasswordEncoder passwordEncoder, ReviewLoginThrottle throttle,
+            AppProperties appProperties, ReviewLoginProperties reviewLoginProperties) {
         this.reviewAccountRepository = reviewAccountRepository;
         this.appUserRepository = appUserRepository;
         this.demoWorkspaceService = demoWorkspaceService;
         this.passwordEncoder = passwordEncoder;
+        this.throttle = throttle;
         this.specs = (appProperties.reviewLoginEnabled()
                 ? ReviewAccountSpec.parse(reviewLoginProperties.accounts())
                 : List.<ReviewAccountSpec>of())
@@ -65,11 +69,16 @@ public class ReviewAccountService {
      */
     public Optional<ReviewAccountSpec> verify(String username, String password) {
         ReviewAccountSpec spec = username == null ? null : specs.get(username);
-        if (spec == null || password == null) {
+        if (spec == null || password == null || throttle.isLocked(spec.username())) {
             passwordEncoder.matches(password == null ? "" : password, timingDummyHash);
             return Optional.empty();
         }
-        return passwordEncoder.matches(password, spec.passwordHash()) ? Optional.of(spec) : Optional.empty();
+        if (!passwordEncoder.matches(password, spec.passwordHash())) {
+            throttle.failed(spec.username());
+            return Optional.empty();
+        }
+        throttle.succeeded(spec.username());
+        return Optional.of(spec);
     }
 
     /**
