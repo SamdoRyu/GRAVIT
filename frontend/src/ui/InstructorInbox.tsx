@@ -30,7 +30,7 @@ async function openInboxItem(item: InboxItem) {
   const to = inboxDestination(item)
   if (to.tab === 'help') ui.openHelpRequest(to.helpRequestId)
   else if (to.tab === 'decisions') ui.openDecisionRecord(to.agendaItemId)
-  else ui.openRetroMember(to.memberId)
+  else ui.openRetroMember(to.memberId, to.view)
 }
 
 /** 읽은 결과를 무엇을 읽었는지(key)와 함께 둔다 — 고르기가 바뀌면 이전 결과는 버려진다. value null = 읽기 실패 */

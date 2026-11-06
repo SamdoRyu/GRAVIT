@@ -33,8 +33,8 @@ export const canUseInbox = (me: Pick<MeResponse, 'isInstructor'> | null) => me?.
 export type InboxDestination =
   | { tab: 'help'; helpRequestId: Id }
   | { tab: 'decisions'; agendaItemId: Id }
-  /** 카드는 회고 탭에서 그 카드 주인을 골라 연다 */
-  | { tab: 'retro'; memberId: Id }
+  /** 카드는 회고 탭에서 그 카드 주인을 골라 "기술 결정 카드" 보기로 연다 */
+  | { tab: 'retro'; memberId: Id; view: 'cards' }
 
 export function inboxDestination(item: Pick<InboxItem, 'kind' | 'targetId' | 'ownerMemberId'>): InboxDestination {
   switch (item.kind) {
@@ -43,6 +43,6 @@ export function inboxDestination(item: Pick<InboxItem, 'kind' | 'targetId' | 'ow
     case 'decision_feedback':
       return { tab: 'decisions', agendaItemId: item.targetId }
     case 'follow_up_question':
-      return { tab: 'retro', memberId: item.ownerMemberId }
+      return { tab: 'retro', memberId: item.ownerMemberId, view: 'cards' }
   }
 }

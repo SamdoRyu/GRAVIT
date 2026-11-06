@@ -54,12 +54,12 @@ describe('강사 요청함 — 규칙', () => {
     )
   })
 
-  it('종류 세 값마다 이름 · 갈 곳 — 도움 요청 탭 · 결정 기록 탭 · 회고 탭의 카드 주인', () => {
+  it('종류 세 값마다 이름 · 갈 곳 — 도움 요청 탭 · 결정 기록 탭 · 회고 탭의 카드 주인 · 기술 결정 카드 보기', () => {
     assert.deepEqual(Object.keys(INBOX_KIND_LABEL).sort(), ['decision_feedback', 'follow_up_question', 'help_request'])
     const item = (kind: InboxItem['kind']) => ({ kind, targetId: 't9', ownerMemberId: 'm4' })
     assert.deepEqual(inboxDestination(item('help_request')), { tab: 'help', helpRequestId: 't9' })
     assert.deepEqual(inboxDestination(item('decision_feedback')), { tab: 'decisions', agendaItemId: 't9' })
-    assert.deepEqual(inboxDestination(item('follow_up_question')), { tab: 'retro', memberId: 'm4' })
+    assert.deepEqual(inboxDestination(item('follow_up_question')), { tab: 'retro', memberId: 'm4', view: 'cards' })
   })
 })
 
