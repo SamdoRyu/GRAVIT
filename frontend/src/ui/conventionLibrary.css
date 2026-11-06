@@ -1,0 +1,16 @@
+/* 컨벤션 라이브러리 대화상자 (#225). 카드 톤은 강사 대화상자(instructors.css)와 같다. */
+.conv { display: grid; gap: 12px; }
+.conv-state { display: grid; gap: 8px; justify-items: start; }
+.conv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.conv-lead { margin: 0; line-height: 1.5; word-break: keep-all; }
+.conv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.conv-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); font: inherit; text-align: left; cursor: pointer; }
+.conv-item:hover { box-shadow: 0 0 0 1px var(--accent); }
+.conv-item strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.conv-target { flex: none; justify-self: start; padding: 2px 8px; border-radius: 999px; background: var(--line); font-size: var(--fs-s); color: var(--text-dim); }
+.conv-detail { display: grid; gap: 8px; }
+.conv-name { margin: 0; font-size: 1.05em; }
+.conv-content, .conv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--fs-s); }
+.conv-content { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+.conv-desc { margin: 0; line-height: 1.5; word-break: keep-all; }
+.conv-form { display: grid; gap: 10px; }

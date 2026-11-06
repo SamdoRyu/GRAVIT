@@ -14,16 +14,17 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 계약 테스트 ① — CONTRACTS_API 「17」 ConventionLibraryItemDto · ConventionLibraryItemRequest 모양 ↔ Java DTO. 계약 문서에
- * 예시 JSON이 없어 TS 인터페이스의 필드를 그대로 옮긴 값으로 본다. 실제 HTTP 응답(②)은 {@code ConventionLibraryIntegrationTest}.
+ * 계약 테스트 ① — CONTRACTS_API 「17」 ConventionLibraryItemDto · ConventionLibraryItemRequest 예시 JSON
+ * ({@code contract/examples/instructor/convention-library-item*.json}) ↔ Java DTO. 실제 HTTP 응답(②)은
+ * {@code ConventionLibraryIntegrationTest}.
  */
 class ConventionLibraryContractTest {
 
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
-    /** 계약 「17」 ConventionLibraryItemRequest. */
-    static final String CONTRACT_REQUEST = "{\"target\":\"branch_name\",\"name\":\"브랜치 이름\","
-            + "\"content\":\"<type>/<이슈번호>-<설명>\",\"description\":\"Git 전략\"}";
+    /** 계약 「17」 ConventionLibraryItemRequest — target은 branch_name. */
+    static final String CONTRACT_REQUEST =
+            ContractShape.readExampleString("instructor", "convention-library-item-request.json");
 
     // 모르는 필드 · 빠진 필드 모두 실패
     private static final JsonMapper MAPPER = JsonMapper.builder()
@@ -32,10 +33,7 @@ class ConventionLibraryContractTest {
             .build();
 
     /** 계약 「17」 ConventionLibraryItemDto — author는 「1」 UserRef. */
-    static final String CONTRACT_ITEM = "{\"id\":\"3\",\"target\":\"pr_title\",\"name\":\"PR 제목 규칙\","
-            + "\"content\":\"<type>(<scope>)?: <설명>\",\"description\":null,"
-            + "\"author\":{\"userId\":\"7\",\"githubLogin\":\"teacher\",\"displayName\":\"강사\",\"avatarUrl\":null},"
-            + "\"updatedAt\":\"2026-11-05T03:00:00Z\"}";
+    static final String CONTRACT_ITEM = ContractShape.readExampleString("instructor", "convention-library-item.json");
 
     @Test
     void itemRoundTripsThroughDto() {

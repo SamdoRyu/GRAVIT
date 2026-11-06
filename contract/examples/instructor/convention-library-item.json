@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "target": "pr_title",
+  "name": "PR 제목 규칙",
+  "content": "<type>(<scope>)?: <설명>",
+  "description": null,
+  "author": { "userId": "40", "githubLogin": "instructor-kim", "displayName": "김강사", "avatarUrl": null },
+  "updatedAt": "2026-11-05T03:00:00Z"
+}

@@ -19,6 +19,8 @@ import type {
   RequirementLinkDto,
   InstructorAssignmentDto,
   InstructorCandidateDto,
+  ConventionLibraryItemDto,
+  ConventionLibraryItemRequest,
   ErrorCode,
   EvaluateRequest,
   EvaluationRoundDto,
@@ -205,6 +207,14 @@ export interface DataSource {
   requestFollowUp(workspaceId: Id, memberId: Id, cardId: Id): Promise<DecisionCardDto>
   /** POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions — 201. R4만, 1~1000자, 요청 안 된 카드 forbidden_role */
   addFollowUpQuestion(workspaceId: Id, memberId: Id, cardId: Id, request: FollowUpQuestionCreateRequest): Promise<FollowUpQuestionDto>
+
+  // ---- 「17」 컨벤션 라이브러리 (#225 — FR-LIB). 서버 전체에 하나, 사무실 경로 밖 ----
+  /** GET /api/convention-library — target · name 순. 로그인한 사람 누구나(심사용 포함) */
+  listConventionLibrary(): Promise<ConventionLibraryItemDto[]>
+  /** POST /api/convention-library — 201. 길이 · 대상 invalid → GitHub 계정 강사가 아님(심사용 · 학생) forbidden_role */
+  createConventionLibraryItem(request: ConventionLibraryItemRequest): Promise<ConventionLibraryItemDto>
+  /** PUT /api/convention-library/{itemId} — 같은 순서, 그 뒤 없는 항목 not_found. 다른 강사가 만든 항목도 고친다 */
+  updateConventionLibraryItem(itemId: Id, request: ConventionLibraryItemRequest): Promise<ConventionLibraryItemDto>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */
