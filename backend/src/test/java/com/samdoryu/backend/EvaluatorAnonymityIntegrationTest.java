@@ -60,8 +60,8 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * #29 사람별 평가 합계 없음 · 평가자 익명(FR-LRN-09 · CONTRACTS.md 「5」 익명성) — 실제 Security · MVC · MySQL.
  * 캐럴이 평가한 뒤, 평가가 실리는 지금 있는 응답(회차 목록 · Snapshot의 현재 회차 · 안건 · 기술 결정 카드 · 회고 리포트 JSON ·
- * 마크다운)을 작성자 · 다른 팀원 · 강사로 읽어 캐럴을 가리키는 값(로그인 · 이름 · GitHub 사용자 ID · 팀원 ID · 사용자 ID)이 없는지 본다.
- * Snapshot의 팀원 명단({@code members})은 평가와 무관한 명단이라 뺀다. 타임라인 · 강사 요청함은 그 API가 생길 때 더한다.
+ * 마크다운 · 학습 타임라인)을 작성자 · 다른 팀원 · 강사로 읽어 캐럴을 가리키는 값(로그인 · 이름 · GitHub 사용자 ID · 팀원 ID ·
+ * 사용자 ID)이 없는지 본다. Snapshot의 팀원 명단({@code members})은 평가와 무관한 명단이라 뺀다. 강사 요청함은 그 API가 생길 때 더한다.
  * 사람별 합계 · 순위 필드 이름은 {@link NoRankingFieldsTest}가 본다.
  */
 @SpringBootTest(properties = {
@@ -186,6 +186,10 @@ class EvaluatorAnonymityIntegrationTest {
             assertNoEvaluator(snapshot);
         }
         for (MockHttpSession reader : List.of(aliceSession, instructorSession)) {
+            String timelineJson = read(workspacePath + "/members/" + Ids.toApi(alice.getId()) + "/timeline", reader);
+            assertThat(timelineJson).contains("세션 만료 처리가 빠졌어요");
+            assertNoEvaluator(ContractShape.readTree(timelineJson));
+
             String cardsJson = read(cardsPath, reader);
             assertThat(cardsJson).contains("세션 만료 처리가 빠졌어요");
             assertNoEvaluator(ContractShape.readTree(cardsJson));

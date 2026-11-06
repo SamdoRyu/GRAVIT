@@ -11,6 +11,7 @@ import com.samdoryu.backend.evaluation.domain.EvaluationRound;
 import com.samdoryu.backend.evaluation.domain.RoundOpenedReason;
 import com.samdoryu.backend.evaluation.dto.EvaluateRequest;
 import com.samdoryu.backend.evaluation.dto.EvaluationRoundDto;
+import com.samdoryu.backend.evaluation.dto.GivenEvaluation;
 import com.samdoryu.backend.evaluation.repository.EvaluationRepository;
 import com.samdoryu.backend.evaluation.repository.EvaluationRoundRepository;
 import com.samdoryu.backend.realtime.SnapshotResource;
@@ -136,6 +137,18 @@ public class EvaluationRoundService {
                 round -> round.getSubmission().getId(),
                 round -> EvaluationRoundDto.of(round, evaluations.getOrDefault(round.getId(), List.of()),
                         access.userId(), canEvaluate(access, round.getSubmission(), viewer))));
+    }
+
+    /**
+     * 학습 타임라인 {@code evaluation_given}(#172) — 그 사용자가 이 사무실에서 남긴 평가, 저장 순서. 강사가 학생 타임라인을 볼 때도
+     * 그 학생의 평가를 돌려줘야 해서 {@code myEvaluation}(요청한 사람 기준)과 따로 둔다. 읽기 권한 검사는 부르는 쪽이 한다.
+     */
+    @Transactional(readOnly = true)
+    public List<GivenEvaluation> evaluationsGivenBy(Long workspaceId, Long evaluatorUserId) {
+        return evaluationRepository.findGivenInWorkspace(workspaceId, evaluatorUserId).stream()
+                .map(evaluation -> new GivenEvaluation(Ids.toApi(evaluation.getRound().getSubmission().getId()),
+                        evaluation.getVerdict(), evaluation.getReason(), evaluation.getUpdatedAt()))
+                .toList();
     }
 
     /**
