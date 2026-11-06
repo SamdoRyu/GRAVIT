@@ -58,9 +58,11 @@ test('a v1 meeting: decide the PR item, leave the issue for next time, end with 
   await expect(start).toBeHidden()
   await expect.poll(async () => (await state(page, ids)).meeting?.status).toBe('ongoing')
 
-  // End dialog (the top bar's live pill moves to v1 with D's TopBar change — open it through the store meanwhile).
-  const meetingId = await readStore(page, (s) => s.office.snapshot.meetings.find((m: { status: string }) => m.status === 'ongoing').id)
-  await callStore(page, 'openDialog', { kind: 'endMeeting', meetingId })
+  // The top bar's live pill shows the v1 meeting (attendees · items waiting for a decision) and opens the end dialog.
+  const pill = page.getByRole('banner').getByRole('status').filter({ hasText: '참석' })
+  const waiting = await readStore(page, (s) => s.office.snapshot.agendaItems.filter((a: { status: string }) => a.status === 'confirmed').length)
+  await expect(pill).toContainText(`안건 ${waiting}`)
+  await pill.getByRole('button', { name: '회의 종료' }).click()
   const end = page.getByRole('dialog', { name: /^회의 종료/ })
   const toDecide = end.getByRole('list', { name: '결정할 안건' })
   await toDecide.getByRole('listitem').filter({ hasText: 'E2E PR 안건' }).getByRole('button', { name: '결정하기' }).click()
