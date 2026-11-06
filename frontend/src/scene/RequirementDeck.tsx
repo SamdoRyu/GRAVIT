@@ -4,14 +4,20 @@
 // the Snapshot's server values — FR-REQ-05); all closed adds a teal rim. A zone with no linked issue (FR-REQ-06) is an
 // unpowered panel: darker, cells off, an orange frame and "연결 없음". Unused places show only a faint floor outline; when
 // requirements overflow, the last place is the waiting plate (SceneModel `requirement-group:waiting` — waiting:N · empty:k).
+// While an issue box is dragged (#15), every requirement plate shows a faint teal rim and the one under it a bright one — letting
+// go there links the issue to that requirement (TaskBox · cargoDrop). The tags show only when the camera is near the deck — from
+// the whole-station view ten of them would pile up over it.
 // OWNER: C.
-import { memo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { createContext, memo, useContext, useRef, useState } from 'react'
+import { MeshBasicMaterial, Vector3, type Group, type Mesh } from 'three'
 import type { RequirementDto } from '../data/types'
 import { useOffice } from '../store'
 import { REQ_DECK, REQ_PLATE, reqPlateCenter, WORLD_SCALE } from '../theme/station/geometry'
 import { Bx, COLORS, Glow, basic, lam } from '../theme/station/parts'
 import { BADGE, REQUIREMENT_WAITING_KEY, REQUIREMENT_WAITING_ROLE } from './model/buildSceneModel'
 import { badgeCount, litCells, PLATE_CELLS, plateTag } from './requirementPlate'
+import { cargoDrag, noRaycast } from './runtime'
 import { SceneHtml } from './shared'
 import { useStationScene } from './useStationScene'
 
@@ -78,10 +84,34 @@ const tagBox = {
 }
 const titleLine = { maxWidth: 134, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, fontSize: 10.5, color: '#6b7487' }
 
+/** Deck centre (world) — the tags show when the camera is within TAGS_NEAR of it and hide again past TAGS_FAR */
+const DECK_CENTER = new Vector3(REQ_DECK.x * WORLD_SCALE, REQ_DECK.deckY * WORLD_SCALE, REQ_DECK.z * WORLD_SCALE)
+const TAGS_NEAR = 15
+const TAGS_FAR = 17
+
+/** Whether the plate tags show (camera near the deck). Re-renders only when it flips. */
+function useTagsShown(): boolean {
+  const [shown, setShown] = useState(false)
+  const last = useRef(false)
+  useFrame(({ camera }) => {
+    const d = camera.position.distanceTo(DECK_CENTER)
+    const next = last.current ? d < TAGS_FAR : d < TAGS_NEAR
+    if (next !== last.current) {
+      last.current = next
+      setShown(next)
+    }
+  })
+  return shown
+}
+
+/** Tags stay mounted (drei's Html misbehaves when mounted / unmounted often) and are only hidden */
+const TagsShown = createContext(false)
+
 function PlateTag({ head, sub, warn, title }: { head: string; sub: string | null; warn: string | null; title: string | null }) {
+  const shown = useContext(TagsShown)
   return (
     <SceneHtml center position={[0, 1.3, 0]} zIndexRange={[0, 0]} pointerEvents="none">
-      <div style={tagBox} data-plate-tag="">
+      <div style={{ ...tagBox, opacity: shown ? 1 : 0, transition: 'opacity 0.25s' }} data-plate-tag="" data-shown={shown ? '' : undefined}>
         <div>
           {head}
           {sub && <span style={{ color: '#3a7d73' }}> · {sub}</span>}
@@ -90,6 +120,44 @@ function PlateTag({ head, sub, warn, title }: { head: string; sub: string | null
         {title && <div style={titleLine}>{title}</div>}
       </div>
     </SceneHtml>
+  )
+}
+
+/** The drop rim's two looks, shared by every plate: faint while an issue is dragged, bright on the drop target */
+const DROP_FAINT = new MeshBasicMaterial({ color: COLORS.teal, transparent: true, opacity: 0.35, depthWrite: false })
+const DROP_BRIGHT = new MeshBasicMaterial({ color: COLORS.teal, transparent: true, opacity: 1, depthWrite: false })
+
+/** Drop glow of one requirement plate: off, faint while an issue is dragged, bright when it is the drop target */
+function PlateDropGlow({ requirementId }: { requirementId: string }) {
+  const group = useRef<Group>(null)
+  const target = `requirement:${requirementId}`
+  useFrame(() => {
+    const g = group.current
+    if (!g) return
+    const issue = cargoDrag.key !== null && cargoDrag.key.startsWith('task:')
+    const hit = cargoDrag.target === target
+    g.visible = issue
+    if (!issue) return
+    g.scale.setScalar(hit ? 1.06 : 1)
+    for (const child of g.children) (child as Mesh).material = hit ? DROP_BRIGHT : DROP_FAINT
+  })
+  const mat = DROP_FAINT
+  const w = W + 0.62
+  const d = D + 0.62
+  const t = 0.14
+  return (
+    <group ref={group} visible={false}>
+      {[
+        [w + t, 0, -d / 2, t],
+        [w + t, 0, d / 2, t],
+        [t, -w / 2, 0, d + t],
+        [t, w / 2, 0, d + t],
+      ].map(([sx, x, z, sz], i) => (
+        <mesh key={i} position={[x, 0.2, z]} material={mat} raycast={noRaycast} renderOrder={4}>
+          <boxGeometry args={[sx, 0.05, sz]} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -105,6 +173,7 @@ const RequirementPlate = memo(function RequirementPlate({ slot, requirement }: {
       <Bx s={[W + 0.24, 0.1, D + 0.24]} p={[0, 0, 0]} c={lam(empty ? COLORS.trim : FRAME)} />
       <Bx s={[W, 0.12, D]} p={[0, 0.06, 0]} c={empty ? lam(PANEL_OFF) : lam(PANEL, { emissive: 0x0a1630 })} />
       <Cells lit={litCells(done, linked)} dead={empty} />
+      <PlateDropGlow requirementId={requirement.id} />
       {full && (
         <>
           <Rim w={W + 0.5} d={D + 0.5} y={0.04} color={COLORS.teal} />
@@ -145,21 +214,24 @@ function WaitingPlate({ slot, waiting, empty }: { slot: number; waiting: number;
 
 export function RequirementDeck() {
   const scene = useStationScene()
+  const tagsShown = useTagsShown()
   const requirements = useOffice((s) => s.office?.snapshot?.requirements)
   if (!scene || !requirements) return null
   const byId = new Map(requirements.map((r) => [r.id, r]))
   const waitingBadges = scene.entities.find((e) => e.key === REQUIREMENT_WAITING_KEY)?.badges ?? []
   const { slots, places } = scene.deck
   return (
-    <group scale={WORLD_SCALE}>
-      {Array.from({ length: slots }, (_, i) => {
-        const place = places[i]
-        if (place === WAITING_PLACE)
-          return <WaitingPlate key="waiting" slot={i} waiting={badgeCount(waitingBadges, BADGE.waiting)} empty={badgeCount(waitingBadges, BADGE.empty)} />
-        const r = place === undefined ? undefined : byId.get(place)
-        if (r) return <RequirementPlate key={`r:${r.id}`} slot={i} requirement={r} />
-        return <OpenPlace key={`open:${i}`} slot={i} />
-      })}
-    </group>
+    <TagsShown.Provider value={tagsShown}>
+      <group scale={WORLD_SCALE}>
+        {Array.from({ length: slots }, (_, i) => {
+          const place = places[i]
+          if (place === WAITING_PLACE)
+            return <WaitingPlate key="waiting" slot={i} waiting={badgeCount(waitingBadges, BADGE.waiting)} empty={badgeCount(waitingBadges, BADGE.empty)} />
+          const r = place === undefined ? undefined : byId.get(place)
+          if (r) return <RequirementPlate key={`r:${r.id}`} slot={i} requirement={r} />
+          return <OpenPlace key={`open:${i}`} slot={i} />
+        })}
+      </group>
+    </TagsShown.Provider>
   )
 }

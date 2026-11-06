@@ -2,9 +2,9 @@
 // an issue is a cube, a PR a triangular prism, both cream with an orange band (#11). A blocked one glows warm (#23), and its
 // badges (blocked · Draft · 미병합 종료 · 계획 안 함 · a PR's current-round votes — #21) float above it. Keeps its own world
 // position and flies along an arc when its slot changes.
-// An original issue / PR can be dragged onto the bridge to raise it as an agenda item (#30 · #26 — CONTRACTS.md 「8」 드롭 결과):
-// letting go there opens the agenda dialog and the shape flies back to its own place (the agenda never moves the original).
-// Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
+// An original issue / PR can be dragged (CONTRACTS.md 「8」 드롭 결과 — cargoDrop.ts): onto the bridge to raise it as an agenda
+// item (#30 · #26 — the agenda dialog opens), or an issue onto a requirement plate to link that requirement (#15 —
+// linkRequirement). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
 // original opens the v1 detail drawer (the GitHub originals are never changed from the app — CON-02).
 // A learning · other agenda item has no source (#31): it sits on the bridge table as the design's octahedron (floating,
 // turning, a lilac glow) or memo pad, shows its title on hover and opens nothing.
@@ -12,14 +12,14 @@ import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { BackSide, Color, CylinderGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, type BufferGeometry, type Group } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import type { Id } from '../data/types'
 import { useOffice, type OfficeSelection } from '../store'
 import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
 import { CargoBadges } from './CargoBadges'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
+import { cargoDropTarget, requirementOf, type CargoSource } from './cargoDrop'
 import type { SceneEntity, ThemeLayout } from './model/types'
-import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
+import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, DROP_ZONE_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
 import { clamp, UNIT_BOX, useDynamicLayer } from './shared'
 import { BOX_D, BOX_H, BOX_W, type Slot } from './slots'
 
@@ -98,11 +98,8 @@ function newAnim(): Anim {
   return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1 }
 }
 
-/** What an original issue / PR raises as an agenda item when dropped on the bridge */
-export interface AgendaSource {
-  type: 'task' | 'submission'
-  id: Id
-}
+/** The original issue / PR a shape stands for: raised as an agenda item on the bridge, linked to a requirement on a plate */
+export type AgendaSource = CargoSource
 
 /** Touch: the finger may drift this far (px) during the long press before it counts as an orbit gesture. */
 const LONG_PRESS_SLOP_PX = 9
@@ -112,7 +109,7 @@ interface Props {
   slot: Slot
   /** What a click opens in the v1 detail drawer (an agenda shape opens its source) */
   select: OfficeSelection | null
-  /** Draggable onto the bridge to raise this as an agenda item; null = not draggable (agenda shapes) */
+  /** Draggable onto the bridge (agenda) or, for an issue, a requirement plate (link); null = not draggable (agenda shapes) */
   raise: AgendaSource | null
   dropZoneAt: ThemeLayout['dropZoneAt']
   /** An open issue past its due date: a soft glow. */
@@ -347,7 +344,8 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
 /**
  * Press on an original issue / PR: a mouse or pen picks it up once it moves a few pixels; a finger has to rest on it for a
  * moment first (otherwise it orbits the camera). While held the shape follows the pointer on the y = DRAG_Y plane and the
- * bridge lights up when letting go would raise it. Releasing over the bridge opens the agenda dialog; Escape cancels.
+ * bridge or the requirement plate under it lights up when letting go would act there. Releasing over the bridge opens the agenda
+ * dialog, over a requirement plate links the issue to it; Escape cancels.
  */
 function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayout['dropZoneAt'], down: PointerEvent) {
   const pointerId = down.pointerId
@@ -364,13 +362,17 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
   const follow = (cx: number, cy: number) => {
     const p = pointerOnPlane(cx, cy, DRAG_Y)
     if (!p) {
+      cargoDrag.target = null
       cargoDrag.overMeeting = false
       return
     }
     cargoDrag.x = p.x
     cargoDrag.y = DRAG_Y
     cargoDrag.z = p.z
-    cargoDrag.overMeeting = dropZoneAt([p.x, 0, p.z]) === 'meeting'
+    // The zone is where the pointer meets the deck tops, not the higher plane the shape floats on.
+    const floor = pointerOnPlane(cx, cy, DROP_ZONE_Y) ?? p
+    cargoDrag.target = cargoDropTarget(dropZoneAt([floor.x, 0, floor.z]), source)
+    cargoDrag.overMeeting = cargoDrag.target === 'meeting'
   }
   const begin = () => {
     dragging = true
@@ -385,18 +387,20 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     follow(px, py)
     setCursor('grabbing')
   }
-  const stop = (): boolean => {
+  /** Ends the drag; the drop target if it was let go over one */
+  const stop = (): string | null => {
     window.clearTimeout(timer)
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', up)
     window.removeEventListener('pointercancel', cancel)
     window.removeEventListener('keydown', escape)
     if (cameraLock.controls) cameraLock.controls.enabled = true
-    const over = dragging && cargoDrag.overMeeting
+    const target = dragging ? cargoDrag.target : null
     if (cargoDrag.key === key) cargoDrag.key = null
+    cargoDrag.target = null
     cargoDrag.overMeeting = false
     setCursor('')
-    return over
+    return target
   }
   const move = (ev: PointerEvent) => {
     if (ev.pointerId !== pointerId) return
@@ -410,7 +414,10 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
   const up = (ev: PointerEvent) => {
     if (ev.pointerId !== pointerId) return
     if (dragging) follow(ev.clientX, ev.clientY)
-    if (stop()) useOffice.getState().openDialog({ kind: 'raiseAgenda', source })
+    const target = stop()
+    if (target === 'meeting') useOffice.getState().openDialog({ kind: 'raiseAgenda', source })
+    const requirementId = requirementOf(target)
+    if (requirementId !== null && source.type === 'task') void linkToRequirement(requirementId, source.id)
   }
   const cancel = (ev: PointerEvent) => {
     if (ev.pointerId === pointerId) stop()
@@ -423,4 +430,20 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
   window.addEventListener('pointerup', up)
   window.addEventListener('pointercancel', cancel)
   window.addEventListener('keydown', escape)
+}
+
+/**
+ * An issue let go over a requirement plate (#15): link the two (linkRequirement — R2 only; a refusal such as 403 is the store's
+ * alert). The issue keeps its own place; the plate's cells follow the new progress. An existing link is only mentioned.
+ */
+async function linkToRequirement(requirementId: string, taskId: string) {
+  const st = useOffice.getState()
+  const snapshot = st.office?.snapshot
+  const requirement = snapshot?.requirements.find((r) => r.id === requirementId)
+  const name = requirement ? (requirement.sourceKey ?? requirement.title) : '요구사항'
+  if (snapshot?.requirementLinks.some((l) => l.requirementId === requirementId && l.taskId === taskId)) {
+    st.toast('info', `이미 ${name}에 연결된 이슈예요`)
+    return
+  }
+  if (await st.linkRequirement(requirementId, taskId)) useOffice.getState().toast('good', `${name}에 연결했어요`)
 }
