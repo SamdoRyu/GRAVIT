@@ -12,7 +12,6 @@ import type {
   TaskDueDateRequest,
   RequirementLinkCreateRequest,
   RequirementLinkDto,
-  DemoChange,
   ErrorCode,
   EvaluateRequest,
   EvaluationRoundDto,
@@ -30,15 +29,8 @@ import type {
   StandupSaveRequest,
   LoginOptions,
   MeResponse,
-  Meeting,
-  MeetingEnd,
-  MeetingStart,
-  Member,
-  MemberInput,
-  MemberPatch,
   OpenWorkspaceRequest,
   PageResponse,
-  Reassign,
   ReportCreateRequest,
   ReportLearningRequest,
   RetroReportDto,
@@ -47,11 +39,7 @@ import type {
   RepositoryChoiceResponse,
   ReviewLoginRequest,
   SyncStatus,
-  Task,
   TeamSettings,
-  TaskInput,
-  TaskPatch,
-  Workspace,
   WorkspaceListItem,
   WorkspaceSnapshot,
   WorkspaceSummary,
@@ -192,53 +180,4 @@ export class DataError extends Error {
     this.name = 'DataError'
     this.code = code
   }
-}
-
-// ============================================================================
-// 데모 DataSource — 지금 화면(store)이 쓰는 이전 인터페이스. 화면이 v1으로 옮겨 가면 지운다.
-// 계약에 없는 CRUD · 데모 모드 메서드다(CONTRACTS.md 「4」 · 「8」).
-// ============================================================================
-
-export interface DemoDataSource {
-  /** Human-readable name for the UI, e.g. "로컬 데모 데이터". */
-  readonly label: string
-
-  load(): Promise<Workspace>
-
-  createTask(input: TaskInput): Promise<Task>
-  updateTask(id: Id, patch: TaskPatch): Promise<Task>
-  deleteTask(id: Id): Promise<void>
-
-  createMember(input: MemberInput): Promise<Member>
-  updateMember(id: Id, patch: MemberPatch): Promise<Member>
-  /** Moves the member's non-done tasks per `reassign`, then removes the member. */
-  deleteMember(id: Id, reassign: Reassign): Promise<void>
-
-  /**
-   * Starts the (single) team meeting: captures open onAgenda tasks as the agenda and sets every
-   * attendee's presence to 'meeting'. Rejects with 'conflict' if a meeting is already ongoing.
-   */
-  startMeeting(input: MeetingStart): Promise<Meeting>
-  /**
-   * Ends the ongoing meeting atomically: applies each outcome to its task, clears onAgenda on
-   * agenda tasks (except 'keep'), sets attendees back to 'working', stores notes/outcomes.
-   */
-  endMeeting(id: Id, result: MeetingEnd): Promise<Meeting>
-
-  /**
-   * Every change (own calls, demo mode, other users/server) is pushed here, plus one
-   * `activity` change per meaningful action. Returns an unsubscribe function.
-   */
-  subscribe(listener: (change: DemoChange) => void): () => void
-
-  /**
-   * Optional: simulated teammates working on their own. Sources without it hide the toggle.
-   * reason 'pause' = the store briefly pausing while a dialog/drag is open (a shared server-side
-   * demo may ignore it); 'user' = the user flipped the toggle.
-   */
-  setDemoMode?(on: boolean, reason?: 'user' | 'pause'): void
-  /** Optional: where demo state lives in the source (e.g. a shared server), report it on load. */
-  getDemoMode?(): Promise<boolean>
-  /** Optional: wipe local data back to the seed. */
-  reset?(): Promise<Workspace>
 }

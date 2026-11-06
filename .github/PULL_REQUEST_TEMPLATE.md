@@ -19,7 +19,7 @@ FR-
 <!-- 이 PR이 따른 계약 버전. 계약 문서(docs/CONTRACTS*.md)를 마지막으로 바꾼 GRAVIT 커밋 SHA를 적는다
      (2026-11-03 기준 위치 전환 — docs/README.md) -->
 
-`702a55fd6f199b4d105412f63a2e160e86c9c0e7`
+`6cc06dea08ffc25801c9c8e9cd01fede651e8815`
 
 ## 고민한 점
 
