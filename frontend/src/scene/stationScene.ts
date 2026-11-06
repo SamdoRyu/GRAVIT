@@ -1,6 +1,6 @@
 // v1 사무실 Snapshot → 3D가 그릴 것 (#102 T5-c-2 · #10 · #11 · 요구사항 데크 #16 · #17). 소유: C.
 // 도메인 데이터 → SceneModel(buildSceneModel) → 정거장 ThemeLayout(createStationLayout) — 그리기는 각 컴포넌트가 한다.
-import type { MemberDto, WorkspaceSnapshot } from '../data/types'
+import type { Id, MemberDto, WorkspaceSnapshot } from '../data/types'
 import { ALWAYS_SHOWN_PODS, PODS } from '../theme/station/geometry'
 import { createStationLayout } from '../theme/station/stationLayout'
 import { deskSeats, buildSceneModel, REQUIREMENT_WAITING_ROLE } from './model/buildSceneModel'
@@ -47,13 +47,14 @@ export function podsShown(seats: ReadonlyMap<string, number>): Set<number> {
 }
 
 /**
- * Snapshot → StationScene. 순수 함수.
+ * Snapshot → StationScene. 순수 함수. `deckOrder` = 보는 사람의 요구사항 대기 칸 교환 결과(스토어 requirementDeckOrder — 버리는 규칙은
+ * 스토어가 이미 적용, CONTRACTS.md 「8」 요구사항 판 배치). SceneModel 입력으로 그대로 넘긴다.
  * 포드 번호가 정거장 포드 수를 넘는 팀원(deskIndex 8 · 9)은 3D에 없고, 그 팀원이 대표 담당인 이슈는 도킹 베이(backlog)에 둔다 —
  * 포드가 없는 팀원의 이슈와 같다(2026-11-04 결정).
  */
-export function stationSceneOf(snapshot: WorkspaceSnapshot): StationScene {
+export function stationSceneOf(snapshot: WorkspaceSnapshot, deckOrder: readonly Id[] | null = null): StationScene {
   const seats = new Map([...deskSeats(snapshot.members)].filter(([, i]) => i < PODS.length))
-  const entities = buildSceneModel(snapshot).map((e) =>
+  const entities = buildSceneModel(snapshot, deckOrder).map((e) =>
     e.placeRole.startsWith('desk:') && e.kind !== 'avatar' && !seats.has(e.placeRole.slice('desk:'.length)) ? { ...e, placeRole: 'backlog' as const } : e,
   )
   const crew = snapshot.members.filter((m) => seats.has(m.id))
@@ -68,10 +69,10 @@ export function stationSceneOf(snapshot: WorkspaceSnapshot): StationScene {
   }
 }
 
-let cached: { snapshot: WorkspaceSnapshot; scene: StationScene } | null = null
-/** 같은 Snapshot 객체면 같은 StationScene을 돌려준다(store는 다시 읽을 때만 새 객체를 만든다) */
-export function stationSceneFor(snapshot: WorkspaceSnapshot): StationScene {
-  if (cached?.snapshot !== snapshot) cached = { snapshot, scene: stationSceneOf(snapshot) }
+let cached: { snapshot: WorkspaceSnapshot; deckOrder: readonly Id[] | null; scene: StationScene } | null = null
+/** 같은 Snapshot · 교환 결과 객체면 같은 StationScene을 돌려준다(store는 바뀔 때만 새 객체를 만든다) */
+export function stationSceneFor(snapshot: WorkspaceSnapshot, deckOrder: readonly Id[] | null = null): StationScene {
+  if (cached?.snapshot !== snapshot || cached.deckOrder !== deckOrder) cached = { snapshot, deckOrder, scene: stationSceneOf(snapshot, deckOrder) }
   return cached.scene
 }
 

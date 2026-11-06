@@ -3,8 +3,10 @@
 //   missing · needs_review not on the deck. The viewer is not R2 there: linking is refused (403) and nothing changes.
 // - demo office (ws_2, 12 active, the viewer is R2): 9 plates + the waiting plate. Dragging an issue box onto a plate lights it
 //   and links the issue to that requirement (progress updates, the box flies back); doing it again only says it is linked.
+//   The waiting plate (#197): a click opens the waiting list, an issue dropped on it opens the list to pick the requirement,
+//   and a swap (store requirementDeckOrder) moves the plates.
 import type { Page } from '@playwright/test'
-import { expect, hoverBox, readStore, settled, test, waitForScene } from './fixtures'
+import { callStore, expect, hoverBox, readStore, settled, test, waitForScene } from './fixtures'
 
 async function openOffice(page: Page, workspaceId: string) {
   await page.goto(`/?workspace=${workspaceId}`)
@@ -21,14 +23,14 @@ async function openOffice(page: Page, workspaceId: string) {
 
 const tags = (page: Page) => page.locator('[data-plate-tag]')
 
-/** Names of the requirement plates in the 3D scene */
+/** Names of the requirement plates in the 3D scene (not the waiting plate) */
 function plates(page: Page) {
   return page.evaluate(async () => {
     const rtPath = '/src/scene/runtime.ts'
     const rt = await import(/* @vite-ignore */ rtPath)
     const names: string[] = []
     rt.sceneApi.get().scene.traverse((o: { name: string }) => {
-      if (o.name.startsWith('requirement:')) names.push(o.name)
+      if (o.name.startsWith('requirement:') && o.name !== 'requirement:waiting') names.push(o.name)
     })
     return names
   })
@@ -122,4 +124,63 @@ test('demo office: 9 plates + the waiting plate; drop an issue on a plate to lin
   await dropOnPlate(page, taskId!, 'rq_23')
   await expect(page.getByText('이미 FR-DEMO-03에 연결된 이슈예요')).toBeVisible()
   expect(await linksOf(page, 'rq_23')).toHaveLength(1)
+})
+
+/** World position of a plate object in the scene */
+function plateAt(page: Page, name: string) {
+  return page.evaluate(async (n) => {
+    const rtPath = '/src/scene/runtime.ts'
+    const rt = await import(/* @vite-ignore */ rtPath)
+    const o = rt.sceneApi.get().scene.getObjectByName(n)
+    if (!o) return null
+    const p = o.getWorldPosition(o.position.clone())
+    return { x: p.x as number, z: p.z as number }
+  }, name)
+}
+
+test('demo office: the waiting plate opens the waiting list, takes an issue to pick its requirement, and a swap moves the plates', async ({ page }) => {
+  await openOffice(page, 'ws_2')
+  await expect.poll(async () => (await plates(page)).length).toBe(9)
+
+  // A click on the waiting plate opens the waiting list.
+  const waitingPoint = await settled(page, { kind: 'point', ...(await plateWorld(page, 'waiting')) })
+  await page.mouse.click(waitingPoint.x, waitingPoint.y)
+  const list = page.getByRole('dialog', { name: '대기 중인 요구사항' })
+  await expect(list).toBeVisible()
+  await expect(list.getByRole('list', { name: '대기 중인 요구사항' }).getByRole('listitem')).toHaveCount(3)
+  await page.keyboard.press('Escape')
+  await expect(list).toBeHidden()
+
+  // An issue box dropped on the waiting plate opens the list to pick the requirement to link.
+  const taskId = await openIssueWithBox(page)
+  test.skip(taskId === null, 'mock seed에 장면에 놓인 열린 이슈가 없다')
+  await dropOnPlate(page, taskId!, 'waiting')
+  const pick = page.getByRole('dialog', { name: '연결할 요구사항 고르기' })
+  await expect(pick).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(pick).toBeHidden()
+
+  // Swap the first plate with a waiting one: it leaves the deck, the waiting one glides into the first place.
+  const first = await plateWorld(page, 'rq_21')
+  await callStore(page, 'setRequirementDeckOrder', ['rq_30', 'rq_22', 'rq_23', 'rq_24', 'rq_25', 'rq_26', 'rq_27', 'rq_28', 'rq_29'])
+  await expect.poll(async () => (await plates(page))[0]).toBe('requirement:rq_30')
+  await expect.poll(async () => (await plates(page)).includes('requirement:rq_21')).toBe(false)
+  await expect
+    .poll(async () => {
+      const p = await plateAt(page, 'requirement:rq_30')
+      return p ? Math.hypot(p.x - first.x, p.z - first.z) : 99
+    })
+    .toBeLessThan(0.01)
+})
+
+test('a click on a requirement plate opens the panel on the 요구사항 tab', async ({ page }) => {
+  await openOffice(page, 'ws_1')
+  await expect.poll(async () => (await plates(page)).length).toBe(5)
+  const panel = page.getByRole('region', { name: '관리 패널' })
+  await expect(panel).toBeHidden()
+  const at = await settled(page, { kind: 'point', ...(await plateWorld(page, 'rq_1')) })
+  await page.mouse.click(at.x, at.y)
+  await expect(panel).toBeVisible()
+  await expect(panel.getByRole('tab', { name: /^요구사항/ })).toHaveAttribute('aria-selected', 'true')
+  expect(await readStore(page, (s) => s.officeSelection)).toBeNull()
 })

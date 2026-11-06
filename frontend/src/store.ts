@@ -4,7 +4,7 @@
 // 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
-import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -28,14 +28,6 @@ export type Dialog =
   | { kind: 'raiseAgenda'; source: { type: 'task' | 'submission'; id: Id } }
   /** 요구사항 대기 목록 (#197). linkTaskId가 있으면 그 이슈를 연결할 요구사항 고르기 */
   | { kind: 'requirementWaiting'; linkTaskId: Id | null }
-
-/** Where a dragged task would land if released now. Set by whoever is under the pointer. */
-export type DropTarget =
-  | { kind: 'member'; id: Id }
-  | { kind: 'backlog' }
-  | { kind: 'status'; status: TaskStatus }
-  /** The meeting-room table: put the task on the next meeting's agenda. */
-  | { kind: 'agenda' }
 
 export interface Toast {
   id: number
@@ -199,12 +191,10 @@ interface OfficeState {
   focusOn: (target: Selection) => void
   clearFocus: () => void
 
-  // ---- drag & drop (3D ↔ panel) ----
+  // ---- 끌기 상태 — 데모 패널 ↔ 3D 끌어 놓기의 흔적. 지금은 시작하는 곳이 없어 늘 null이다.
+  // 3D(CameraRig) · HUD · 단축키가 "끄는 중인가"를 읽어 남겨 둔다(#102 ④ 다음 단계에서 C와 함께 정리)
   drag: { taskId: Id; from: 'scene' | 'panel' } | null
-  dropTarget: DropTarget | null
-  startDrag: (taskId: Id, from: 'scene' | 'panel') => void
-  setDropTarget: (t: DropTarget | null) => void
-  /** Apply the drop (if any) and clear drag state. Called on pointerup anywhere. */
+  /** 끌기를 끝낸다 — 어디서든 pointerup */
   endDrag: () => void
   cancelDrag: () => void
 
@@ -548,16 +538,9 @@ export const useOffice = create<OfficeState>((set, get) => {
     },
 
     drag: null,
-    dropTarget: null,
-    startDrag: (taskId, from) => set({ drag: { taskId, from }, dropTarget: null }),
-    setDropTarget: (t) => {
-      const cur = get().dropTarget
-      if (JSON.stringify(cur) === JSON.stringify(t)) return
-      set({ dropTarget: t })
-    },
     // 끌어 놓기는 데모 모델의 작업 배정 · 상태 이동이었다 — v1에는 놓을 곳이 없어 비우기만 한다
-    endDrag: () => set({ drag: null, dropTarget: null }),
-    cancelDrag: () => set({ drag: null, dropTarget: null }),
+    endDrag: () => set({ drag: null }),
+    cancelDrag: () => set({ drag: null }),
 
     toasts: [],
     toast: (level, text) => {

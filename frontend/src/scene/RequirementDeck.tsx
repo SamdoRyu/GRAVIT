@@ -5,8 +5,10 @@
 // unpowered panel: darker, cells off, an orange frame and "연결 없음". Unused places show only a faint floor outline; when
 // requirements overflow, the last place is the waiting plate (SceneModel `requirement-group:waiting` — waiting:N · empty:k).
 // While an issue box is dragged (#15), every requirement plate shows a faint teal rim and the one under it a bright one — letting
-// go there links the issue to that requirement (TaskBox · cargoDrop). The tags show only when the camera is near the deck — from
-// the whole-station view ten of them would pile up over it.
+// go there links the issue to that requirement (TaskBox · cargoDrop); over the waiting plate it opens the waiting list to pick
+// the requirement (#197). A click on a plate opens the panel's 요구사항 tab, on the waiting plate the waiting list. When the
+// viewer swaps plates (store requirementDeckOrder → SceneModel), a plate glides over to its new place. The tags show only when
+// the camera is near the deck — from the whole-station view ten of them would pile up over it.
 // OWNER: C.
 import { useFrame } from '@react-three/fiber'
 import { createContext, memo, useContext, useRef, useState } from 'react'
@@ -17,7 +19,8 @@ import { REQ_DECK, REQ_PLATE, reqPlateCenter, WORLD_SCALE } from '../theme/stati
 import { Bx, COLORS, Glow, basic, lam } from '../theme/station/parts'
 import { BADGE, REQUIREMENT_WAITING_KEY, REQUIREMENT_WAITING_ROLE } from './model/buildSceneModel'
 import { badgeCount, litCells, PLATE_CELLS, plateTag } from './requirementPlate'
-import { cargoDrag, noRaycast } from './runtime'
+import { cargoDrag, noRaycast, setCursor } from './runtime'
+import { useUi } from '../ui/uiState'
 import { SceneHtml } from './shared'
 import { useStationScene } from './useStationScene'
 
@@ -127,8 +130,8 @@ function PlateTag({ head, sub, warn, title }: { head: string; sub: string | null
 const DROP_FAINT = new MeshBasicMaterial({ color: COLORS.teal, transparent: true, opacity: 0.35, depthWrite: false })
 const DROP_BRIGHT = new MeshBasicMaterial({ color: COLORS.teal, transparent: true, opacity: 1, depthWrite: false })
 
-/** Drop glow of one requirement plate: off, faint while an issue is dragged, bright when it is the drop target */
-function PlateDropGlow({ requirementId }: { requirementId: string }) {
+/** Drop glow of one requirement plate (or the waiting plate, id 'waiting'): off, faint while an issue is dragged, bright when it is the drop target */
+function PlateDropGlow({ requirementId, y = 0 }: { requirementId: string; y?: number }) {
   const group = useRef<Group>(null)
   const target = `requirement:${requirementId}`
   useFrame(() => {
@@ -146,7 +149,7 @@ function PlateDropGlow({ requirementId }: { requirementId: string }) {
   const d = D + 0.62
   const t = 0.14
   return (
-    <group ref={group} visible={false}>
+    <group ref={group} visible={false} position={[0, y, 0]}>
       {[
         [w + t, 0, -d / 2, t],
         [w + t, 0, d / 2, t],
@@ -161,15 +164,82 @@ function PlateDropGlow({ requirementId }: { requirementId: string }) {
   )
 }
 
+/** Invisible, pickable cover of a plate — the plate meshes themselves are not pickable */
+const HIT = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false })
+
+/** A click target over a plate: pointer cursor, and `onOpen` on a click (not while a box is dragged) */
+function PlateHit({ height, onOpen }: { height: number; onOpen: () => void }) {
+  return (
+    <mesh
+      position={[0, height / 2, 0]}
+      material={HIT}
+      onPointerOver={(e) => {
+        if (cargoDrag.key !== null) return
+        e.stopPropagation()
+        setCursor('pointer')
+      }}
+      onPointerOut={() => {
+        if (cargoDrag.key === null) setCursor('')
+      }}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (e.delta > 6 || cargoDrag.key !== null) return
+        onOpen()
+      }}
+    >
+      <boxGeometry args={[W + 0.24, height, D + 0.24]} />
+    </mesh>
+  )
+}
+
+/** Open the panel on the 요구사항 tab (D — #202) */
+function openRequirementsTab() {
+  const ui = useUi.getState()
+  ui.setPanelOpen(true)
+  ui.setTab('requirements')
+}
+
+/** Keeps a plate group at (x, z): the first time it is just there, later it glides over (a small hop) when its place changes */
+function useGlide(x: number, z: number) {
+  const ref = useRef<Group>(null)
+  /** Where the plate starts (so it is not at the origin before the first frame); later moves are the frame loop's */
+  const [initial] = useState<[number, number, number]>(() => [x, Y, z])
+  const from = useRef<{ x: number; z: number; t: number } | null>(null)
+  useFrame((_, delta) => {
+    const g = ref.current
+    if (!g) return
+    if (from.current === null) {
+      g.position.set(x, Y, z)
+      from.current = { x, z, t: 1 }
+      return
+    }
+    const f = from.current
+    if (Math.abs(g.position.x - x) > 1e-3 || Math.abs(g.position.z - z) > 1e-3) {
+      if (f.t >= 1) {
+        f.x = g.position.x
+        f.z = g.position.z
+        f.t = 0
+      }
+      f.t = Math.min(1, f.t + Math.min(delta, 0.1) / 0.6)
+      const u = f.t < 0.5 ? 2 * f.t * f.t : 1 - Math.pow(-2 * f.t + 2, 2) / 2
+      g.position.set(f.x + (x - f.x) * u, Y + Math.sin(Math.PI * f.t) * 0.9, f.z + (z - f.z) * u)
+      if (f.t >= 1) g.position.set(x, Y, z)
+    } else f.t = 1
+  })
+  return [ref, initial] as const
+}
+
 const RequirementPlate = memo(function RequirementPlate({ slot, requirement }: { slot: number; requirement: RequirementDto }) {
   const { x, z } = reqPlateCenter(slot)
+  const [plateRef, plateAt] = useGlide(x, z)
   const linked = requirement.linkedTaskCount
   const done = requirement.doneTaskCount
   const empty = linked === 0
   const full = linked > 0 && done >= linked
   const tag = plateTag(requirement)
   return (
-    <group position={[x, Y, z]} name={`requirement:${requirement.id}`}>
+    <group ref={plateRef} position={plateAt} name={`requirement:${requirement.id}`}>
+      <PlateHit height={0.4} onOpen={openRequirementsTab} />
       <Bx s={[W + 0.24, 0.1, D + 0.24]} p={[0, 0, 0]} c={lam(empty ? COLORS.trim : FRAME)} />
       <Bx s={[W, 0.12, D]} p={[0, 0.06, 0]} c={empty ? lam(PANEL_OFF) : lam(PANEL, { emissive: 0x0a1630 })} />
       <Cells lit={litCells(done, linked)} dead={empty} />
@@ -199,7 +269,9 @@ function OpenPlace({ slot }: { slot: number }) {
 function WaitingPlate({ slot, waiting, empty }: { slot: number; waiting: number; empty: number }) {
   const { x, z } = reqPlateCenter(slot)
   return (
-    <group position={[x, Y, z]}>
+    <group position={[x, Y, z]} name="requirement:waiting">
+      <PlateHit height={0.7} onOpen={() => useOffice.getState().openRequirementWaiting()} />
+      <PlateDropGlow requirementId="waiting" y={0.32} />
       {[0, 1, 2].map((i) => (
         // stacked straight up (a slight sideways lean only), so the stack stays inside its own place
         <group key={i} position={[i * 0.08, i * 0.16, 0]}>
