@@ -23,7 +23,12 @@ import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.BinaryOperator;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -178,6 +183,27 @@ public class HelpRequestService {
         return helpRequestRepository.findByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
                 .map(helpRequest -> HelpRequestSummary.of(helpRequest, now))
                 .toList();
+    }
+
+    /**
+     * 강사 요청함(CONTRACTS_API 「16」 · FR-LRN-23) 재료 — 여러 사무실의 "강사에게 요청"이 켜진 글을 사무실 · 요청자와 함께.
+     * 어느 사무실을 볼지(지금 지정된 사무실)는 부르는 쪽이 정한다.
+     */
+    @Transactional(readOnly = true)
+    public List<HelpRequest> listInstructorRequested(Collection<Long> workspaceIds) {
+        return workspaceIds.isEmpty() ? List.of()
+                : helpRequestRepository.findInstructorRequestedByWorkspaceIds(workspaceIds);
+    }
+
+    /** 도움 요청마다 첫 강사 답변 시각 — 강사 답변이 없는 글은 키가 없다. */
+    @Transactional(readOnly = true)
+    public Map<Long, Instant> firstInstructorAnswerAt(Collection<Long> helpRequestIds) {
+        if (helpRequestIds.isEmpty()) {
+            return Map.of();
+        }
+        return helpCommentRepository.findByHelpRequestIdInAndInstructorAnswerTrue(helpRequestIds).stream()
+                .collect(Collectors.toMap(comment -> comment.getHelpRequest().getId(), HelpComment::getCreatedAt,
+                        BinaryOperator.minBy(Comparator.naturalOrder())));
     }
 
     /**
