@@ -85,7 +85,7 @@
 | `ConventionLibraryItem` | 서버 | 대상, 이름, 내용, 설명, 작성 강사 → AppUser, 수정 시각 | 서버 전체에 하나 | FR-LIB |
 | `SyncState` | 사무실 | 진행 중 여부, 마지막 성공 시각, 마지막 실패 시각 · code · 사유, 마지막 명세 문서 읽기 경고 | Workspace 1–1 | FR-GH-05 · P4 |
 
-- 학습 타임라인 · 강사 요청함 · 막힘 · 진행률 · 팀 지표 · 요구사항 묶음 · 대표 담당자 · 도움 요청의 안건 후보 여부는 **저장하지 않고 계산한다** [확정 — 06 「화면에 보이지만 따로 저장하지 않는 값」].
+- 학습 타임라인 · 강사 요청함 · 막힘 · 진행률 · 팀 지표 · 요구사항 판 배치(대기 칸) · 대표 담당자 · 도움 요청의 안건 후보 여부는 **저장하지 않고 계산한다** [확정 — 06 「화면에 보이지만 따로 저장하지 않는 값」].
 
 ### ID 정책 (2026-11-03 결정 — Q1)
 
@@ -188,7 +188,7 @@ JSON의 열거 값은 소문자 snake다(코드 컨벤션 (BE) 「이름」). �
 **읽기**
 
 1. 명세 문서의 `##` 제목(정확히 2단계)을 위에서부터 읽는다. 순서가 `position`이다.
-2. 제목 맨 앞이 요구사항 ID 꼴(`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-[0-9]+`, 예: `FR-AUTH-01` · `NFR-04`)이면 그것이 **원본 ID(`sourceKey`)**다. 묶음 키(요구사항 종류)는 원본 ID에서 끝 번호를 뺀 접두사다 — 화면 계산(ARCHITECTURE.md 「요구사항 묶음 표시」).
+2. 제목 맨 앞이 요구사항 ID 꼴(`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*-[0-9]+`, 예: `FR-AUTH-01` · `NFR-04`)이면 그것이 **원본 ID(`sourceKey`)**다. 요구사항 종류(`groupKey` — 이름표 · 분류 · 정렬용, 묶음 기준 아님)는 원본 ID에서 끝 번호를 뺀 접두사다 — 화면 계산(ARCHITECTURE.md 「요구사항 묶음 표시」).
 3. **정규화 제목**: 제목에서 원본 ID와 바로 뒤의 구분 기호(공백 · `:` · `-` · `.`)를 빼고, 앞뒤 공백을 지우고, 연속 공백을 하나로 줄인 값. 응답의 `title`도 이 값이다.
 
 **매칭** — 같은 사무실의 기존 요구사항(상태 무관)과 맞춘다.
@@ -214,8 +214,8 @@ JSON의 열거 값은 소문자 snake다(코드 컨벤션 (BE) 「이름」). �
 
 - `needs_review`는 다음 재동기화에서 모호함이 풀리면 `active`(짝을 찾음) 또는 `missing`(못 찾음)으로 바뀐다. 문서를 고치면 풀린다 — 따로 승인 API는 없다.
 - **`RequirementLink`는 재동기화가 자동으로 지우지 않는다.** `missing` · `needs_review` 요구사항의 연결도 남고, 같은 요구사항이 다시 `active`가 되면 그대로 이어진다. 연결을 지우는 것은 레포 관리자의 `DELETE` 요청뿐이다.
-- 상태별 동작: `active`만 3D 요구사항 영역 · 묶음 · 진행률 · 새 연결 대상이 된다. `missing` · `needs_review`는 요구사항 패널에 상태와 함께 보이고(연결 보존 확인용), 새 연결 요청은 `conflict`다.
-- 진행률(FR-REQ-05) [구현 기본값]: 요구사항마다 `doneTaskCount / linkedTaskCount` — 연결된 이슈 중 닫힌 이슈 수(닫힘 사유 무관) / 연결된 이슈 수. 묶음 배지의 "완료 요구사항"은 연결 이슈가 1개 이상이고 모두 닫힌 요구사항이다.
+- 상태별 동작: `active`만 3D 요구사항 판 · 대기 칸 · 진행률 · 새 연결 대상이 된다. `missing` · `needs_review`는 요구사항 패널에 상태와 함께 보이고(연결 보존 확인용), 새 연결 요청은 `conflict`다.
+- 진행률(FR-REQ-05) [구현 기본값]: 요구사항마다 `doneTaskCount / linkedTaskCount` — 연결된 이슈 중 닫힌 이슈 수(닫힘 사유 무관) / 연결된 이슈 수.
 
 ### 평가 회차 [확정 → 계약]
 
@@ -451,16 +451,16 @@ type Change =
 ```ts
 type PlaceRole =
   | 'backlog' | `desk:${string}` | 'review' | 'done'      // desk:<memberId>
-  | 'meeting' | 'board' | `requirement:${string}`;        // requirement:<requirementId>
+  | 'meeting' | 'board' | `requirement:${string}`;        // requirement:<requirementId> · 대기 칸은 requirement:waiting(내부 ID는 숫자라 겹치지 않음)
 
 interface SceneEntity {
-  key: string;               // 종류를 붙인 화면 키 — 'task:42' · 'submission:42' · 'agenda:7' · 'member:3' · 'requirement:5' · 'requirement-group:FR-AUTH' · 'board'
+  key: string;               // 종류를 붙인 화면 키 — 'task:42' · 'submission:42' · 'agenda:7' · 'member:3' · 'requirement:5' · 'requirement-group:waiting' · 'board'
   kind: 'issue' | 'pr' | 'help' | 'learning' | 'other' | 'activity' | 'avatar' | 'requirement' | 'requirementGroup' | 'board';
-  refId: string | null;      // 가리키는 도메인 내부 ID (묶음 · 게시판은 null)
+  refId: string | null;      // 가리키는 도메인 내부 ID (대기 칸 · 게시판은 null)
   placeRole: PlaceRole;
-  badges: string[];          // 막힘 · 추천·비추천 수 · 묶음 개수 · Draft · 미병합 종료 · 시연 데이터 등
+  badges: string[];          // 막힘 · 추천·비추천 수 · 대기 칸 waiting:N · empty:k · Draft · 미병합 종료 · 시연 데이터 등
   highlight?: 'blocked' | 'recent' | 'dim' | 'focus';
-  groupKey?: string;         // 요구사항 묶음 — 요구사항 종류(원본 ID 접두사) [확정], 없으면 "미분류"
+  groupKey?: string;         // 요구사항 종류(원본 ID 접두사), 없으면 "미분류" — 이름표 · 분류 · 정렬용, 묶음 기준 아님
 }
 
 interface ThemeLayout {
@@ -470,11 +470,12 @@ interface ThemeLayout {
 }
 ```
 
-- SceneModel은 `WorkspaceSnapshot` → `SceneEntity[]`의 순수 함수다. 테마를 모른다. 내부 ID는 테이블마다 따로 매기므로 화면 키(`key`)에는 종류를 붙인다(「2」).
+- SceneModel은 `WorkspaceSnapshot`(과 요구사항 판 교환 결과) → `SceneEntity[]`의 순수 함수다. 테마를 모른다. 내부 ID는 테이블마다 따로 매기므로 화면 키(`key`)에는 종류를 붙인다(「2」).
 - 회의 공간의 안건 표현은 `kind`가 안건 종류(이슈 안건 → `issue` 모양)이고 `key`는 `agenda:<agendaItemId>`다. 원본 이슈 · PR의 SceneEntity는 따로 제자리에 있다.
-- 대표 담당자 = `task.assigneeMemberIds[0]`(「3」). 막힘 · 묶음 진행률 같은 도메인 값은 Snapshot의 서버 계산 값을 쓴다.
+- 대표 담당자 = `task.assigneeMemberIds[0]`(「3」). 막힘 · 진행률 같은 도메인 값은 Snapshot의 서버 계산 값을 쓴다.
 - ThemeLayout 구현은 기본 테마(우주정거장 — 확정 시안 `frontend/public/station/`, 2026-11-04) 하나다. 테마 엔진은 만들지 않는다 [확정].
-- 드롭 결과: `requirement:*` → `linkRequirement`(상자는 제자리), `meeting` → `createAgendaItem`(원본은 제자리), 그 밖은 아무 일도 없음 [확정 — 위치 규칙]. 묶음 오브젝트에 놓으면 HUD에서 요구사항을 하나 고른 뒤 `linkRequirement`.
+- 드롭 결과: `requirement:*` → `linkRequirement`(상자는 제자리), `meeting` → `createAgendaItem`(원본은 제자리), 그 밖은 아무 일도 없음 [확정 — 위치 규칙]. 단, 대기 칸(`requirement:waiting`)에 놓으면 대기 목록에서 요구사항을 하나 고른 뒤 `linkRequirement`. 요구사항이 없는 빈 판은 드롭 구역이 아니다(`dropZoneAt` → `null`, 드롭 빛 없음) [2026-11-06 결정].
+- 요구사항 판 배치 [2026-11-06 결정]: 판 수 · 기본 순서 · 대기 칸 · 교환은 「10」과 ARCHITECTURE.md 「요구사항 묶음 표시」를 따른다. 대기 칸 교환 결과(판에 올린 요구사항 ID 목록, `string[] | null`)는 사무실별로 보는 사람의 브라우저에만 둔다 — 서버 저장 · API 없음. 스토어가 내주고 SceneModel이 입력으로 받는다. 보는 사람마다 배치가 다를 수 있다.
 
 ## 9. 계약 변경 절차 [계약]
 
@@ -583,7 +584,7 @@ interface ThemeLayout {
 | 강사 수동 동기화 | 허용하지 않음 | 「4」 |
 | 전체 관리자(ROLE-03) | 전용 화면 · API 없음, 추가 데이터 접근 없음 — 최소 권한부터 | 「4」 |
 | 우리 조 계정의 시연 사무실 역할 | 우리 조 실제 사무실의 역할을 따름 | 「2」 시연 사무실 접근 대상 |
-| 요구사항 묶음 전환 개수 · 시각 효과 | ARCHITECTURE.md 「요구사항 묶음 표시」의 상수 예시로 시작 | SceneModel |
+| 요구사항 판 수 · 대기 칸 · 시각 효과 | 판 최소 5 · 최대 10, 11개 이상이면 표기용 9 + 대기 칸 1. 기본 순서 `position`. 교환 결과를 버리는 때(교환한 요구사항이 `missing` · `needs_review`, active 10개 이하, 저장소를 읽지 못함) — ARCHITECTURE.md 「요구사항 묶음 표시」(2026-11-06 결정). 숫자는 SceneModel 상수 한 곳 | SceneModel |
 | 글자 수 한도 | CONTRACTS_API.md 각 요청 DTO에 적은 값 | CONTRACTS_API.md |
 
 ### 남은 결정
