@@ -7,7 +7,7 @@ import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
-import { SETTINGS_MSG, addLocalDays, isLocalDate, openWorkspaceError, settingsError } from '../../rules/period'
+import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
@@ -714,7 +714,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       await wait()
       const user = requireUser()
       const ws = accessible(workspaceId, user)
-      const error = standupSaveError(date, request, now())
+      const error = standupSaveError(date, request, kstToday(now()))
       if (error) throw new DataError(error, 'invalid')
       const me = currentMember(ws, user)!.id
       ws.standups ??= []
