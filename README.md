@@ -144,7 +144,7 @@ macOS · Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 씁니다.
 - 개발 중에 읽는 곳: [`docs/CONTRACTS.md`](docs/CONTRACTS.md)(도메인 · ID · 에러 · 보안 · 계약 테스트) · [`docs/CONTRACTS_API.md`](docs/CONTRACTS_API.md)(엔드포인트 · DTO)
   - 기획 저장소 커밋 `796fc25`의 두 파일을 **2026-11-03에 그대로 옮겼습니다**(본문 변경 없음, 맨 위에 출처 안내만 추가).
   - 본문에 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md · 코드 컨벤션 (BE) 등)의 고정 링크는 [`docs/README.md`](docs/README.md)에 있습니다.
-- `contract/examples/`의 JSON은 CONTRACTS_API.md의 예시를 **글자 그대로** 옮긴 것입니다.
+- `contract/examples/`의 JSON은 CONTRACTS_API.md의 예시를 옮겨 시작했고, 문서에 예시가 없는 DTO는 계약 타입대로 새로 만들었습니다. 기준은 계약 문서의 타입이고, 예시 JSON · Java DTO · TS 사본은 계약 테스트(CONTRACTS.md 「9」)가 서로 맞춥니다.
 - PR 본문에 기준 계약 커밋을 적습니다.
 
 ### 기준 위치 — GRAVIT (2026-11-03 전환)
@@ -268,29 +268,35 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 **우주정거장으로 확정했습니다**(2026-11-04, #76 · #77). v1 테마는 이것 하나입니다.
 
 - 확정 시안은 `frontend/public/station/`의 정적 데모(three r150 · GLB 아바타)입니다. `npm run dev` 뒤 `http://localhost:5173/station/index.html`에서 4개 화면(`#/` · `#/blocked` · `#/meeting` · `#/pr/21`)을 볼 수 있습니다. 시안은 디자인 참조용이라 원본 파일은 고치지 않습니다.
-- 실제 서비스 화면은 이 시안을 기준으로 기존 React · R3F 구조에 다시 구현합니다(C: SceneModel · ThemeLayout · R3F, D: HUD · DataSource). 구조는 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링` 그대로입니다. **지금 3D 화면은 아직 옛 사무실**입니다.
+- 실제 서비스 화면은 이 시안을 기준으로 기존 React · R3F 구조에 다시 구현합니다(C: SceneModel · ThemeLayout · R3F, D: HUD · DataSource). 구조는 `도메인 데이터 → SceneModel → ThemeLayout → R3F 렌더링` 그대로입니다. 정거장 좌표 · 드롭 구역은 `frontend/src/theme/station/`에 있습니다.
 - 보이는 모양은 시안을, 데이터 · 상태값 · API · 권한은 공통 계약을 따릅니다. 시안의 `data.js` 목업과 클린/스멜 표시, 앱이 찾은 이슈 안건 후보는 계약이 아닙니다.
 - 작업 포드는 최대 8개입니다 — 기본 4개는 늘 보이고, 확장 4개는 그 자리를 쓰는 팀원이 있을 때만 보입니다(`docs/CONTRACTS.md` 「10」).
 
 ## 현재 상태
 
+2026-11-06 기준. 실제 GitHub 레포(`SamdoRyu/gravit-rehearsal-1`)로 로그인 → 사무실 열기 → 동기화 → 화면까지 리허설을 마쳤습니다.
+
 ### 된 것
 
-- 모노레포 구조(`frontend/` · `backend/` · `contract/examples/` · `compose.yaml` · `.env.example`)
-- 기존 3D 데모 화면 · 카메라 · 드래그 · HUD · mock DataSource 이전 (Hono 서버 제거)
-- Vite `/api` 프록시 → Spring `:8080`
-- Spring Boot ↔ MySQL(compose) 연결, Flyway 기본 동작
-- 계약 예시 JSON 6개(에러 · `/api/me` · Snapshot · 평가 요청 · 안건 생성 요청 · 타임라인)
-- 공통 계약 문서 이전(`docs/`) · 기준 위치 전환(2026-11-03 — 확인: `docs/README.md`), 이슈 · PR 템플릿, CI(프론트 · 백엔드), Claude Code 규칙 · `CLAUDE.md`
-- 백엔드 공통 기반(#74): Spring Security 기본 거부 · 서버 세션 · CSRF(`XSRF-TOKEN` → `X-XSRF-TOKEN`) · 401 JSON · 쓰기 Origin 검사, 공통 에러 응답 · 전역 예외 처리, 내부 ID 문자열 ↔ `Long` 변환, 인가 서비스(로그인 → 사무실 접근 → 역할), `GET /api/health`
-- 공통 스키마(#80): Flyway `V1`(기본 테이블) · `V2`(기능 테이블), 패키지별 Entity · Repository, 백엔드 계약 테스트 ① · ②의 틀
-- 라벨(`.github/labels.yml`) · CODEOWNERS · `main` 보호 규칙(승인 1명 · CI 2개 필수)
+- 모노레포 구조(`frontend/` · `backend/` · `contract/examples/` · `compose.yaml` · `.env.example`), Vite `/api` 프록시 → Spring `:8080`
+- 백엔드 공통 기반(#74): Spring Security 기본 거부 · 서버 세션 · CSRF(`XSRF-TOKEN` → `X-XSRF-TOKEN`) · 401 JSON · 쓰기 Origin 검사, 공통 에러 응답 · 전역 예외 처리, 내부 ID 문자열 ↔ `Long` 변환, 인가 서비스(로그인 → 사무실 접근 → 역할)
+- 스키마: Flyway `V1` ~ `V4`(기본 · 기능 · 도움 요청 테이블, 작업 포드 8개), 패키지별 Entity · Repository
+- 백엔드 v1 API(`docs/CONTRACTS_API.md`):
+  - 로그인: GitHub 로그인(GitHub App OAuth), 보안 심사용 ID/PW 로그인(기본 꺼짐)
+  - 사무실: 레포 고르기 · 사무실 열기, Snapshot, SSE 알림, 팀 설정
+  - GitHub 동기화: 읽기 전용, 5분 폴링 + 수동 동기화. 자동 폴링은 명세 문서를 읽지 않는다
+  - 기능: PR 익명 평가, 회의 · 안건 · 스탠드업, 도움 요청, 작업 마감, 요구사항 연결, 회고 리포트 · 학습 타임라인 · 기술 결정 카드, 활동 기록 · 수집 동의
+  - 강사: 지정, 요청함, 컨벤션 라이브러리
+- 프론트(`frontend/`):
+  - 진입 화면: 로그인 · 사무실 고르기 · 사무실 열기
+  - 우주정거장 3D(R3F · SceneModel · ThemeLayout), 상단 바 · 관리 패널 · 대화상자 HUD
+  - v1 DataSource 두 구현: 브라우저 mock이 기본, `?source=api`는 Spring
+- 계약 예시 JSON(`contract/examples/`)과 계약 테스트 ① · ②(Java) · ③ · ④(TS), Playwright E2E(로컬)
+- 공통 계약 문서(`docs/` — 기준 위치 `docs/README.md`), 이슈 · PR 템플릿, CI(프론트 · 백엔드), 라벨 · CODEOWNERS · `main` 보호 규칙(승인 1명 · CI 2개 필수), Claude Code 규칙 · `CLAUDE.md`
 - 확정 디자인 시안(#77): `frontend/public/station/`
 
 ### 아직 없는 것
 
-- GitHub 로그인(OAuth2) · 심사용 로그인, `/api/me` 등 v1 도메인 API 전부(지금 Controller는 `/api/health`뿐)
-- 도움 요청 테이블(`help_*` — #47에서 추가), 동기화 · GitHub 어댑터
-- 프론트 v1 화면 타입 · mock · 계약 테스트 ③ · ④(#75 진행 중), `DataSource(api)`의 Spring v1 API 연결
-- 확정 시안(우주정거장)의 R3F 반영 · SceneModel · ThemeLayout 분리 — 지금 3D 화면은 아직 옛 사무실
+- 사무실 3D 활동 메모지(#173 — C): 확인된 활동이 Snapshot `activityNotes`로 오지만 3D에는 아직 안 보인다. 동료 피드백(FR-ACT-04)은 v1 보류
+- 기본 데이터 소스 전환: 지금은 주소에 `?source=api`가 있어야 서버를 쓴다
 - 배포 설정, CI의 E2E
