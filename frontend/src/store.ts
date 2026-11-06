@@ -6,6 +6,8 @@ import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
+import { withProgress } from './data/rules/requirements'
+import type { RequirementLinkDto } from './data/types'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
 /** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
@@ -53,6 +55,13 @@ export interface OfficeView {
 /** 'changed' 알림을 이만큼 모아서 Snapshot을 한 번 다시 읽는다 (CONTRACTS_API.md 「6」 "짧게 모아서") */
 export const OFFICE_RELOAD_DELAY_MS = 300
 
+/** 요구사항 연결을 바꾸고 진행 수를 같은 규칙으로 다시 센다 */
+const withLinks = (snap: WorkspaceSnapshot, requirementLinks: RequirementLinkDto[]): WorkspaceSnapshot => ({
+  ...snap,
+  requirementLinks,
+  requirements: withProgress(snap.requirements, requirementLinks, snap.tasks),
+})
+
 interface OfficeState {
   /** Link state for remote sources (null for local ones). */
   connection: ConnectionStatus | null
@@ -96,6 +105,14 @@ interface OfficeState {
   setTaskDueDate: (taskId: Id, dueDate: LocalDate) => Promise<boolean>
   /** DELETE W/tasks/{id}/due-date */
   clearTaskDueDate: (taskId: Id) => Promise<boolean>
+
+  // ---- 요구사항 연결 (#197 — 「8」, R2만). 3D 판 · 대기 목록에 이슈를 놓으면 부른다. 위와 같이 실패하면 알림 후 null(false) ----
+  // 성공하면 snapshot.requirementLinks와 요구사항 진행 수(linkedTaskCount · doneTaskCount)를 같은 규칙(rules/requirements)으로 바로 고친다.
+  // 서버의 changed(requirements) 알림이 오면 Snapshot을 다시 읽어 서버 값으로 맞춘다.
+  /** POST W/requirement-links — 새 연결이든 이미 있던 연결이든 그 연결을 돌려준다 */
+  linkRequirement: (requirementId: Id, taskId: Id) => Promise<RequirementLinkDto | null>
+  /** DELETE W/requirement-links/{linkId} */
+  unlinkRequirement: (linkId: Id) => Promise<boolean>
 
   // ---- 도움 요청 (#183 — 「11」). 목록은 Snapshot의 helpRequests. 위와 같이 실패하면 알림 후 null ----
   /** GET W/help-requests/{id} — 상세(코멘트 포함) */
@@ -389,6 +406,23 @@ export const useOffice = create<OfficeState>((set, get) => {
           return true as const
         },
         (snap) => ({ ...snap, tasks: snap.tasks.map((t) => (t.id === taskId ? { ...t, dueDate: null } : t)) }),
+      )) !== null,
+
+    linkRequirement: (requirementId, taskId) =>
+      officeWrite(
+        (src, ws) => src.linkRequirement(ws, { requirementId, taskId }),
+        (snap, link) => withLinks(snap, upsert(snap.requirementLinks, link)),
+      ),
+    unlinkRequirement: async (linkId) =>
+      (await officeWrite(
+        async (src, ws) => {
+          await src.unlinkRequirement(ws, linkId)
+          return true as const
+        },
+        (snap) => withLinks(
+          snap,
+          snap.requirementLinks.filter((l) => l.id !== linkId),
+        ),
       )) !== null,
 
     // ---- 도움 요청 (#183) — 응답을 바로 반영하고, 서버의 changed(help_requests) 알림으로 다시 읽는다 ----

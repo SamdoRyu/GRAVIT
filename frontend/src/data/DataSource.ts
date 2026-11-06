@@ -10,6 +10,8 @@ import type {
   StartMeetingRequest,
   TaskDueDateDto,
   TaskDueDateRequest,
+  RequirementLinkCreateRequest,
+  RequirementLinkDto,
   DemoChange,
   ErrorCode,
   EvaluateRequest,
@@ -141,6 +143,15 @@ export interface DataSource {
   getStandupPrefill(workspaceId: Id, date: LocalDate): Promise<StandupPrefill>
   /** PUT W/standups/{date}/mine — 있으면 고치고 없으면 만든다. 오늘 뒤 날짜 · 2000자 초과 invalid, 강사 forbidden_role */
   saveMyStandup(workspaceId: Id, date: LocalDate, request: StandupSaveRequest): Promise<StandupDto>
+
+  // ---- 「8」 요구사항 연결 (#197 — 요구사항 목록 · 연결은 Snapshot의 requirements · requirementLinks) ----
+  /**
+   * POST W/requirement-links — 201 새 연결, 같은 연결이 이미 있으면 200과 기존 연결(요구사항 상태와 상관없이).
+   * R2만(forbidden_role), 요구사항 · 이슈가 없거나 다른 사무실 것 not_found, 요구사항이 active가 아님 conflict
+   */
+  linkRequirement(workspaceId: Id, request: RequirementLinkCreateRequest): Promise<RequirementLinkDto>
+  /** DELETE W/requirement-links/{linkId} — 204. R2만(forbidden_role) */
+  unlinkRequirement(workspaceId: Id, linkId: Id): Promise<void>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

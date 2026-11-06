@@ -9,6 +9,7 @@ import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
+import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
@@ -194,7 +195,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       members: s.members,
       tasks: s.tasks,
       submissions: s.submissions,
-      requirements: s.requirements,
+      // 진행 수는 연결 · 이슈 상태로 응답 때 계산한다(FR-REQ-05 — 서버와 같은 규칙, rules/requirements.ts)
+      requirements: withProgress(s.requirements, s.requirementLinks, s.tasks),
       requirementLinks: s.requirementLinks,
       agendaItems: s.agendaItems,
       meetings: s.meetings,
@@ -732,6 +734,42 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       save()
       emit(workspaceId, { type: 'changed', resources: ['standups'] })
       return structuredClone(standup)
+    },
+
+    // ---- 「8」 요구사항 연결 — R2만 (#197) ----
+
+    async linkRequirement(workspaceId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(REQUIREMENT_MSG.notAdmin, 'forbidden_role')
+      const error = linkRequestError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const s = ws.snapshot
+      const requirement = s.requirements.find((r) => r.id === request.requirementId)
+      if (!requirement || !s.tasks.some((t) => t.id === request.taskId)) throw new DataError(REQUIREMENT_MSG.notFound, 'not_found')
+      // 같은 연결이 이미 있으면 요구사항 상태와 상관없이 200과 기존 연결(새 연결이 아니라 409에 해당하지 않음)
+      const existing = existingLink(s.requirementLinks, request)
+      if (existing) return structuredClone(existing)
+      if (requirement.status !== 'active') throw new DataError(REQUIREMENT_MSG.notActive, 'conflict')
+      const link = { id: nextId('rl'), requirementId: requirement.id, taskId: request.taskId, linkedAt: toInstant(now()) }
+      s.requirementLinks.push(link)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['requirements'] })
+      return structuredClone(link)
+    },
+
+    async unlinkRequirement(workspaceId, linkId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(REQUIREMENT_MSG.notAdmin, 'forbidden_role')
+      const s = ws.snapshot
+      const at = s.requirementLinks.findIndex((l) => l.id === linkId)
+      if (at < 0) throw new DataError(REQUIREMENT_MSG.linkNotFound, 'not_found')
+      s.requirementLinks.splice(at, 1)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['requirements'] })
     },
 
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----

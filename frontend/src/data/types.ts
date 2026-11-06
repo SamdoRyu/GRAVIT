@@ -283,7 +283,7 @@ export interface GithubReviewDto {
 
 export interface RequirementDto {
   id: Id
-  /** ## 제목의 요구사항 ID (예: "FR-AUTH-01"). 묶음 키는 화면이 여기서 계산 */
+  /** ## 제목의 원본 ID (예: "FR-AUTH-01"). 없으면 null — 화면은 제목만 보인다. 판 배치 · 순서는 position (2026-11-06 — #194) */
   sourceKey: string | null
   /** 원본 ID를 뺀 정규화 제목 */
   title: string
@@ -301,6 +301,11 @@ export interface RequirementLinkDto {
   requirementId: Id
   taskId: Id
   linkedAt: Instant
+}
+/** `POST W/requirement-links` (CONTRACTS_API.md 「8」) */
+export interface RequirementLinkCreateRequest {
+  requirementId: Id
+  taskId: Id
 }
 
 /** 팀 단위 계산 값 — 사람별 합계 · 순위 없음 (P6) */

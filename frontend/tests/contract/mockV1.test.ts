@@ -168,7 +168,8 @@ describe('mock v1 — Snapshot', () => {
     const snap = await make('github').load(TEAM_WS)
     assert.ok(snap.members.length > 0 && snap.tasks.length > 0 && snap.submissions.length > 0)
     assert.ok(snap.helpRequests.length > 0, '도움 요청 seed (#183 — help.test.ts)')
-    for (const key of ['requirements', 'requirementLinks', 'agendaItems', 'meetings', 'activityNotes'] as const) {
+    assert.ok(snap.requirements.length > 0 && snap.requirementLinks.length > 0, '요구사항 seed (#197 — requirements.test.ts)')
+    for (const key of ['agendaItems', 'meetings', 'activityNotes'] as const) {
       assert.deepEqual(snap[key], [], key)
     }
   })

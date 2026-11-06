@@ -144,6 +144,12 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/standups\?date=[^&]+$/.test(path)) return sendJson(res, 200, [standupExample])
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/standups\/[^/]+\/mine\/prefill$/.test(path)) return sendJson(res, 200, standupPrefillExample)
     if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/standups\/[^/]+\/mine$/.test(path)) return sendJson(res, 200, { ...standupExample, ...(JSON.parse(r.body) as object) })
+    // 「8」 요구사항 연결 (#197)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
+    if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
+      res.writeHead(204)
+      return res.end()
+    }
     if (/^\/api\/workspaces\/[^/]+\/tasks\/[^/]+\/due-date$/.test(path)) {
       if (r.method === 'PUT') return sendJson(res, 200, { taskId: '7', dueDate: (JSON.parse(r.body) as { dueDate: string }).dueDate, updatedAt: '2026-11-05T03:10:00Z', updatedBy: meResponseExample.user })
       if (r.method === 'DELETE') {
@@ -330,6 +336,22 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.startMeeting('3', { attendeeMemberIds: [] }), 'conflict', '이미 진행 중인 회의가 있어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요'))
     await rejectsWith(api.clearDueDate('3', '7'), 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요')
+  })
+
+  it('요구사항 연결 — POST 본문 · DELETE 204, 경로 · CSRF, 403 · 409를 그대로 (#197)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.deepEqual(await api.linkRequirement('3', { requirementId: '5', taskId: '41' }), { id: '30', requirementId: '5', taskId: '41', linkedAt: '2026-11-05T02:30:00Z' })
+    assert.equal(await api.unlinkRequirement('3', '30'), undefined)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      ['POST /api/workspaces/3/requirement-links tok-1 {"requirementId":"5","taskId":"41"}', 'DELETE /api/workspaces/3/requirement-links/30 tok-1 -'],
+    )
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '지금 명세 문서에 없는 요구사항이라 새로 연결할 수 없어요'))
+    await rejectsWith(api.linkRequirement('3', { requirementId: '6', taskId: '41' }), 'conflict', '지금 명세 문서에 없는 요구사항이라 새로 연결할 수 없어요')
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '요구사항 연결은 레포 관리자만 바꿀 수 있어요'))
+    await rejectsWith(api.unlinkRequirement('3', '30'), 'forbidden_role', '요구사항 연결은 레포 관리자만 바꿀 수 있어요')
   })
 
   it('도움 요청 — 읽기는 CSRF 없이 GET, 쓰기 5개는 경로 · CSRF · JSON 본문, 403 · 409를 그대로 (#183)', async () => {
