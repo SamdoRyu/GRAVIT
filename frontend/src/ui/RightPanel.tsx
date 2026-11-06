@@ -1,7 +1,6 @@
 // Right rail: detail drawer on top, management panel (tabs + search + body) below. OWNER: D.
 // 칸반 · 목록은 v1 이슈 · PR만 보인다(데모 작업 칸반 · 필터는 뺐다 — #102 T5-c-2).
 import { useOffice } from '../store'
-import { DetailDrawer } from './Detail'
 import { HelpPanel } from './HelpBoard'
 import { StandupPanel } from './StandupBoard'
 import { Icon } from './icons'
@@ -78,7 +77,6 @@ export function Rail() {
   const panelOpen = useUi((s) => s.panelOpen)
   return (
     <div className="rail">
-      <DetailDrawer />
       <OfficeDetailDrawer />
       {panelOpen ? (
         <Panel />

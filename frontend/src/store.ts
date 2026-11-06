@@ -1,10 +1,10 @@
-// App state + actions. Owned by the architect.
-// Entities mirror the DemoDataSource; every mutation goes through an action here
-// (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
+// App state + actions. OWNER: D.
+// 사무실 데이터는 v1 WorkspaceSnapshot(office)이 전부다 — 쓰기는 v1 DataSource 액션이 보내고 응답을 snapshot에 반영한다.
+// 데모 모델(DemoDataSource의 작업 · 팀원 · 회의 칸과 액션)은 #102 ④에서 걷어냈다. 남은 view state(selection · hover · focus · drag)는
+// 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
 import { create } from 'zustand'
-import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
-import { EMPTY_FILTERS, type Filters } from './data/selectors'
+import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -19,16 +19,7 @@ export function aliveInOffice(snapshot: WorkspaceSnapshot, sel: OfficeSelection 
   const list = sel.kind === 'task' ? snapshot.tasks : sel.kind === 'submission' ? snapshot.submissions : snapshot.members
   return list.some((x) => x.id === sel.id) ? sel : null
 }
-/** 3D 오버레이. 사람별 업무량 오버레이는 v1에서 뺐다(FR-FLOW-06 — #102 T5-c-2) */
-export type Overlay = 'none' | 'deadline' | 'project'
-export type PanelView = 'kanban' | 'list'
-
 export type Dialog =
-  | { kind: 'task'; taskId?: Id; defaults?: Partial<TaskInput> }
-  | { kind: 'member'; memberId?: Id }
-  | { kind: 'removeMember'; memberId: Id }
-  | { kind: 'deleteTask'; taskId: Id }
-  | { kind: 'confirmReset' }
   | { kind: 'startMeeting' }
   | { kind: 'endMeeting'; meetingId: Id }
   /** v1 사무실의 프로젝트 기간 (#38 — FR-PLAN-01, R2만) */
@@ -72,22 +63,9 @@ const withLinks = (snap: WorkspaceSnapshot, requirementLinks: RequirementLinkDto
 })
 
 interface OfficeState {
-  // ---- data (mirrors the DemoDataSource) ----
-  status: 'idle' | 'loading' | 'ready' | 'error'
-  sourceLabel: string
-  canDemo: boolean
-  canReset: boolean
   /** Link state for remote sources (null for local ones). */
   connection: ConnectionStatus | null
-  projects: Record<Id, Project>
-  members: Record<Id, Member>
-  tasks: Record<Id, Task>
-  /** Ongoing meeting (if any) + recent ended ones. Use ongoingMeeting() to find the live one. */
-  meetings: Record<Id, Meeting>
-  /** Newest last, capped at 100. */
-  activity: Activity[]
-
-  // ---- v1 사무실 (WorkspaceSnapshot) — 위 데모 칸과 따로 둔다. 화면이 v1으로 옮겨 가면 데모 칸을 지운다 ----
+  // ---- v1 사무실 (WorkspaceSnapshot) ----
   /** 지금 연 사무실. null = 열지 않음 */
   office: OfficeView | null
   /**
@@ -113,7 +91,6 @@ interface OfficeState {
   // ---- 회의 · 안건 · 작업 마감 (#102 T5-c-2 — C의 회의 대화상자 · 일정판이 부른다) ----
   // 모두: 사무실이 없으면 보내지 않고 null(false). 성공하면 응답을 snapshot에 바로 반영하고 결과를 돌려준다.
   // 실패하면 사유를 알림으로 보이고 null(false). conflict(이미 진행 중 · 이미 결정됨 등)면 Snapshot을 다시 읽는다.
-  // 이름이 데모 액션(startMeeting · endMeeting · setAgenda …)과 겹치지 않게 했다 — 데모 코드를 지울 때 정리한다.
   /** POST W/meetings — 참석자는 비어도 됨 */
   startOfficeMeeting: (attendeeMemberIds: Id[]) => Promise<MeetingDto | null>
   /** POST W/meetings/{id}/end — 회의록 0~5000자(null 가능) */
@@ -160,7 +137,7 @@ interface OfficeState {
   saveMyStandup: (date: LocalDate, request: StandupSaveRequest) => Promise<StandupDto | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
-   * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
+   * selection(3D가 아직 읽는 옛 선택 칸)과 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
    */
   officeSelection: OfficeSelection | null
   selectInOffice: (s: OfficeSelection | null) => void
@@ -171,21 +148,12 @@ interface OfficeState {
   /** Hovered thing in either the 3D view or the panel; both highlight it. */
   hover: Selection | null
   setHover: (s: Selection | null) => void
-  filters: Filters
-  setFilters: (patch: Partial<Filters>) => void
-  clearFilters: () => void
-  overlay: Overlay
-  setOverlay: (o: Overlay) => void
-  panelView: PanelView
-  setPanelView: (v: PanelView) => void
   dialog: Dialog | null
   openDialog: (d: Dialog | null) => void
   /** Camera fly-to request. Scene resolves the target's position, then clears it. */
   focus: { target: Selection; key: number } | null
   focusOn: (target: Selection) => void
   clearFocus: () => void
-  demoMode: boolean
-  setDemoMode: (on: boolean) => void
 
   // ---- drag & drop (3D ↔ panel) ----
   drag: { taskId: Id; from: 'scene' | 'panel' } | null
@@ -207,34 +175,8 @@ interface OfficeState {
   viewInsets: { top: number; right: number; bottom: number; left: number }
   setViewInsets: (v: OfficeState['viewInsets']) => void
 
-  // ---- actions ----
-  // Mutations resolve to true on success, false on failure (a toast was already shown).
-  init: (source: DemoDataSource) => Promise<void>
-  createTask: (input: TaskInput) => Promise<Task | null>
-  updateTask: (id: Id, patch: TaskPatch) => Promise<boolean>
-  deleteTask: (id: Id) => Promise<boolean>
-  /** Assign to a member (top of their stack) or null (back to the backlog shelf). */
-  assignTask: (taskId: Id, memberId: Id | null) => Promise<boolean>
-  moveTask: (taskId: Id, status: TaskStatus) => Promise<boolean>
-  createMember: (input: MemberInput) => Promise<Member | null>
-  updateMember: (id: Id, patch: MemberPatch) => Promise<boolean>
-  deleteMember: (id: Id, reassign: Reassign) => Promise<boolean>
-  /** Only available when canReset. */
-  resetData: () => Promise<boolean>
-  /** Put a task on / take it off the next meeting's agenda. */
-  setAgenda: (taskId: Id, on: boolean) => Promise<boolean>
-  startMeeting: (input: MeetingStart) => Promise<Meeting | null>
-  endMeeting: (id: Id, result: MeetingEnd) => Promise<boolean>
 }
 
-/** The meeting currently in progress, if any. */
-export function ongoingMeeting(meetings: Record<Id, Meeting>): Meeting | null {
-  for (const m of Object.values(meetings)) if (m.status === 'ongoing') return m
-  return null
-}
-
-let source: DemoDataSource | null = null
-let unsubscribe: (() => void) | null = null
 let toastSeq = 1
 
 // v1 사무실 연결. officeGen은 사무실을 열고 닫을 때마다 늘어서, 그 전 사무실의 늦은 응답 · 알림을 버린다.
@@ -249,84 +191,12 @@ let officeLoadPending = false
 /** 마지막 읽기 중에 온 sync 알림 — 응답 위에 다시 얹는다(알림이 그 응답보다 새 값이라고 본다) */
 let syncDuringLoad: SyncStatus | null = null
 
-const DEMO_PREF_KEY = 'office-dashboard:demo'
-const readPref = (k: string) => {
-  try {
-    return localStorage.getItem(k)
-  } catch {
-    return null
-  }
-}
-const writePref = (k: string, v: string) => {
-  try {
-    localStorage.setItem(k, v)
-  } catch {
-    // Private mode / blocked storage: the preference just isn't remembered.
-  }
-}
-
-/** Patch that moves a task to the top of `memberId`'s stack (or the backlog shelf for null). */
-function assignPatch(tasks: Record<Id, Task>, t: Task, memberId: Id | null): TaskPatch {
-  const top = Math.max(0, ...Object.values(tasks).filter((x) => x.assigneeId === memberId).map((x) => x.order)) + 1
-  const patch: TaskPatch = { assigneeId: memberId, order: top }
-  if (memberId === null && (t.status === 'in_progress' || t.status === 'review')) patch.status = 'todo'
-  return patch
-}
-
 /** id가 같은 것을 바꾸고, 없으면 뒤에 붙인다 */
 const upsert = <T extends { id: Id }>(list: readonly T[], item: T): T[] => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item])
-const byId = <T extends { id: Id }>(list: T[]) => Object.fromEntries(list.map((x) => [x.id, x])) as Record<Id, T>
-const isNotFound = (e: unknown) => e instanceof DataError && e.code === 'not_found'
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '요청을 처리하지 못했어요')
-const without = <T>(rec: Record<Id, T>, id: Id) => {
-  const next = { ...rec }
-  delete next[id]
-  return next
-}
 
 export const useOffice = create<OfficeState>((set, get) => {
   const fail = (e: unknown) => get().toast('bad', errText(e))
-
-  const apply = (c: DemoChange) => {
-    const s = get()
-    switch (c.type) {
-      case 'task_upsert':
-        set({ tasks: { ...s.tasks, [c.task.id]: c.task } })
-        break
-      case 'task_delete':
-        if (s.tasks[c.id]) set({ tasks: without(s.tasks, c.id) })
-        if (s.selection?.kind === 'task' && s.selection.id === c.id) set({ selection: null })
-        break
-      case 'member_upsert':
-        set({ members: { ...s.members, [c.member.id]: c.member } })
-        break
-      case 'member_delete':
-        if (s.members[c.id]) set({ members: without(s.members, c.id) })
-        if (s.selection?.kind === 'member' && s.selection.id === c.id) set({ selection: null })
-        if (s.filters.assigneeIds.includes(c.id)) {
-          set({ filters: { ...s.filters, assigneeIds: s.filters.assigneeIds.filter((x) => x !== c.id) } })
-        }
-        break
-      case 'project_upsert':
-        set({ projects: { ...s.projects, [c.project.id]: c.project } })
-        break
-      case 'meeting_upsert':
-        set({ meetings: { ...s.meetings, [c.meeting.id]: c.meeting } })
-        break
-      case 'activity':
-        if (!s.activity.some((a) => a.id === c.activity.id)) set({ activity: [...s.activity, c.activity].slice(-100) })
-        break
-      case 'snapshot':
-        replaceWorkspace(c.workspace)
-        break
-      case 'connection':
-        set({ connection: c.status })
-        break
-      case 'demo':
-        set({ demoMode: c.on })
-        break
-    }
-  }
 
   // ---- v1 사무실 ----
 
@@ -423,35 +293,8 @@ export const useOffice = create<OfficeState>((set, get) => {
     }
   }
 
-  /** Swap in a whole workspace, dropping view state that points at things that no longer exist. */
-  const replaceWorkspace = (ws: Workspace) => {
-    const members = byId(ws.members)
-    const tasks = byId(ws.tasks)
-    const s = get()
-    const alive = (x: Selection | null) => (x && (x.kind === 'task' ? tasks[x.id] : members[x.id]) ? x : null)
-    set({
-      projects: byId(ws.projects),
-      members,
-      tasks,
-      meetings: byId(ws.meetings ?? []),
-      activity: ws.activity.slice(-100),
-      selection: alive(s.selection),
-      hover: alive(s.hover),
-      filters: { ...s.filters, assigneeIds: s.filters.assigneeIds.filter((id) => id === 'unassigned' || members[id]) },
-    })
-  }
-
   return {
-    status: 'idle',
-    sourceLabel: '',
-    canDemo: false,
-    canReset: false,
     connection: null,
-    projects: {},
-    members: {},
-    tasks: {},
-    meetings: {},
-    activity: [],
 
     office: null,
     openOffice: async (src, workspaceId) => {
@@ -624,7 +467,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       ),
 
     selection: null,
-    // 데모 쪽을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
+    // 옛 선택 칸을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
     select: (selection) => set(selection ? { selection, officeSelection: null } : { selection }),
     hover: null,
     setHover: (hover) => {
@@ -632,34 +475,11 @@ export const useOffice = create<OfficeState>((set, get) => {
       if (cur === hover || (cur && hover && cur.kind === hover.kind && cur.id === hover.id)) return
       set({ hover })
     },
-    filters: EMPTY_FILTERS,
-    setFilters: (patch) => set({ filters: { ...get().filters, ...patch } }),
-    clearFilters: () => set({ filters: EMPTY_FILTERS }),
-    overlay: 'none',
-    setOverlay: (overlay) => set({ overlay }),
-    panelView: 'kanban',
-    setPanelView: (panelView) => set({ panelView }),
     dialog: null,
     openDialog: (dialog) => set({ dialog }),
     focus: null,
     focusOn: (target) => set({ focus: { target, key: Date.now() } }),
     clearFocus: () => set({ focus: null }),
-    demoMode: false,
-    setDemoMode: (on) => {
-      const enabled = on && !!source?.setDemoMode
-      if (source?.getDemoMode) {
-        // Shared demo (server): the user's toggle is always a real change; the source reports the
-        // actual state back with a 'demo' change if it differs (e.g. the request failed).
-        source.setDemoMode?.(enabled, 'user')
-      } else {
-        const busy = get().dialog !== null || get().drag !== null
-        if (enabled && busy) source?.setDemoMode?.(false, 'pause')
-        else source?.setDemoMode?.(enabled, 'user')
-        writePref(DEMO_PREF_KEY, enabled ? '1' : '0')
-      }
-      set({ demoMode: enabled })
-    },
-
     viewInsets: { top: 0, right: 0, bottom: 0, left: 0 },
     setViewInsets: (v) => {
       const cur = get().viewInsets
@@ -675,33 +495,8 @@ export const useOffice = create<OfficeState>((set, get) => {
       if (JSON.stringify(cur) === JSON.stringify(t)) return
       set({ dropTarget: t })
     },
-    endDrag: () => {
-      const { drag, dropTarget } = get()
-      set({ drag: null, dropTarget: null })
-      if (!drag || !dropTarget) return
-      const { tasks } = get()
-      const t = tasks[drag.taskId]
-      if (!t) return
-      // One drop = one request. A box dragged off the meeting table (3D) to a person or the shelf
-      // also leaves the agenda; reassigning from the panel keeps it on the agenda.
-      const offTable: TaskPatch = drag.from === 'scene' && t.onAgenda ? { onAgenda: false } : {}
-      switch (dropTarget.kind) {
-        case 'member':
-          if (t.assigneeId !== dropTarget.id) void get().updateTask(t.id, { ...assignPatch(tasks, t, dropTarget.id), ...offTable })
-          else if (offTable.onAgenda === false) void get().updateTask(t.id, offTable)
-          break
-        case 'backlog':
-          if (t.assigneeId !== null) void get().updateTask(t.id, { ...assignPatch(tasks, t, null), ...offTable })
-          else if (offTable.onAgenda === false) void get().updateTask(t.id, offTable)
-          break
-        case 'status':
-          void get().moveTask(drag.taskId, dropTarget.status)
-          break
-        case 'agenda':
-          void get().setAgenda(drag.taskId, true)
-          break
-      }
-    },
+    // 끌어 놓기는 데모 모델의 작업 배정 · 상태 이동이었다 — v1에는 놓을 곳이 없어 비우기만 한다
+    endDrag: () => set({ drag: null, dropTarget: null }),
     cancelDrag: () => set({ drag: null, dropTarget: null }),
 
     toasts: [],
@@ -712,225 +507,5 @@ export const useOffice = create<OfficeState>((set, get) => {
     },
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
-    init: async (src) => {
-      if (src === source) return
-      unsubscribe?.()
-      unsubscribe = null
-      // Stop a local demo we were driving; never switch off a shared (server) demo for everyone.
-      if (source && !source.getDemoMode) source.setDemoMode?.(false, 'user')
-      source = src
-      set({ status: 'loading', sourceLabel: src.label, canDemo: !!src.setDemoMode, canReset: !!src.reset, connection: null })
-      try {
-        // A remote source may not be up yet: keep retrying while it's unreachable.
-        let ws: Workspace | null = null
-        for (let delay = 1000; !ws; delay = Math.min(delay * 2, 10_000)) {
-          try {
-            ws = await src.load()
-          } catch (e) {
-            if (!(e instanceof DataError && e.code === 'unavailable')) throw e
-            if (source !== src) return
-            set({ connection: 'offline' })
-            await new Promise((r) => setTimeout(r, delay))
-            if (source !== src) return
-          }
-        }
-        if (source !== src) return
-        set({
-          status: 'ready',
-          projects: byId(ws.projects),
-          members: byId(ws.members),
-          tasks: byId(ws.tasks),
-          meetings: byId(ws.meetings ?? []),
-          activity: ws.activity.slice(-100),
-        })
-        unsubscribe = src.subscribe(apply)
-        if (src.getDemoMode) {
-          // Shared demo (e.g. on a server): show its state, don't override it.
-          const on = await src.getDemoMode().catch(() => false)
-          if (source === src) set({ demoMode: on })
-        } else if (src.setDemoMode) {
-          // Local demo teammates start on by default; the toggle is remembered per browser.
-          get().setDemoMode(readPref(DEMO_PREF_KEY) !== '0')
-        }
-      } catch (e) {
-        set({ status: 'error' })
-        fail(e)
-      }
-    },
-
-    createTask: async (input) => {
-      if (!source) return null
-      try {
-        const task = await source.createTask(input)
-        apply({ type: 'task_upsert', task })
-        return task
-      } catch (e) {
-        fail(e)
-        return null
-      }
-    },
-
-    updateTask: async (id, patch) => {
-      const prev = get().tasks[id]
-      if (!source || !prev) return false
-      const optimistic: Task = { ...prev, ...patch, updatedAt: new Date().toISOString() }
-      if (patch.status && patch.status !== prev.status) {
-        optimistic.completedAt = patch.status === 'done' ? new Date().toISOString() : null
-      }
-      apply({ type: 'task_upsert', task: optimistic })
-      try {
-        apply({ type: 'task_upsert', task: await source.updateTask(id, patch) })
-        return true
-      } catch (e) {
-        const cur = get().tasks[id]
-        if (isNotFound(e)) {
-          apply({ type: 'task_delete', id })
-        } else if (cur) {
-          // Undo only the fields we changed, and only where nobody changed them since.
-          const undo: Partial<Task> = {}
-          for (const k of Object.keys(patch) as (keyof TaskPatch)[]) {
-            if (cur[k] === optimistic[k]) (undo as Record<string, unknown>)[k] = prev[k]
-          }
-          if (cur.completedAt === optimistic.completedAt) undo.completedAt = prev.completedAt
-          apply({ type: 'task_upsert', task: { ...cur, ...undo } })
-        }
-        fail(e)
-        return false
-      }
-    },
-
-    deleteTask: async (id) => {
-      const prev = get().tasks[id]
-      if (!source || !prev) return false
-      apply({ type: 'task_delete', id })
-      try {
-        await source.deleteTask(id)
-        return true
-      } catch (e) {
-        if (!isNotFound(e)) {
-          apply({ type: 'task_upsert', task: prev })
-          fail(e)
-          return false
-        }
-        return true
-      }
-    },
-
-    assignTask: async (taskId, memberId) => {
-      const { tasks } = get()
-      const t = tasks[taskId]
-      if (!t) return false
-      if (t.assigneeId === memberId) return true
-      return get().updateTask(taskId, assignPatch(tasks, t, memberId))
-    },
-
-    moveTask: async (taskId, status) => {
-      const t = get().tasks[taskId]
-      if (!t) return false
-      if (t.status === status) return true
-      return get().updateTask(taskId, { status })
-    },
-
-    createMember: async (input) => {
-      if (!source) return null
-      try {
-        const member = await source.createMember(input)
-        apply({ type: 'member_upsert', member })
-        return member
-      } catch (e) {
-        fail(e)
-        return null
-      }
-    },
-
-    updateMember: async (id, patch) => {
-      const prev = get().members[id]
-      if (!source || !prev) return false
-      const optimistic = { ...prev, ...patch }
-      apply({ type: 'member_upsert', member: optimistic })
-      try {
-        apply({ type: 'member_upsert', member: await source.updateMember(id, patch) })
-        return true
-      } catch (e) {
-        if (get().members[id] === optimistic) apply({ type: 'member_upsert', member: prev })
-        fail(e)
-        return false
-      }
-    },
-
-    deleteMember: async (id, reassign) => {
-      if (!source || !get().members[id]) return false
-      try {
-        // Not optimistic: the source moves tasks and pushes the resulting changes.
-        await source.deleteMember(id, reassign)
-        apply({ type: 'member_delete', id })
-        return true
-      } catch (e) {
-        fail(e)
-        return false
-      }
-    },
-
-    resetData: async () => {
-      if (!source?.reset) return false
-      try {
-        const ws = await source.reset()
-        replaceWorkspace(ws)
-        set({
-          selection: null,
-          hover: null,
-          filters: EMPTY_FILTERS,
-          dialog: null,
-          drag: null,
-          dropTarget: null,
-        })
-        return true
-      } catch (e) {
-        fail(e)
-        return false
-      }
-    },
-
-    setAgenda: async (taskId, on) => {
-      const t = get().tasks[taskId]
-      if (!t) return false
-      if (t.onAgenda === on) return true
-      return get().updateTask(taskId, { onAgenda: on })
-    },
-
-    startMeeting: async (input) => {
-      if (!source) return null
-      try {
-        // Not optimistic: the source flips attendee presence and pushes those changes.
-        const meeting = await source.startMeeting(input)
-        apply({ type: 'meeting_upsert', meeting })
-        return meeting
-      } catch (e) {
-        fail(e)
-        return null
-      }
-    },
-
-    endMeeting: async (id, result) => {
-      if (!source) return false
-      try {
-        const meeting = await source.endMeeting(id, result)
-        apply({ type: 'meeting_upsert', meeting })
-        return true
-      } catch (e) {
-        fail(e)
-        return false
-      }
-    },
   }
-})
-
-// Local demo teammates pause while the user is in the middle of something (dialog open or
-// dragging), so simulated changes never race a user's edit. A shared server demo ignores 'pause';
-// there the server's manager-touch window keeps the bot off what the user just edited.
-useOffice.subscribe((s, prev) => {
-  const busy = s.dialog !== null || s.drag !== null
-  const wasBusy = prev.dialog !== null || prev.drag !== null
-  if (busy === wasBusy || !s.demoMode) return
-  source?.setDemoMode?.(!busy, 'pause')
 })
