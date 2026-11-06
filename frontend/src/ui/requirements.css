@@ -41,3 +41,12 @@
   .req-issue { min-height: 44px; }
   .req-issue-open { min-height: 40px; }
 }
+
+/* 대기 목록 (#197) — 대화상자 안 */
+.req-waiting-open { justify-self: start; }
+.req-waiting { display: grid; gap: 10px; }
+.req-waiting .req-list { max-height: min(52vh, 420px); overflow: auto; padding: 2px; }
+.req-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; }
+.req-swap { flex: 1 1 200px; min-width: 0; display: grid; gap: 2px; }
+.req-swap .select { height: 32px; font-size: var(--fs-s); }
+.req-waiting .grow, .modal-foot .grow { flex: 1 1 auto; }

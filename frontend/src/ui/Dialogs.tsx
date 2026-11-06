@@ -5,6 +5,7 @@ import { useOffice, type Dialog } from '../store'
 import { Icon } from './icons'
 import { EndMeetingDialog, MeetingHistoryDialog, RaiseAgendaDialog, StartMeetingDialog } from './MeetingDialogs'
 import { ProjectPeriodDialog } from './PeriodDialog'
+import { RequirementWaitingDialog } from './RequirementWaiting'
 import { useUi } from './uiState'
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -86,5 +87,7 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <ProjectPeriodDialog />
     case 'raiseAgenda':
       return <RaiseAgendaDialog source={dialog.source} />
+    case 'requirementWaiting':
+      return <RequirementWaitingDialog linkTaskId={dialog.linkTaskId} />
   }
 }

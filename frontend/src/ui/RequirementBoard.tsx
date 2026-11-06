@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react'
 import type { RequirementDto, WorkspaceSnapshot } from '../data/types'
 import { useOffice } from '../store'
+import { planRequirementDeck } from '../scene/model/requirementDeck'
 import { Empty } from './common'
 import {
   REQUIREMENT_STATUS_HINT,
@@ -21,6 +22,9 @@ import './requirements.css'
 export function RequirementPanel() {
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   const sections = useMemo(() => (snapshot ? requirementSections(snapshot) : null), [snapshot])
+  // 3D 데크와 같은 판 배치 — 대기 칸에 있는 요구사항 수 (#194)
+  const order = useOffice((s) => s.requirementDeckOrder)
+  const waiting = useMemo(() => (snapshot ? planRequirementDeck(snapshot.requirements, order).waiting.length : 0), [snapshot, order])
   if (!snapshot || !sections) return <Empty icon="refresh" title="사무실을 불러오는 중…" />
   if (snapshot.requirements.length === 0) return <NoRequirements snapshot={snapshot} />
   const canEdit = canEditRequirementLinks(snapshot.viewer)
@@ -34,6 +38,11 @@ export function RequirementPanel() {
         )}
         {canEdit ? '이슈 상자를 3D 요구사항 판에 놓으면 연결돼요.' : '연결은 레포 관리자가 3D 요구사항 판에서 바꿔요.'}
       </p>
+      {waiting > 0 && (
+        <button type="button" className="btn btn-sm req-waiting-open" onClick={() => useOffice.getState().openRequirementWaiting()}>
+          대기 중인 요구사항 {waiting}개 · 판 바꾸기
+        </button>
+      )}
       <section aria-labelledby="req-active-title" className="req-section">
         <h3 id="req-active-title" className="req-section-title">
           문서에 있는 요구사항 <span className="dim">{sections.active.length}</span>
