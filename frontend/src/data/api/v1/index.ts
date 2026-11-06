@@ -8,9 +8,14 @@ import type {
   ConnectionStatus,
   AgendaItemCreateRequest,
   AgendaItemDto,
+  DecisionCardCreateRequest,
+  DecisionCardDto,
+  DecisionCardUpdateRequest,
   DecisionRequest,
   EndMeetingRequest,
   ErrorCode,
+  FollowUpQuestionCreateRequest,
+  FollowUpQuestionDto,
   MeetingDto,
   StartMeetingRequest,
   TaskDueDateDto,
@@ -129,6 +134,7 @@ const helpPath = (workspaceId: Id, helpRequestId: Id) => `${workspacePath(worksp
 const standupPath = (workspaceId: Id, date: string) => `${workspacePath(workspaceId)}/standups/${encodeURIComponent(date)}`
 const memberPath = (workspaceId: Id, memberId: Id) => `${workspacePath(workspaceId)}/members/${encodeURIComponent(memberId)}`
 const reportPath = (workspaceId: Id, memberId: Id, reportId: Id) => `${memberPath(workspaceId, memberId)}/reports/${encodeURIComponent(reportId)}`
+const cardPath = (workspaceId: Id, memberId: Id, cardId: Id) => `${memberPath(workspaceId, memberId)}/decision-cards/${encodeURIComponent(cardId)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -399,6 +405,15 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
         throw new DataError('서버 응답을 읽을 수 없어요', 'unavailable')
       }
     },
+
+    listDecisionCards: async (workspaceId, memberId) => json<DecisionCardDto[]>(await read(`${memberPath(workspaceId, memberId)}/decision-cards`)),
+    createDecisionCard: async (workspaceId, memberId, request: DecisionCardCreateRequest) =>
+      json<DecisionCardDto>(await write('POST', `${memberPath(workspaceId, memberId)}/decision-cards`, request)),
+    updateDecisionCard: async (workspaceId, memberId, cardId, request: DecisionCardUpdateRequest) =>
+      json<DecisionCardDto>(await write('PUT', cardPath(workspaceId, memberId, cardId), request)),
+    requestFollowUp: async (workspaceId, memberId, cardId) => json<DecisionCardDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-request`)),
+    addFollowUpQuestion: async (workspaceId, memberId, cardId, request: FollowUpQuestionCreateRequest) =>
+      json<FollowUpQuestionDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-questions`, request)),
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
     async clearDueDate(workspaceId, taskId) {
