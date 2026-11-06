@@ -1,0 +1,131 @@
+/* 로그인 화면 — GRAVIT 로그인 디자인("로그인-원본") 값 그대로. OWNER: D.
+   글꼴: Fredoka(워드마크 · 영문 머리) · IBM Plex Sans KR(본문) — index.html에서 확정 시안(public/station)과 같은 Google Fonts를 읽는다. */
+.login {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(120% 90% at 40% 30%, #1c2156 0%, #10153a 55%, #080b22 100%);
+  font-family: 'IBM Plex Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  color: #eef3ff;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  /* 알림(Toasts)이 쓰는 hud 토큰 */
+  --fs-s: 12px;
+  --fs-m: 13px;
+  --line: rgba(20, 30, 60, 0.09);
+  --soft: rgba(20, 30, 60, 0.05);
+  --ink-bad: #cc2f35;
+  --ink-good: #168a60;
+  --bad-soft: rgba(229, 72, 77, 0.1);
+  --good-soft: rgba(34, 176, 125, 0.12);
+}
+.login .toasts { position: fixed; left: 16px; bottom: 16px; color: var(--text); }
+
+.login-sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.login-vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(140% 110% at 45% 45%, rgba(8, 10, 30, 0) 55%, rgba(6, 8, 26, 0.55) 100%); }
+
+.login-head { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 24px clamp(16px, 4vw, 48px) 0; }
+.login-logo { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.login-wordmark { font-family: Fredoka, 'IBM Plex Sans KR', sans-serif; font-weight: 600; font-size: 21px; letter-spacing: 2.4px; }
+
+.login-main {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 24px clamp(16px, 4vw, 48px) 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 32px 56px;
+}
+
+.login-hero { flex: 1 1 480px; min-width: 0; max-width: 680px; display: flex; flex-direction: column; gap: 14px; }
+.login-eyebrow { font-family: Fredoka, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 3px; color: #8ff0e0; }
+.login-hero h1 { margin: 0; font-size: clamp(30px, 3.4vw, 46px); line-height: 1.25; font-weight: 700; letter-spacing: -0.5px; }
+.login-hero p { margin: 0; max-width: 520px; font-size: 16px; line-height: 1.65; color: #c3cbe6; }
+.login-art { display: block; width: 100%; max-width: 600px; height: auto; margin-top: 4px; }
+
+.login-card {
+  flex: 0 1 420px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 32px clamp(20px, 3vw, 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 22px;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.08), 0 24px 60px rgba(5, 8, 30, 0.6);
+  color: #10173a;
+}
+.login-card-head { display: flex; flex-direction: column; gap: 8px; }
+.login-card-head h2 { margin: 0; font-size: 28px; font-weight: 700; line-height: 1.3; color: #10173a; }
+.login-card-head p { margin: 0; font-size: 15px; line-height: 1.6; color: #3d4670; }
+.login-chip { align-self: flex-start; display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #e6f8f5; border: 1px solid #b4ebe2; font-size: 13px; color: #0b5a50; font-weight: 700; }
+.login-chip-dot { width: 7px; height: 7px; border-radius: 4px; background: #f29a52; }
+
+.login-github {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 56px;
+  border-radius: 14px;
+  border: 0;
+  background: #f29a52;
+  color: #1a1430;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(242, 154, 82, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.login-github:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(242, 154, 82, 0.4); }
+.login-github:focus-visible { outline: 3px solid #0f6b5f; outline-offset: 3px; }
+.login-github.is-busy { border: 1px solid #f2b07a; background: #fff4ec; color: #7a3b12; box-shadow: none; cursor: progress; }
+.login-spin { transform-origin: 10px 10px; animation: login-spin 0.9s linear infinite; }
+@keyframes login-spin { to { transform: rotate(360deg); } }
+.login-note { margin: -6px 0 0; font-size: 12px; line-height: 1.55; color: #5d6790; text-align: center; }
+
+.login-divider { height: 1px; background: #e7e4f0; }
+
+.login-cargo { display: flex; flex-direction: column; gap: 12px; }
+.login-cargo > span { font-size: 12px; font-weight: 600; color: #5d6790; }
+.login-cargo ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.login-cargo li { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: 12px; background: #1a2150; font-size: 12px; color: #e6ebfa; }
+
+/* 보안 심사용 로그인(#63) — 디자인에 없어 카드 톤으로 더함 */
+.login-review { border: 1px solid #e7e4f0; border-radius: 14px; background: #faf9fd; }
+.login-review summary { display: flex; align-items: center; min-height: 44px; padding: 0 14px; font-size: 13px; font-weight: 600; color: #3d4670; cursor: pointer; list-style: none; }
+.login-review summary::-webkit-details-marker { display: none; }
+.login-review summary::after { content: ''; margin-left: auto; width: 7px; height: 7px; border-right: 2px solid #5d6790; border-bottom: 2px solid #5d6790; transform: rotate(45deg); transition: transform 0.15s; }
+.login-review[open] summary::after { transform: rotate(-135deg); }
+.login-review summary:focus-visible { outline: 3px solid #0f6b5f; outline-offset: 2px; border-radius: 14px; }
+.login-review form { display: grid; gap: 10px; padding: 0 14px 14px; }
+.login-field { display: grid; gap: 4px; font-size: 12px; color: #3d4670; }
+.login-field input { height: 40px; padding: 0 12px; border: 1px solid #d6d3e4; border-radius: 10px; background: #ffffff; color: #10173a; font: inherit; font-size: 14px; }
+.login-field input:focus { outline: none; border-color: #0f6b5f; box-shadow: 0 0 0 3px rgba(15, 107, 95, 0.18); }
+.login-field input[aria-invalid='true'] { border-color: #c2410c; }
+.login-field-error { font-style: normal; font-size: 12px; color: #9a2f05; }
+.login-review-submit { height: 44px; border-radius: 12px; border: 1px solid #d6d3e4; background: #ffffff; color: #10173a; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.login-review-submit:hover:not(:disabled) { border-color: #10173a; }
+.login-review-submit:disabled { cursor: progress; opacity: 0.7; }
+.login-mock { margin: 0; font-size: 12px; line-height: 1.5; color: #5d6790; }
+
+@media (max-width: 720px) {
+  /* 좁은 화면 — 일러스트를 줄여 로그인 카드가 첫 화면에 가깝게 */
+  .login-art { max-width: 320px; margin: 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-spin { animation: none; }
+  .login-github { transition: none; }
+}
