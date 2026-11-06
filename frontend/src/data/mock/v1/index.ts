@@ -7,7 +7,8 @@ import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
-import { SETTINGS_MSG, openWorkspaceError, settingsError } from '../../rules/period'
+import { SETTINGS_MSG, addLocalDays, isLocalDate, openWorkspaceError, settingsError } from '../../rules/period'
+import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
   Change,
@@ -23,6 +24,7 @@ import type {
   OpenWorkspaceRequest,
   RepositoryChoice,
   SnapshotResource,
+  StandupPrefill,
   SubmissionDto,
   SyncStatus,
   TaskDto,
@@ -560,18 +562,23 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const ws = accessible(workspaceId, user)
       const error = helpCreateError(request)
       if (error) throw new DataError(error, 'invalid')
-      // mock에는 스탠드업이 없어 어느 스탠드업도 본인 것이 아니다
-      if (request.fromStandupId !== null) throw new DataError(HELP_MSG.notOwnStandup, 'forbidden_role')
+      const me = currentMember(ws, user)!
+      // "막힌 것"에서 넘어온 도움 요청 — 없는 스탠드업 not_found, 다른 팀원 것 forbidden_role (서버와 같다, #190)
+      if (request.fromStandupId !== null) {
+        const standup = (ws.standups ?? []).find((s) => s.id === request.fromStandupId)
+        if (!standup) throw new DataError(HELP_MSG.standupNotFound, 'not_found')
+        if (standup.memberId !== me.id) throw new DataError(HELP_MSG.notOwnStandup, 'forbidden_role')
+      }
       const summary: HelpRequestSummary = {
         id: nextId('hr'),
-        requesterMemberId: currentMember(ws, user)!.id,
+        requesterMemberId: me.id,
         content: request.content,
         status: 'open',
         isAgendaCandidate: false,
         instructorRequested: false,
         instructorRequestedAt: null,
         agendaItemId: null,
-        fromStandupId: null,
+        fromStandupId: request.fromStandupId,
         commentCount: 0,
         createdAt: toInstant(now()),
         closedAt: null,
@@ -672,6 +679,57 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
         emit(workspaceId, { type: 'changed', resources: ['help_requests'] })
       }
       return helpSummary(help, now())
+    },
+
+    // ---- 「12」 스탠드업 (#190) — 날짜는 한국 시간. mock에는 강사 계정이 없다 ----
+
+    async listStandups(workspaceId, date) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      if (!isLocalDate(date)) throw new DataError(STANDUP_MSG.date, 'invalid')
+      return structuredClone((ws.standups ?? []).filter((s) => s.date === date).sort((a, b) => a.memberId.localeCompare(b.memberId, 'en', { numeric: true })))
+    },
+
+    // 서버(StandupService.prefill)와 같은 재료 — 전날 내가 연 · 머지한 PR, 내가 남긴 리뷰, 내가 담당한 이슈가 닫힘. 커밋은 아직 없다(#34)
+    async getStandupPrefill(workspaceId, date) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!isLocalDate(date)) throw new DataError(STANDUP_MSG.date, 'invalid')
+      const me = currentMember(ws, user)!.id
+      const { from, to } = kstDayRange(addLocalDays(date, -1))
+      const inDay = (at: Instant | null) => at !== null && Date.parse(at) >= from && Date.parse(at) < to
+      const items: StandupPrefill['items'] = []
+      for (const pr of ws.snapshot.submissions) {
+        if (pr.authorMemberId === me && inDay(pr.githubCreatedAt)) items.push({ kind: 'pr_opened', title: pr.title, githubNumber: pr.githubPrNumber, occurredAt: pr.githubCreatedAt })
+        if (pr.authorMemberId === me && inDay(pr.mergedAt)) items.push({ kind: 'pr_merged', title: pr.title, githubNumber: pr.githubPrNumber, occurredAt: pr.mergedAt! })
+        for (const r of pr.reviews) if (r.reviewerMemberId === me && inDay(r.submittedAt)) items.push({ kind: 'review_submitted', title: pr.title, githubNumber: pr.githubPrNumber, occurredAt: r.submittedAt })
+      }
+      for (const t of ws.snapshot.tasks) if (t.assigneeMemberIds.includes(me) && inDay(t.closedAt)) items.push({ kind: 'issue_closed', title: t.title, githubNumber: t.githubIssueNumber, occurredAt: t.closedAt! })
+      items.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
+      return { date, items }
+    },
+
+    async saveMyStandup(workspaceId, date, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = standupSaveError(date, request, now())
+      if (error) throw new DataError(error, 'invalid')
+      const me = currentMember(ws, user)!.id
+      ws.standups ??= []
+      let standup = ws.standups.find((s) => s.memberId === me && s.date === date)
+      if (standup) {
+        standup.yesterday = request.yesterday
+        standup.blockers = request.blockers
+        standup.updatedAt = toInstant(now())
+      } else {
+        standup = { id: nextId('st'), memberId: me, date, yesterday: request.yesterday, blockers: request.blockers, updatedAt: toInstant(now()) }
+        ws.standups.push(standup)
+      }
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['standups'] })
+      return structuredClone(standup)
     },
 
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----

@@ -3,7 +3,7 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
+import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
 import { afterComment, toHelpSummary } from './data/rules/help'
 
@@ -133,6 +133,14 @@ interface OfficeState {
   convertHelpRequestToAgenda: (helpRequestId: Id, title: string) => Promise<AgendaItemDto | null>
   /** POST W/help-requests/{id}/instructor-request — 요청자만 */
   requestInstructorHelp: (helpRequestId: Id) => Promise<HelpRequestSummary | null>
+
+  // ---- 스탠드업 (#190 — 「12」). Snapshot 밖 — 화면이 날짜로 읽는다. 실패하면 알림 후 null ----
+  /** GET W/standups?date= — 그날 쓴 팀원 것 */
+  loadStandups: (date: LocalDate) => Promise<StandupDto[] | null>
+  /** GET W/standups/{date}/mine/prefill — "어제 한 일" 미리 채우기 재료 */
+  loadStandupPrefill: (date: LocalDate) => Promise<StandupPrefill | null>
+  /** PUT W/standups/{date}/mine — 팀원만, 오늘 뒤 날짜는 안 됨 */
+  saveMyStandup: (date: LocalDate, request: StandupSaveRequest) => Promise<StandupDto | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -335,6 +343,19 @@ export const useOffice = create<OfficeState>((set, get) => {
     }
   }
 
+  /** v1 사무실 읽기 한 번(Snapshot 밖의 데이터). 사무실이 없으면 보내지 않고 null, 실패하면 알림 후 null */
+  const officeRead = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>): Promise<T | null> => {
+    const src = officeSource
+    const office = get().office
+    if (!src || !office) return null
+    try {
+      return await run(src, office.workspaceId)
+    } catch (e) {
+      fail(e)
+      return null
+    }
+  }
+
   /**
    * v1 사무실 쓰기 한 번. 사무실이 없으면 보내지 않고 null. 성공하면 patch로 snapshot을 바로 고친다(그 사이 사무실을
    * 닫거나 바꿨으면 버린다). 실패하면 알림 후 null — conflict면 지금 값을 다시 읽어 화면을 맞춘다.
@@ -528,17 +549,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       )) !== null,
 
     // ---- 도움 요청 (#183) — 응답을 바로 반영하고, 서버의 changed(help_requests) 알림으로 다시 읽는다 ----
-    loadHelpRequest: async (helpRequestId) => {
-      const src = officeSource
-      const office = get().office
-      if (!src || !office) return null
-      try {
-        return await src.getHelpRequest(office.workspaceId, helpRequestId)
-      } catch (e) {
-        fail(e)
-        return null
-      }
-    },
+    loadHelpRequest: (helpRequestId) => officeRead((src, ws) => src.getHelpRequest(ws, helpRequestId)),
     createHelpRequest: (request) =>
       officeWrite(
         (src, ws) => src.createHelpRequest(ws, request),
@@ -567,6 +578,15 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeWrite(
         (src, ws) => src.requestInstructorHelp(ws, helpRequestId),
         (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
+      ),
+
+    // ---- 스탠드업 (#190) — Snapshot에 없다. 화면이 날짜로 읽고, 저장 뒤 다시 읽는다 ----
+    loadStandups: (date) => officeRead((src, ws) => src.listStandups(ws, date)),
+    loadStandupPrefill: (date) => officeRead((src, ws) => src.getStandupPrefill(ws, date)),
+    saveMyStandup: (date, request) =>
+      officeWrite(
+        (src, ws) => src.saveMyStandup(ws, date, request),
+        (snap) => snap,
       ),
 
     selection: null,

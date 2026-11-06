@@ -7,6 +7,7 @@ import type {
   FlowSummary,
   HelpCommentDto,
   HelpRequestSummary,
+  StandupDto,
   Id,
   Instant,
   LocalDate,
@@ -40,6 +41,8 @@ export interface MockWorkspace {
   pastRounds?: { submissionId: Id; round: EvaluationRoundDto }[]
   /** 도움 요청의 코멘트 · 닫을 때 남긴 값 (#183) — Snapshot 요약(helpRequests)과 ID로 짝. 없으면 빈 목록 */
   helpThreads?: MockHelpThread[]
+  /** 스탠드업 (#190) — Snapshot에 없고 날짜로 읽는다. 없으면 빈 목록 */
+  standups?: StandupDto[]
 }
 
 export interface MockHelpThread {
@@ -72,7 +75,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 3 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183)
+export const MOCK_STATE_VERSION = 4 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190)
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -375,6 +378,12 @@ function teamWorkspace(now: Date): MockWorkspace {
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
     helpThreads: help.threads,
+    // 오늘 이삼도 · 박데브(막힌 것 있음), 어제 나(김옥토). 오늘 내 스탠드업은 비워 둔다 — 화면에서 써 보게 (#190)
+    standups: [
+      { id: 'st_1', memberId: 'm_1', date: kstDate(now, -1), yesterday: '로그인 화면 마무리', blockers: null, updatedAt: ago(26) },
+      { id: 'st_2', memberId: 'm_2', date: kstDate(now), yesterday: '레포 선택 화면 리뷰', blockers: null, updatedAt: ago(2) },
+      { id: 'st_3', memberId: 'm_3', date: kstDate(now), yesterday: '3D 상자 배치', blockers: '상자를 끌면 가끔 책상 밖으로 튀어요', updatedAt: ago(1) },
+    ],
   }
 }
 

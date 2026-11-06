@@ -568,6 +568,11 @@ export interface StandupDto {
   blockers: string | null
   updatedAt: Instant
 }
+/** `PUT W/standups/{date}/mine` — 각 0~2000자. 있으면 고치고 없으면 만든다 */
+export interface StandupSaveRequest {
+  yesterday: string
+  blockers: string | null
+}
 /** {date}의 전날(한국 시간) 내 GitHub 활동 — "어제 한 일" 미리 채우기 (FR-MTG-01) */
 export interface StandupPrefill {
   date: LocalDate
