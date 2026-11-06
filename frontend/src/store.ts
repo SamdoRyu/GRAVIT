@@ -64,6 +64,13 @@ export interface OfficeView {
 /** 'changed' 알림을 이만큼 모아서 Snapshot을 한 번 다시 읽는다 (CONTRACTS_API.md 「6」 "짧게 모아서") */
 export const OFFICE_RELOAD_DELAY_MS = 300
 
+/** 요구사항 연결을 바꾸고 진행 수를 같은 규칙으로 다시 센다 */
+const withLinks = (snap: WorkspaceSnapshot, requirementLinks: RequirementLinkDto[]): WorkspaceSnapshot => ({
+  ...snap,
+  requirementLinks,
+  requirements: withProgress(snap.requirements, requirementLinks, snap.tasks),
+})
+
 interface OfficeState {
   // ---- data (mirrors the DemoDataSource) ----
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -265,13 +272,6 @@ function assignPatch(tasks: Record<Id, Task>, t: Task, memberId: Id | null): Tas
   if (memberId === null && (t.status === 'in_progress' || t.status === 'review')) patch.status = 'todo'
   return patch
 }
-
-/** 요구사항 연결을 바꾸고 진행 수를 같은 규칙으로 다시 센다 */
-const withLinks = (snap: WorkspaceSnapshot, requirementLinks: RequirementLinkDto[]): WorkspaceSnapshot => ({
-  ...snap,
-  requirementLinks,
-  requirements: withProgress(snap.requirements, requirementLinks, snap.tasks),
-})
 
 /** id가 같은 것을 바꾸고, 없으면 뒤에 붙인다 */
 const upsert = <T extends { id: Id }>(list: readonly T[], item: T): T[] => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item])
