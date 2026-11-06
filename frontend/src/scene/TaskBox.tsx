@@ -7,12 +7,14 @@
 // linkRequirement). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
 // original opens the v1 detail drawer (the GitHub originals are never changed from the app — CON-02).
 // A learning · other agenda item has no source (#31): it sits on the bridge table as the design's octahedron (floating,
-// turning, a lilac glow) or memo pad, shows its title on hover and opens nothing.
+// turning, a lilac glow) or memo pad, shows its title on hover and opens nothing. A help-request item (#205) is the design's
+// sphere (an icosahedron with an orange tip and a pulsing warm halo); a click opens that help request in the panel.
 import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { BackSide, Color, CylinderGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, type BufferGeometry, type Group } from 'three'
+import { BackSide, Color, CylinderGeometry, IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, SphereGeometry, type BufferGeometry, type Group } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { useOffice, type OfficeSelection } from '../store'
+import { useUi } from '../ui/uiState'
 import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
 import { CargoBadges } from './CargoBadges'
@@ -61,6 +63,12 @@ const OCTA_BODY = new MeshStandardMaterial({ color: CARGO, emissive: '#2a2030', 
 const OCTA_GLOW = 0xd9c6ff
 /** Other: the design's memo pad (cargo 'pad') — a thin slab with three blue lines, turned a quarter */
 const PAD_LINE = new MeshBasicMaterial({ color: '#8fa4c4' })
+/** Help request: the design's sphere (cargo 'sphere') — an icosahedron of radius 0.52 s centred 0.56 s up, an orange tip on top and a warm halo that pulses */
+const HELP = new IcosahedronGeometry(0.52 * NOTE_S, 1)
+const HELP_Y = 0.56 * NOTE_S
+const HELP_TIP = new SphereGeometry(0.1 * NOTE_S, 8, 6)
+const HELP_TIP_MAT = new MeshBasicMaterial({ color: '#ff9d4d' })
+const HELP_HALO = 0xffb36b
 const PAD_LINES = [0, 1, 2].map((i) => ({ w: (i === 2 ? 0.45 : 0.75) * NOTE_S, x: i === 2 ? -0.15 * NOTE_S : 0, z: (-0.2 + i * 0.2) * NOTE_S }))
 
 const easeInOut = (u: number) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2)
@@ -111,6 +119,8 @@ interface Props {
   select: OfficeSelection | null
   /** Draggable onto the bridge (agenda) or, for an issue, a requirement plate (link); null = not draggable (agenda shapes) */
   raise: AgendaSource | null
+  /** A help-request agenda item: the help request a click opens in the panel (#205) */
+  helpRequestId: string | null
   dropZoneAt: ThemeLayout['dropZoneAt']
   /** An open issue past its due date: a soft glow. */
   overdue: boolean
@@ -118,11 +128,12 @@ interface Props {
   pop: boolean
 }
 
-export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, dropZoneAt, overdue, pop }: Props) {
+export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, helpRequestId, dropZoneAt, overdue, pop }: Props) {
   const { key } = entity
   const blocked = entity.highlight === 'blocked'
   const badges = useMemo(() => cargoBadgeView(entity.badges), [entity.badges])
-  const kind = entity.kind === 'pr' || entity.kind === 'learning' || entity.kind === 'other' ? entity.kind : 'issue'
+  const kind = entity.kind === 'pr' || entity.kind === 'learning' || entity.kind === 'other' || entity.kind === 'help' ? entity.kind : 'issue'
+  const opens = select !== null || helpRequestId !== null
   const selected = useOffice((s) => select !== null && s.officeSelection?.kind === select.kind && s.officeSelection.id === select.id)
   const hovered = useOffice((s) => s.hover?.kind === 'task' && s.hover.id === key)
 
@@ -148,6 +159,8 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
   const outlineMesh = useRef<Mesh>(null)
   /** The learning octahedron's own turn and bob (inside the group that flies) */
   const spin = useRef<Group>(null)
+  /** The help sphere's pulsing halo */
+  const halo = useRef<Group>(null)
   const anim = useRef<Anim>(newAnim())
   const live = useRef<BoxLive>({ x: 0, y: 0, z: 0 })
   const phase = useMemo(() => (key.length * 1.7 + key.charCodeAt(key.length - 1)) % 6.283, [key])
@@ -251,6 +264,9 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
     else if (overdue) body.emissiveIntensity = 0.08 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.4 + phase))
     else if (body.emissiveIntensity !== 0) body.emissiveIntensity = Math.max(0, body.emissiveIntensity - dt * 2)
 
+    const hl = halo.current
+    if (hl) hl.scale.setScalar(0.75 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.6 + phase)))
+
     const sp = spin.current
     if (sp) {
       sp.rotation.y = t * 0.8 + phase
@@ -273,7 +289,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
         if (cargoDrag.key !== null) return
         e.stopPropagation()
         useOffice.getState().setHover({ kind: 'task', id: key })
-        setCursor(raise ? 'grab' : select ? 'pointer' : '')
+        setCursor(raise ? 'grab' : opens ? 'pointer' : '')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
@@ -287,11 +303,21 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
       }}
       onClick={(e) => {
         e.stopPropagation()
-        if (e.delta > clickSlop(e) || select === null) return
-        useOffice.getState().selectInOffice(select)
+        if (e.delta > clickSlop(e)) return
+        if (select) useOffice.getState().selectInOffice(select)
+        else if (helpRequestId) openHelpRequest(helpRequestId)
       }}
     >
-      {kind === 'learning' ? (
+      {kind === 'help' ? (
+        <>
+          <mesh geometry={HELP} material={body} position={[0, HELP_Y, 0]} castShadow receiveShadow raycast={meshRaycast} />
+          <mesh geometry={HELP_TIP} material={HELP_TIP_MAT} position={[0, 1.12 * NOTE_S, 0]} raycast={noRaycast} />
+          <group ref={halo} position={[0, 0.6 * NOTE_S, 0]}>
+            <Glow color={HELP_HALO} size={2.6 * NOTE_S} p={[0, 0, 0]} opacity={0.45} />
+          </group>
+          <mesh ref={outlineMesh} geometry={HELP} position={[0, HELP_Y, 0]} scale={1.2} material={outline} visible={false} raycast={noRaycast} renderOrder={5} />
+        </>
+      ) : kind === 'learning' ? (
         <group ref={spin}>
           <mesh geometry={OCTA} material={OCTA_BODY} position={[0, OCTA_Y, 0]} scale={NOTE_S} castShadow raycast={meshRaycast} />
           <mesh ref={outlineMesh} geometry={OCTA} position={[0, OCTA_Y, 0]} scale={NOTE_S * 1.2} material={outline} visible={false} raycast={noRaycast} renderOrder={5} />
@@ -446,4 +472,11 @@ async function linkToRequirement(requirementId: string, taskId: string) {
     return
   }
   if (await st.linkRequirement(requirementId, taskId)) useOffice.getState().toast('good', `${name}에 연결했어요`)
+}
+
+/** A help-request agenda item clicked (#205): open the panel on its help request (관리 패널 도움 요청 탭 — #183) */
+function openHelpRequest(helpRequestId: string) {
+  const ui = useUi.getState()
+  ui.setPanelOpen(true)
+  ui.openHelpRequest(helpRequestId)
 }

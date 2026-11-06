@@ -23,7 +23,7 @@ GRAVIT/
 │   ├── src/             app · scene(3D) · ui(HUD) · data(DataSource · mock · api) · store.ts
 │   ├── tests/contract/  DataSource 계약 · 규칙 · API 클라이언트 테스트 (node:test)
 │   ├── tests/e2e/       Playwright E2E (mock 데이터)
-│   └── scripts/         check-bundle(빌드 후 검사) · data-smoke
+│   └── scripts/         check-bundle(빌드 후 검사)
 ├── backend/             Spring Boot (com.samdoryu.backend)
 │   └── src/main/resources/
 │       ├── application.yaml
@@ -119,7 +119,6 @@ npm run dev
 | `npm run test:contract` | mock DataSource 계약 · 규칙 · API 클라이언트 테스트 |
 | `npm run test:e2e` | Playwright E2E (mock). Chrome 필요, 포트 5180 사용 |
 | `npm run preview` | 빌드 결과 미리 보기 |
-| `npx tsx scripts/data-smoke.ts` | mock 데이터 소스 스모크 검사 |
 
 ### 백엔드 (`backend/`)
 
@@ -141,7 +140,7 @@ macOS · Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 씁니다.
 
 ## 공통 계약
 
-- **기준 계약 커밋: `702a55fd6f199b4d105412f63a2e160e86c9c0e7`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
+- **기준 계약 커밋: `6cc06dea08ffc25801c9c8e9cd01fede651e8815`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
 - 개발 중에 읽는 곳: [`docs/CONTRACTS.md`](docs/CONTRACTS.md)(도메인 · ID · 에러 · 보안 · 계약 테스트) · [`docs/CONTRACTS_API.md`](docs/CONTRACTS_API.md)(엔드포인트 · DTO)
   - 기획 저장소 커밋 `796fc25`의 두 파일을 **2026-11-03에 그대로 옮겼습니다**(본문 변경 없음, 맨 위에 출처 안내만 추가).
   - 본문에 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md · 코드 컨벤션 (BE) 등)의 고정 링크는 [`docs/README.md`](docs/README.md)에 있습니다.
