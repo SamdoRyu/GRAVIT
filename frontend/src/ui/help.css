@@ -45,3 +45,10 @@
 .help-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .help-choices { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; font-size: var(--fs-s); }
 .help-choices label { display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
+
+/* 스탠드업 탭 (#190) — 도움 요청 탭과 같은 카드 · 폼을 쓴다 */
+.standup-nav { display: flex; align-items: center; gap: 4px; }
+.standup-date { display: inline-flex; align-items: center; gap: 6px; min-width: 7em; justify-content: center; }
+.standup-blockers { margin: 2px 0 0; }
+.standup-blockers strong { margin-right: 4px; }
+.standup-actions { flex-wrap: wrap; align-items: center; }

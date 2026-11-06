@@ -1,7 +1,7 @@
 // 스탠드업 요청 검사 · 날짜 규칙 (CONTRACTS_API.md 「12」). 순수 함수 — mock과 화면이 같은 규칙 · 문구를 쓴다.
 // 서버는 같은 규칙으로 다시 검사한다(400 invalid). 날짜는 한국 시간 달력 날짜다. 소유: A (#190).
 import type { LocalDate, StandupPrefill, StandupSaveRequest } from '../types'
-import { isLocalDate, kstToday } from './period'
+import { isLocalDate } from './period'
 
 export const STANDUP_TEXT_MAX = 2000
 
@@ -14,10 +14,10 @@ export const STANDUP_MSG = {
 
 const within = (s: string) => Array.from(s).length <= STANDUP_TEXT_MAX
 
-/** `PUT W/standups/{date}/mine` 검사 — 날짜 형식 · 미래 날짜(한국 시간 오늘 뒤) · 각 0~2000자 */
-export function standupSaveError(date: unknown, req: StandupSaveRequest, now: Date): string | null {
+/** `PUT W/standups/{date}/mine` 검사 — 날짜 형식 · 미래 날짜(today = 한국 시간 오늘, kstToday) · 각 0~2000자 */
+export function standupSaveError(date: unknown, req: StandupSaveRequest, today: LocalDate): string | null {
   if (!isLocalDate(date)) return STANDUP_MSG.date
-  if (date > kstToday(now)) return STANDUP_MSG.futureDate
+  if (date > today) return STANDUP_MSG.futureDate
   if (typeof req?.yesterday !== 'string' || !within(req.yesterday)) return STANDUP_MSG.yesterday
   if (req.blockers !== null && (typeof req.blockers !== 'string' || !within(req.blockers))) return STANDUP_MSG.blockers
   return null
