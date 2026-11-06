@@ -1,5 +1,7 @@
 package com.samdoryu.backend.report.service;
 
+import com.samdoryu.backend.activity.domain.ActivityKind;
+import com.samdoryu.backend.activity.service.ActivityService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
@@ -43,21 +45,27 @@ public class RetroReportService {
 
     private static final String AREA_LABEL_PREFIX = "area:";
     private static final String NONE = "- 없음";
+    /** 마크다운의 활동 유형 이름 — 이슈 #173 「문제 / 목적」의 말. */
+    private static final Map<ActivityKind, String> ACTIVITY_KIND_NAMES = Map.of(
+            ActivityKind.PLANNING, "기획", ActivityKind.RESEARCH, "자료조사", ActivityKind.DESIGN, "디자인",
+            ActivityKind.PRESENTATION, "발표 준비", ActivityKind.MENTOR_QUESTION, "멘토 질문");
 
     private final RetroReportRepository retroReportRepository;
     private final WorkspaceService workspaceService;
     private final SyncedItemService syncedItemService;
     private final AgendaItemService agendaItemService;
     private final DecisionCardService decisionCardService;
+    private final ActivityService activityService;
 
     public RetroReportService(RetroReportRepository retroReportRepository, WorkspaceService workspaceService,
             SyncedItemService syncedItemService, AgendaItemService agendaItemService,
-            DecisionCardService decisionCardService) {
+            DecisionCardService decisionCardService, ActivityService activityService) {
         this.retroReportRepository = retroReportRepository;
         this.workspaceService = workspaceService;
         this.syncedItemService = syncedItemService;
         this.agendaItemService = agendaItemService;
         this.decisionCardService = decisionCardService;
+        this.activityService = activityService;
     }
 
     /** {@code GET W/members/{memberId}/reports} — createdAt 내림차순. 본인 · 지정된 강사. */
@@ -112,7 +120,6 @@ public class RetroReportService {
         return anonymize(toMarkdown(report), workspaceService.allMembers(access.workspaceId()));
     }
 
-    // ponytail: 활동 분포는 아직 늘 빈 목록이라 싣지 않는다 — 활동 기록이 채울 때 여기에 칸을 더한다
     private static String toMarkdown(RetroReportDto report) {
         StringBuilder md = new StringBuilder();
         md.append("# ").append(report.kind() == ReportKind.FINAL ? "최종" : "중간").append(" 회고 리포트\n\n")
@@ -143,6 +150,12 @@ public class RetroReportService {
         report.instructorFeedbacks().forEach(feedback -> md.append("- ").append(feedback.createdAt())
                 .append(" 강사: ").append(feedback.body()).append('\n'));
         if (report.instructorFeedbacks().isEmpty()) {
+            md.append(NONE).append('\n');
+        }
+        md.append("\n## 활동 분포\n\n");
+        report.activityDistribution().forEach(share -> md.append("- ").append(ACTIVITY_KIND_NAMES.get(share.kind()))
+                .append(": ").append(share.totalMinutes()).append("분\n"));
+        if (report.activityDistribution().isEmpty()) {
             md.append(NONE).append('\n');
         }
         md.append("\n## 기술 결정 카드\n\n");
@@ -199,7 +212,7 @@ public class RetroReportService {
     }
 
     /**
-     * 계산 칸 — 활동 분포(활동 기록 기능 전)는 아직 빈 목록이다. 결정 카드는 본인이 확인한 것만(P11), 카드 목록 순서(createdAt
+     * 계산 칸 — 활동 분포는 본인의 확인된 활동만 유형별 분 합계(FR-ACT-03 · #173). 결정 카드는 본인이 확인한 것만(P11), 카드 목록 순서(createdAt
      * 내림차순) 그대로 — 카드 읽기 검사(본인 · 지정된 강사)는 리포트 읽기와 같다.
      */
     private RetroReportDto toDto(WorkspaceAccess access, RetroReport report) {
@@ -233,12 +246,16 @@ public class RetroReportService {
 
         List<DecisionCardDto> confirmedCards = decisionCardService.list(access, report.getMember().getId()).stream()
                 .filter(DecisionCardDto::confirmed).toList();
+        List<RetroReportDto.ActivityShare> activityDistribution = activityService
+                .confirmedMinutesByKind(report.getMember().getId()).entrySet().stream()
+                .map(entry -> new RetroReportDto.ActivityShare(entry.getKey(), entry.getValue()))
+                .toList();
 
         String summary = "맡은 이슈 %d개(닫힘 %d) · 작성한 PR %d개(머지 %d) · 올린 안건 %d건(결론 %d)".formatted(
                 myIssues.size(), myIssues.stream().filter(issue -> issue.state() == TaskState.CLOSED).count(),
                 myPrs.size(), myPrs.stream().filter(pr -> pr.state() == SubmissionState.MERGED).count(),
                 myAgenda.size(), agendaResults.size());
         return new RetroReportDto(Ids.toApi(report.getId()), report.getKind(), report.getCreatedAt(), me, summary,
-                areaLabels, report.getLearning(), agendaResults, feedbacks, List.of(), confirmedCards);
+                areaLabels, report.getLearning(), agendaResults, feedbacks, activityDistribution, confirmedCards);
     }
 }
