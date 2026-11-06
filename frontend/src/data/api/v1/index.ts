@@ -15,6 +15,8 @@ import type {
   StartMeetingRequest,
   TaskDueDateDto,
   TaskDueDateRequest,
+  RequirementLinkCreateRequest,
+  RequirementLinkDto,
   EvaluateRequest,
   EvaluationRoundDto,
   HelpCommentCreateRequest,
@@ -366,6 +368,11 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     listStandups: async (workspaceId, date) => json<StandupDto[]>(await read(`${workspacePath(workspaceId)}/standups?date=${encodeURIComponent(date)}`)),
     getStandupPrefill: async (workspaceId, date) => json<StandupPrefill>(await read(`${standupPath(workspaceId, date)}/mine/prefill`)),
     saveMyStandup: async (workspaceId, date, request: StandupSaveRequest) => json<StandupDto>(await write('PUT', `${standupPath(workspaceId, date)}/mine`, request)),
+
+    linkRequirement: async (workspaceId, request: RequirementLinkCreateRequest) => json<RequirementLinkDto>(await write('POST', `${workspacePath(workspaceId)}/requirement-links`, request)),
+    async unlinkRequirement(workspaceId, linkId) {
+      await write('DELETE', `${workspacePath(workspaceId)}/requirement-links/${encodeURIComponent(linkId)}`)
+    },
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
     async clearDueDate(workspaceId, taskId) {

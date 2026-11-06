@@ -1,7 +1,7 @@
 // v1 mock seed — 서버 없이 화면 · 3D를 개발하려고 브라우저에 두는 사무실 데이터. 소유: D.
 // 모양은 v1 계약 DTO 그대로다. ID는 일부러 접두사 문자열("m_1", "t_1"…)이다 — 화면이 ID를 숫자로
 // 다루면 바로 드러나게 한다(CONTRACTS.md 「2」 변환 경계). GitHub 식별자는 10진 문자열이다.
-// 요구사항 · 연결 · 안건 · 회의 · 도움 요청 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []).
+// 안건 · 회의 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []). 요구사항 · 연결은 #197, 도움 요청은 #183.
 import type {
   EvaluationRoundDto,
   FlowSummary,
@@ -15,12 +15,15 @@ import type {
   MemberDto,
   OwnerChoice,
   RepositoryChoice,
+  RequirementDto,
+  RequirementLinkDto,
   SubmissionDto,
   SyncStatus,
   TaskDto,
   Verdict,
   WorkspaceSnapshot,
 } from '../../types'
+import { withProgress } from '../../rules/requirements'
 
 /** mock 세션 — GitHub 로그인 사용자 또는 심사용 계정. null = 로그인 안 됨. */
 export type MockSession = 'github' | 'review'
@@ -75,7 +78,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 4 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190)
+export const MOCK_STATE_VERSION = 5 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197)
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -283,6 +286,35 @@ function submission(s: SubmissionSeed, c: SeedContext): SubmissionDto {
   }
 }
 
+interface RequirementSeed {
+  id: Id
+  /** 원본 ID — 없으면 null */
+  key: string | null
+  title: string
+  status?: RequirementDto['status']
+}
+
+/**
+ * 요구사항 · 연결 — position은 목록 순서. 진행 수는 연결과 이슈 상태로 계산한다(rules/requirements — mock은 응답 때도 다시 계산).
+ * missing · needs_review는 문서에서 마지막으로 본 시각이 하루 전이다.
+ */
+function requirementsOf(list: RequirementSeed[], links: [requirementId: Id, taskId: Id, linkedHoursAgo: number][], tasks: TaskDto[], c: SeedContext) {
+  const requirementLinks: RequirementLinkDto[] = links.map(([requirementId, taskId, h], i) => ({ id: `rl_${requirementId}_${i + 1}`, requirementId, taskId, linkedAt: c.ago(h) }))
+  const requirements: RequirementDto[] = list.map((r, position) => ({
+    id: r.id,
+    sourceKey: r.key,
+    title: r.title,
+    position,
+    status: r.status ?? 'active',
+    linkedTaskCount: 0,
+    doneTaskCount: 0,
+    lastSeenAt: c.ago(r.status && r.status !== 'active' ? 24 : 0.2),
+  }))
+  return { requirements: withProgress(requirements, requirementLinks, tasks), requirementLinks }
+}
+
+const DEMO_REQUIREMENTS = ['로그인', '사무실 꾸미기', '첫 동기화', '이슈 상자', 'PR 삼각기둥', '회의실', '안건 올리기', '도움 요청', '스탠드업', '회고 리포트', '강사 피드백', '요구사항 판']
+
 function emptyCollections() {
   return { requirements: [], requirementLinks: [], agendaItems: [], meetings: [], helpRequests: [], activityNotes: [] } satisfies Partial<StoredSnapshot>
 }
@@ -363,6 +395,30 @@ function teamWorkspace(now: Date): MockWorkspace {
     ),
   ]
   const help = teamHelpRequests(members, ago)
+  // 요구사항(#197) — 판 10장 이하인 사무실. 진행 중(1/2) · 모두 닫힘(1/1) · 빈 구역(0) · 원본 ID 없음 · 아직 진행 없음(0/1) ·
+  // missing(연결은 남음) · needs_review. 보는 사람(김옥토)은 이 사무실에서 R2가 아니라 연결을 바꿀 수 없다(403) — 시연 사무실은 R2
+  const req = requirementsOf(
+    [
+      { id: 'rq_1', key: 'FR-WS-01', title: '레포 선택 · 사무실 열기' },
+      { id: 'rq_2', key: 'FR-UI-09', title: '다크 모드' },
+      { id: 'rq_3', key: 'FR-REQ-05', title: '요구사항 진행률' },
+      { id: 'rq_4', key: null, title: '동기화 상태 표시' },
+      { id: 'rq_5', key: 'FR-AUTH-01', title: 'GitHub 로그인' },
+      { id: 'rq_6', key: 'FR-OLD-01', title: '이메일 알림', status: 'missing' },
+      { id: 'rq_7', key: 'FR-REP-01', title: '회고 리포트', status: 'needs_review' },
+    ],
+    [
+      ['rq_1', 't_1', 30],
+      ['rq_1', 't_3', 20],
+      ['rq_2', 't_8', 12],
+      ['rq_4', 't_4', 10],
+      ['rq_5', 't_2', 9],
+      ['rq_6', 't_7', 30],
+      ['rq_7', 't_9', 6],
+    ],
+    tasks,
+    c,
+  )
   return {
     snapshot: {
       workspace: { id: 'ws_1', kind: 'github', displayName: 'team-samdo/gitvillage', githubOwner: 'team-samdo', githubRepo: 'gitvillage', githubRepoId: '880001234', htmlUrl: repoUrl, openedAt: ago(52) },
@@ -372,6 +428,7 @@ function teamWorkspace(now: Date): MockWorkspace {
       tasks,
       submissions,
       ...emptyCollections(),
+      ...req,
       helpRequests: help.summaries,
       // 평균 리뷰 대기는 응답 시각에 계산한다(rules/flow.ts — mock의 toSnapshot) — 저장해 두지 않는다
       flow: computeFlow({ members, tasks, submissions }),
@@ -431,7 +488,8 @@ function demoWorkspace(now: Date): MockWorkspace {
   const ago = (hours: number) => toInstant(new Date(now.getTime() - hours * HOUR_MS))
   const c: SeedContext = { ago, repoUrl: null, syncedAt: ago(0.5) }
   const members = [
-    member({ id: 'm_11', userId: 'u_1', githubUserId: '1001', githubLogin: 'octo-kim', displayName: '김옥토', deskIndex: 0 }, c),
+    // 김옥토는 시연 사무실의 레포 관리자 — mock에서 요구사항 연결(R2)을 해 볼 수 있다 (#197)
+    member({ id: 'm_11', userId: 'u_1', githubUserId: '1001', githubLogin: 'octo-kim', displayName: '김옥토', deskIndex: 0, isRepoAdmin: true }, c),
     member({ id: 'm_12', userId: 'u_review', githubUserId: null, githubLogin: null, displayName: '심사 계정', deskIndex: 1 }, c),
     member({ id: 'm_13', userId: null, githubUserId: null, githubLogin: null, displayName: '시연 팀원 A', deskIndex: 2, isRepoAdmin: true }, c),
     member({ id: 'm_14', userId: null, githubUserId: null, githubLogin: null, displayName: '시연 팀원 B', deskIndex: 3 }, c),
@@ -467,6 +525,17 @@ function demoWorkspace(now: Date): MockWorkspace {
       tasks,
       submissions,
       ...emptyCollections(),
+      // 요구사항 active 12개 — 판 9장 + 대기 칸(11개 이상, #197 · #194). 앞쪽 판에 진행 중 · 모두 닫힘, 대기 칸 쪽에 연결 하나
+      ...requirementsOf(
+        Array.from({ length: 12 }, (_, i) => ({ id: `rq_${21 + i}`, key: `FR-DEMO-${String(i + 1).padStart(2, '0')}`, title: DEMO_REQUIREMENTS[i] })),
+        [
+          ['rq_21', 't_11', 8],
+          ['rq_22', 't_13', 6],
+          ['rq_31', 't_12', 4],
+        ],
+        tasks,
+        c,
+      ),
       flow: computeFlow({ members, tasks, submissions }),
     },
     consentedUserIds: ['u_1', 'u_review'],
