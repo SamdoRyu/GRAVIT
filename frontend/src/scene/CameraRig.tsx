@@ -105,7 +105,7 @@ function resolve(sel: Selection, out: Fly): boolean {
       return true
     }
     const snapshot = useOffice.getState().office?.snapshot
-    const seat = snapshot ? stationSceneFor(snapshot).seats.get(sel.id) : undefined
+    const seat = snapshot ? stationSceneFor(snapshot, useOffice.getState().requirementDeckOrder).seats.get(sel.id) : undefined
     const spot = seat === undefined ? null : crewSpot(seat, true)
     if (spot) {
       out.tx = spot.x

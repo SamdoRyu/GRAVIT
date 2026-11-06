@@ -4,7 +4,7 @@
 // position and flies along an arc when its slot changes.
 // An original issue / PR can be dragged (CONTRACTS.md 「8」 드롭 결과 — cargoDrop.ts): onto the bridge to raise it as an agenda
 // item (#30 · #26 — the agenda dialog opens), or an issue onto a requirement plate to link that requirement (#15 —
-// linkRequirement). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
+// linkRequirement) or onto the waiting plate to pick the requirement from the waiting list first (#197). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
 // original opens the v1 detail drawer (the GitHub originals are never changed from the app — CON-02).
 // A learning · other agenda item has no source (#31): it sits on the bridge table as the design's octahedron (floating,
 // turning, a lilac glow) or memo pad, shows its title on hover and opens nothing. A help-request item (#205) is the design's
@@ -19,7 +19,7 @@ import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
 import { CargoBadges } from './CargoBadges'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
-import { cargoDropTarget, requirementOf, type CargoSource } from './cargoDrop'
+import { cargoDropTarget, isWaitingTarget, requirementOf, type CargoSource } from './cargoDrop'
 import type { SceneEntity, ThemeLayout } from './model/types'
 import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, DROP_ZONE_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
 import { clamp, UNIT_BOX, useDynamicLayer } from './shared'
@@ -444,6 +444,7 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     if (target === 'meeting') useOffice.getState().openDialog({ kind: 'raiseAgenda', source })
     const requirementId = requirementOf(target)
     if (requirementId !== null && source.type === 'task') void linkToRequirement(requirementId, source.id)
+    if (isWaitingTarget(target) && source.type === 'task') useOffice.getState().openRequirementWaiting(source.id)
   }
   const cancel = (ev: PointerEvent) => {
     if (ev.pointerId === pointerId) stop()

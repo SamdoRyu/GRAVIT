@@ -1,7 +1,7 @@
 // 원본 이슈 · PR을 놓았을 때의 결과 (CONTRACTS.md 「8」 드롭 결과 — #30 · #26 · #15).
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { cargoDropTarget, requirementOf } from '../../src/scene/cargoDrop'
+import { cargoDropTarget, isWaitingTarget, requirementOf } from '../../src/scene/cargoDrop'
 
 const issue = { type: 'task', id: 't_1' } as const
 const pr = { type: 'submission', id: 's_1' } as const
@@ -18,9 +18,15 @@ describe('드롭 결과 — 함교 · 요구사항 판', () => {
     assert.equal(requirementOf('requirement:rq_1'), 'rq_1')
   })
 
-  it('대기 칸은 대기 목록(D — #197 다음 PR)이 나오기 전까지 드롭 대상이 아니다, 그 밖 · 빈 판도 아무 일 없음', () => {
-    assert.equal(cargoDropTarget('requirement:waiting', issue), null)
-    assert.equal(requirementOf('requirement:waiting'), null)
+  it('대기 칸은 이슈만 — 놓으면 대기 목록에서 요구사항을 고른다(바로 연결하지 않음, #197)', () => {
+    assert.equal(cargoDropTarget('requirement:waiting', issue), 'requirement:waiting')
+    assert.equal(cargoDropTarget('requirement:waiting', pr), null)
+    assert.equal(isWaitingTarget('requirement:waiting'), true)
+    assert.equal(isWaitingTarget('requirement:rq_1'), false)
+    assert.equal(requirementOf('requirement:waiting'), null, '대기 칸은 요구사항 ID가 아니다')
+  })
+
+  it('그 밖 · 빈 판은 아무 일 없음', () => {
     for (const zone of [null, 'backlog', 'review', 'done', 'board', 'desk:m_1'] as const) assert.equal(cargoDropTarget(zone, issue), null, String(zone))
     assert.equal(requirementOf('meeting'), null)
     assert.equal(requirementOf(null), null)
