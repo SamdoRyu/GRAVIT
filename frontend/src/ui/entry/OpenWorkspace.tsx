@@ -130,6 +130,8 @@ export function RepositoryChoices({ myWorkspaceIds, onEnter }: { myWorkspaceIds:
   const [repos, setRepos] = useState<RepositoryChoiceResponse | null>(null)
   const [failed, setFailed] = useState(false)
   const [opening, setOpening] = useState<string | null>(null)
+  // 강사 · 심사용 계정은 레포를 고르지 않는다(계약 「3」 — 늘 organizations: [])
+  const picksRepos = useSession((s) => s.me?.accountType === 'github' && !s.me.isInstructor)
 
   useEffect(() => {
     let alive = true
@@ -148,13 +150,15 @@ export function RepositoryChoices({ myWorkspaceIds, onEnter }: { myWorkspaceIds:
 
   if (failed) return <p className="entry-state">레포 목록을 받지 못했어요. 새로 고침해 주세요.</p>
   if (!repos) return <p className="entry-state">레포 목록을 읽는 중…</p>
-  if (repos.organizations.length === 0) return null
+  if (repos.organizations.length === 0 && !picksRepos) return null
   return (
     <section className="entry-repos" aria-labelledby="repos-title">
       <h2 id="repos-title" className="entry-subtitle">
         레포에서 사무실 열기
       </h2>
       <p className="dim small">레포 관리자가 레포의 사무실을 열면 팀원 모두가 들어올 수 있어요.</p>
+      {/* 앱이 아직 설치되지 않은 조직은 GitHub가 서버에 보여 주지 않아 목록에 없을 수 있다(#238) — 그때를 위한 안내 */}
+      <p className="dim small">팀 레포가 안 보이면 그 조직에 GRAVIT GitHub 앱이 아직 설치되지 않은 거예요. 조직 관리자에게 앱 설치를 부탁해 주세요.</p>
       {repos.organizations.map((org) => (
         <section key={org.githubOwnerId} className="entry-org" aria-label={`${org.login} 레포`}>
           <div className="entry-org-head">
