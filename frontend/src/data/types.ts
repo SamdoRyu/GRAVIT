@@ -658,6 +658,14 @@ export interface RetroReportDto extends RetroReportSummary {
   /** 본인이 확인한 카드만 (P11) */
   decisionCards: DecisionCardDto[]
 }
+/** `POST W/members/{memberId}/reports` — 본인만 */
+export interface ReportCreateRequest {
+  kind: RetroReportSummary['kind']
+}
+/** `PUT W/members/{memberId}/reports/{reportId}/learning` — 0~5000자, 통째로 바꾼다 (FR-REP-02) */
+export interface ReportLearningRequest {
+  learning: string
+}
 /** 9칸 — 각 0~2000자, 재료가 없으면 null */
 export interface DecisionCardCells {
   goal: string | null

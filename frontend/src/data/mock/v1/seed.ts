@@ -23,6 +23,7 @@ import type {
   Verdict,
   WorkspaceSnapshot,
 } from '../../types'
+import type { StoredReport } from '../../rules/report'
 import { withProgress } from '../../rules/requirements'
 
 /** mock 세션 — GitHub 로그인 사용자 또는 심사용 계정. null = 로그인 안 됨. */
@@ -46,6 +47,8 @@ export interface MockWorkspace {
   helpThreads?: MockHelpThread[]
   /** 스탠드업 (#190) — Snapshot에 없고 날짜로 읽는다. 없으면 빈 목록 */
   standups?: StandupDto[]
+  /** 회고 리포트 (#209) — 저장하는 칸만(종류 · 배운 점 · 만든 시각), 나머지는 읽을 때 계산한다. 없으면 빈 목록 */
+  reports?: StoredReport[]
 }
 
 export interface MockHelpThread {
