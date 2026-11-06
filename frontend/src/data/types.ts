@@ -155,7 +155,7 @@ export interface WorkspaceSnapshot {
   viewer: Viewer
   settings: TeamSettings
   sync: SyncStatus
-  /** 빠진 팀원 포함 전부. 지금 팀원 먼저 deskIndex 순, 그 뒤 빠진 팀원 */
+  /** 빠진 팀원 포함 전부. 지금 팀원 먼저 deskIndex 순(자리가 없는 지금 팀원은 그 뒤 id 순), 그 뒤 빠진 팀원 */
   members: MemberDto[]
   /** 이슈 전부. githubIssueNumber 오름차순 */
   tasks: TaskDto[]
@@ -204,7 +204,7 @@ export interface MemberDto {
   githubLogin: string | null
   displayName: string
   avatarUrl: string | null
-  /** 0~9 — 테마의 책상 자리 번호(좌표 아님). 빠진 팀원은 null — 책상 · 아바타 없음 */
+  /** 0~7 — 테마의 책상 자리 번호(좌표 아님). 빠진 팀원과 자리가 없는 팀원(8자리가 다 참)은 null — 책상 · 아바타 없음 */
   deskIndex: number | null
   isRepoAdmin: boolean
   /** 콜라보레이터에서 빠진 시각 */
