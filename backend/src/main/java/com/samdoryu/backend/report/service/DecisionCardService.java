@@ -31,10 +31,12 @@ import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -182,6 +184,27 @@ public class DecisionCardService {
         FollowUpQuestion question = followUpQuestionRepository.save(
                 new FollowUpQuestion(card, appUserService.require(access.userId()), body, now()));
         return FollowUpQuestionDto.of(question);
+    }
+
+    /**
+     * 강사 요청함(CONTRACTS_API 「16」 · FR-LRN-23) 재료 — 여러 사무실에서 꼬리질문을 요청한 카드를 주인 · 사무실 · PR과 함께.
+     * 어느 사무실을 볼지(지금 지정된 사무실)는 부르는 쪽이 정한다.
+     */
+    @Transactional(readOnly = true)
+    public List<DecisionCard> listFollowUpRequested(Collection<Long> workspaceIds) {
+        return workspaceIds.isEmpty() ? List.of()
+                : decisionCardRepository.findFollowUpRequestedByWorkspaceIds(workspaceIds);
+    }
+
+    /** 카드마다 첫 꼬리질문 시각 — 꼬리질문이 없는 카드는 키가 없다. */
+    @Transactional(readOnly = true)
+    public Map<Long, Instant> firstFollowUpQuestionAt(Collection<Long> cardIds) {
+        if (cardIds.isEmpty()) {
+            return Map.of();
+        }
+        return followUpQuestionRepository.findWithInstructorByDecisionCardIds(cardIds).stream()
+                .collect(Collectors.toMap(question -> question.getDecisionCard().getId(), FollowUpQuestion::getCreatedAt,
+                        BinaryOperator.minBy(Comparator.naturalOrder())));
     }
 
     private DecisionCard requireCard(Long memberId, Long cardId) {

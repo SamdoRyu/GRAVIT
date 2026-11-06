@@ -1,5 +1,5 @@
 // Every issue / PR of the open v1 office as one persistent box (keyed by SceneEntity key), placed by its SceneModel role,
-// plus an issue / PR agenda shape on the bridge table for each item on the agenda (#30 · #26).
+// plus an agenda shape on the bridge table for each item on the agenda: issue · PR (#30 · #26), learning · other (#31).
 import { useMemo, useRef, type ReactElement } from 'react'
 import { useOffice, type OfficeSelection } from '../store'
 import { TaskBox, type AgendaSource } from './TaskBox'

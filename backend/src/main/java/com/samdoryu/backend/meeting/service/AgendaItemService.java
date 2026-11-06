@@ -31,8 +31,11 @@ import com.samdoryu.backend.workspace.service.WorkspaceService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -231,6 +234,27 @@ public class AgendaItemService {
         return agendaItemRepository.findByWorkspaceIdOrderByRaisedAtAscIdAsc(workspaceId).stream()
                 .map(item -> AgendaItemDto.of(item, feedbacks.getOrDefault(item.getId(), List.of())))
                 .toList();
+    }
+
+    /**
+     * 강사 요청함(CONTRACTS_API 「16」 · FR-LRN-23) 재료 — 여러 사무실의 강사 피드백이 요청된 결정 기록을 사무실 · 올린 사람과
+     * 함께. 어느 사무실을 볼지(지금 지정된 사무실)는 부르는 쪽이 정한다.
+     */
+    @Transactional(readOnly = true)
+    public List<AgendaItem> listFeedbackRequested(Collection<Long> workspaceIds) {
+        return workspaceIds.isEmpty() ? List.of()
+                : agendaItemRepository.findFeedbackRequestedByWorkspaceIds(workspaceIds);
+    }
+
+    /** 안건마다 첫 강사 피드백 시각 — 피드백이 없는 안건은 키가 없다. */
+    @Transactional(readOnly = true)
+    public Map<Long, Instant> firstInstructorFeedbackAt(Collection<Long> agendaItemIds) {
+        if (agendaItemIds.isEmpty()) {
+            return Map.of();
+        }
+        return instructorFeedbackRepository.findByAgendaItemIdIn(agendaItemIds).stream()
+                .collect(Collectors.toMap(feedback -> feedback.getAgendaItem().getId(), InstructorFeedback::getCreatedAt,
+                        BinaryOperator.minBy(Comparator.naturalOrder())));
     }
 
     /**

@@ -167,7 +167,9 @@ describe('mock v1 — Snapshot', () => {
   it('팀원 · 이슈 · PR이 있고, 아직 다루지 않는 목록은 비어 있다', async () => {
     const snap = await make('github').load(TEAM_WS)
     assert.ok(snap.members.length > 0 && snap.tasks.length > 0 && snap.submissions.length > 0)
-    for (const key of ['requirements', 'requirementLinks', 'agendaItems', 'meetings', 'helpRequests', 'activityNotes'] as const) {
+    assert.ok(snap.helpRequests.length > 0, '도움 요청 seed (#183 — help.test.ts)')
+    assert.ok(snap.requirements.length > 0 && snap.requirementLinks.length > 0, '요구사항 seed (#197 — requirements.test.ts)')
+    for (const key of ['agendaItems', 'meetings', 'activityNotes'] as const) {
       assert.deepEqual(snap[key], [], key)
     }
   })
@@ -385,10 +387,10 @@ describe('mock v1 — 동기화', () => {
       tab(storage, 'github')
       const saved = JSON.parse(storage.getItem(V1_STORAGE_KEY) ?? 'null')
       saved.version = MOCK_STATE_VERSION - 1
-      saved.workspaces[0].snapshot.flow.averageReviewWaitHours = null // 옛 seed 모양
+      saved.workspaces[0].snapshot.workspace.displayName = '옛 사무실' // 옛 seed 표시
       storage.setItem(V1_STORAGE_KEY, JSON.stringify(saved))
       const source = quiet(() => tab(storage))
-      assert.equal((await source.load(TEAM_WS)).flow.averageReviewWaitHours, 6.5)
+      assert.equal((await source.load(TEAM_WS)).workspace.displayName, 'team-samdo/gitvillage')
     })
   })
 

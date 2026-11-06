@@ -8,7 +8,9 @@ import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.common.security.AppProperties;
 import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
+import com.samdoryu.backend.workspace.service.DemoWorkspaceService;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
+import java.util.List;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -26,13 +28,16 @@ public class AuthorizationService {
     private final InstructorAssignmentService instructorAssignmentService;
     private final WorkspaceService workspaceService;
     private final ReviewAccountService reviewAccountService;
+    private final DemoWorkspaceService demoWorkspaceService;
 
     public AuthorizationService(AppProperties appProperties, InstructorAssignmentService instructorAssignmentService,
-            WorkspaceService workspaceService, ReviewAccountService reviewAccountService) {
+            WorkspaceService workspaceService, ReviewAccountService reviewAccountService,
+            DemoWorkspaceService demoWorkspaceService) {
         this.appProperties = appProperties;
         this.instructorAssignmentService = instructorAssignmentService;
         this.workspaceService = workspaceService;
         this.reviewAccountService = reviewAccountService;
+        this.demoWorkspaceService = demoWorkspaceService;
     }
 
     /** 검사 순서 1 — 세션의 로그인 사용자. 없으면 {@code unauthorized}. */
@@ -92,6 +97,29 @@ public class AuthorizationService {
             throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
         }
         return principal;
+    }
+
+    /**
+     * 강사 요청함(CONTRACTS_API 「16」 · FR-LRN-23) — 사무실 경로 밖이라 검사 순서 2가 없다. {@code MeResponse.isInstructor}인
+     * 사람만이고 그 밖은 {@code forbidden_role}. 돌려주는 것은 요청함이 볼 사무실 — 허용 목록 강사는 지금 지정된 사무실(요청마다
+     * DB 확인, 해제된 사무실은 빠진다), 심사용 강사는 시연 사무실만(P15).
+     */
+    public List<Long> requireInstructorInboxWorkspaceIds() {
+        AppPrincipal principal = currentPrincipal();
+        if (principal.accountType() == AccountType.REVIEW) {
+            if (!reviewAccountService.isReviewInstructor(principal.userId())) {
+                throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+            }
+            return demoWorkspaceService.findDemoWorkspaceId().map(List::of).orElse(List.of());
+        }
+        if (!isAllowlistedInstructor(principal)) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        List<Long> assigned = instructorAssignmentService.currentWorkspaceIds(principal.githubUserId());
+        if (assigned.isEmpty()) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        return assigned;
     }
 
     private boolean isAllowlistedInstructor(AppPrincipal principal) {

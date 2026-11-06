@@ -1,7 +1,9 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
-// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26)을 만든다. 안건(#26 · #30), 요구사항(#15) 등은 각 Issue에서 더한다.
+// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26 · #31),
+// 요구사항 구역(#16 · #17)을 만든다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
-import type { AgendaItemDto, AgendaKind, MemberDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
+import type { AgendaItemDto, AgendaKind, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
+import { planRequirementDeck } from './requirementDeck'
 import type { PlaceRole, SceneEntity, SceneEntityKind } from './types'
 
 /** 화면 배지 값 — 그리는 쪽이 모양을 정한다 */
@@ -18,10 +20,16 @@ export const BADGE = {
   recommend: 'recommend',
   /** 현재 회차 비추천 수 — `countBadge(BADGE.notRecommend, n)` */
   notRecommend: 'not_recommend',
+  /** 대기 칸의 요구사항 수 — `countBadge(BADGE.waiting, n)` (CONTRACTS.md 「8」 대기 칸) */
+  waiting: 'waiting',
+  /** 대기 칸 안의 빈 구역(연결 이슈 0) 수 — 있을 때만 `countBadge(BADGE.empty, k)` */
+  empty: 'empty',
 } as const
 
+type CountBadge = typeof BADGE.recommend | typeof BADGE.notRecommend | typeof BADGE.waiting | typeof BADGE.empty
+
 /** 수를 담는 배지 — `<배지>:<수>`, 예: 'recommend:2'. 그리는 쪽이 모양을 정한다. */
-export const countBadge = (badge: typeof BADGE.recommend | typeof BADGE.notRecommend, count: number): string => `${badge}:${count}`
+export const countBadge = (badge: CountBadge, count: number): string => `${badge}:${count}`
 
 const deskRole = (memberId: string): PlaceRole => `desk:${memberId}`
 
@@ -92,7 +100,60 @@ function agendaEntity(a: AgendaItemDto): SceneEntity {
   return { key: `agenda:${a.id}`, kind: AGENDA_SHAPE[a.kind], refId: a.id, placeRole: 'meeting', badges: [] }
 }
 
-export function buildSceneModel(snapshot: WorkspaceSnapshot): SceneEntity[] {
+/** 원본 ID가 없는 요구사항의 묶음 키 */
+export const UNGROUPED = '미분류'
+
+/** 요구사항 종류(CONTRACTS.md 「3」): 원본 ID에서 끝 번호를 뺀 접두사 — 'FR-AUTH-01' → 'FR-AUTH'. 원본 ID가 없으면 "미분류". */
+export function requirementGroupKey(sourceKey: string | null): string {
+  if (!sourceKey) return UNGROUPED
+  const cut = sourceKey.lastIndexOf('-')
+  return cut > 0 ? sourceKey.slice(0, cut) : sourceKey
+}
+
+/** 대기 칸(CONTRACTS.md 「8」): 판에 못 오른 요구사항이 기다리는 마지막 판 */
+export const REQUIREMENT_WAITING_KEY = 'requirement-group:waiting'
+export const REQUIREMENT_WAITING_ROLE: PlaceRole = 'requirement:waiting'
+
+const isEmptyRequirement = (r: RequirementDto) => r.linkedTaskCount === 0
+
+function requirementEntity(r: RequirementDto): SceneEntity {
+  return {
+    key: `requirement:${r.id}`,
+    kind: 'requirement',
+    refId: r.id,
+    placeRole: `requirement:${r.id}`,
+    badges: [],
+    groupKey: requirementGroupKey(r.sourceKey),
+    ...(isEmptyRequirement(r) ? { highlight: 'dim' as const } : {}),
+  }
+}
+
+/**
+ * 요구사항 구역(FR-REQ-02 · 05 · 06): 판에 오른 `active` 요구사항마다 하나, 판 순서대로(planRequirementDeck). `missing` ·
+ * `needs_review`는 3D에 없다(「3」). 연결된 이슈가 없는 구역(빈 구역 — FR-REQ-06)은 `dim`. 진행률은 그리는 쪽이 Snapshot의
+ * 서버 계산 값(doneTaskCount / linkedTaskCount)을 읽는다. 판에 못 오른 요구사항이 있으면 대기 칸 하나(배지 waiting:N · empty:k).
+ */
+function requirementEntities(requirements: readonly RequirementDto[], deckOrder: readonly Id[] | null): SceneEntity[] {
+  const { shown, waiting } = planRequirementDeck(requirements, deckOrder)
+  const entities = shown.map(requirementEntity)
+  if (waiting.length > 0) {
+    const empty = waiting.filter(isEmptyRequirement).length
+    entities.push({
+      key: REQUIREMENT_WAITING_KEY,
+      kind: 'requirementGroup',
+      refId: null,
+      placeRole: REQUIREMENT_WAITING_ROLE,
+      badges: [countBadge(BADGE.waiting, waiting.length), ...(empty > 0 ? [countBadge(BADGE.empty, empty)] : [])],
+    })
+  }
+  return entities
+}
+
+/**
+ * @param deckOrder 요구사항 대기 칸 교환 결과(판에 올린 요구사항 ID 목록) — 스토어가 사무실별로 내준다(CONTRACTS.md 「8」).
+ * 없으면 position 순서.
+ */
+export function buildSceneModel(snapshot: WorkspaceSnapshot, deckOrder: readonly Id[] | null = null): SceneEntity[] {
   const seatedMembers = snapshot.members.filter(isSeated)
   const seated = new Set(seatedMembers.map((m) => m.id))
   const blockedMembers = new Set(snapshot.flow.blockedMemberIds)
@@ -101,5 +162,6 @@ export function buildSceneModel(snapshot: WorkspaceSnapshot): SceneEntity[] {
     ...snapshot.tasks.map((t) => taskEntity(t, seated)),
     ...snapshot.submissions.map(submissionEntity),
     ...snapshot.agendaItems.filter((a) => a.status === 'confirmed').map(agendaEntity),
+    ...requirementEntities(snapshot.requirements, deckOrder),
   ]
 }

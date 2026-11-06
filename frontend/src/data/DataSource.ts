@@ -10,11 +10,24 @@ import type {
   StartMeetingRequest,
   TaskDueDateDto,
   TaskDueDateRequest,
+  RequirementLinkCreateRequest,
+  RequirementLinkDto,
   DemoChange,
   ErrorCode,
   EvaluateRequest,
   EvaluationRoundDto,
+  HelpCommentCreateRequest,
+  HelpCommentDto,
+  HelpRequestCloseRequest,
+  HelpRequestCreateRequest,
+  HelpRequestDetail,
+  HelpRequestSummary,
+  HelpRequestToAgendaRequest,
   Id,
+  LocalDate,
+  StandupDto,
+  StandupPrefill,
+  StandupSaveRequest,
   LoginOptions,
   MeResponse,
   Meeting,
@@ -105,6 +118,40 @@ export interface DataSource {
    * 요청이 틀리면 invalid, confirmed가 아니거나 머지 · 닫힌 PR에 revise_and_reevaluate면 conflict
    */
   recordDecision(workspaceId: Id, agendaItemId: Id, request: DecisionRequest): Promise<AgendaItemDto>
+
+  // ---- 「11」 도움 요청 (#183 — 목록은 Snapshot의 helpRequests) ----
+  /** GET W/help-requests/{helpRequestId} — 코멘트(createdAt 오름차순) · 도움이 된 코멘트 · 배운 점 */
+  getHelpRequest(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestDetail>
+  /** POST W/help-requests — 201(open). 팀원만(강사 forbidden_role), fromStandupId가 본인 것이 아니면 forbidden_role */
+  createHelpRequest(workspaceId: Id, request: HelpRequestCreateRequest): Promise<HelpRequestSummary>
+  /**
+   * POST W/help-requests/{id}/comments — 201. 요청자가 아닌 팀원의 첫 코멘트면 open → discussing. 강사는 "강사에게 요청"이
+   * 켜진 글에만(아니면 forbidden_role), resolved · ended면 conflict
+   */
+  addHelpComment(workspaceId: Id, helpRequestId: Id, request: HelpCommentCreateRequest): Promise<HelpCommentDto>
+  /** POST W/help-requests/{id}/close — 요청자만(forbidden_role), open · discussing만(conflict), 도움이 된 코멘트가 틀리면 invalid */
+  closeHelpRequest(workspaceId: Id, helpRequestId: Id, request: HelpRequestCloseRequest): Promise<HelpRequestDetail>
+  /** POST W/help-requests/{id}/to-agenda — 201 AgendaItemDto(help_request). 요청자만, open · discussing만. 도움 요청은 on_agenda */
+  convertHelpRequestToAgenda(workspaceId: Id, helpRequestId: Id, request: HelpRequestToAgendaRequest): Promise<AgendaItemDto>
+  /** POST W/help-requests/{id}/instructor-request — 요청자만. 이미 켜져 있으면 그대로 */
+  requestInstructorHelp(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestSummary>
+
+  // ---- 「12」 스탠드업 (#190 — 날짜는 한국 시간 LocalDate) ----
+  /** GET W/standups?date= — 그날 쓴 팀원 것, memberId 순. 날짜 형식이 틀리면 invalid */
+  listStandups(workspaceId: Id, date: LocalDate): Promise<StandupDto[]>
+  /** GET W/standups/{date}/mine/prefill — {date}의 전날 내 GitHub 활동. 강사 forbidden_role */
+  getStandupPrefill(workspaceId: Id, date: LocalDate): Promise<StandupPrefill>
+  /** PUT W/standups/{date}/mine — 있으면 고치고 없으면 만든다. 오늘 뒤 날짜 · 2000자 초과 invalid, 강사 forbidden_role */
+  saveMyStandup(workspaceId: Id, date: LocalDate, request: StandupSaveRequest): Promise<StandupDto>
+
+  // ---- 「8」 요구사항 연결 (#197 — 요구사항 목록 · 연결은 Snapshot의 requirements · requirementLinks) ----
+  /**
+   * POST W/requirement-links — 201 새 연결, 같은 연결이 이미 있으면 200과 기존 연결(요구사항 상태와 상관없이).
+   * R2만(forbidden_role), 요구사항 · 이슈가 없거나 다른 사무실 것 not_found, 요구사항이 active가 아님 conflict
+   */
+  linkRequirement(workspaceId: Id, request: RequirementLinkCreateRequest): Promise<RequirementLinkDto>
+  /** DELETE W/requirement-links/{linkId} — 204. R2만(forbidden_role) */
+  unlinkRequirement(workspaceId: Id, linkId: Id): Promise<void>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

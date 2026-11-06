@@ -1,0 +1,165 @@
+// The requirement deck (H — #16 · #17): one solar-cell plate per requirement zone on the deck of the new module south of the
+// scanner, laid out by stationScene `deckPlan` (5 to 10 plates). A plate is the design's panel() lying on the floor: a cream
+// frame, a navy panel and a 5 × 2 cell grid. Cells light up teal as the linked issues close (doneTaskCount / linkedTaskCount,
+// the Snapshot's server values — FR-REQ-05); all closed adds a teal rim. A zone with no linked issue (FR-REQ-06) is an
+// unpowered panel: darker, cells off, an orange frame and "연결 없음". Unused places show only a faint floor outline; when
+// requirements overflow, the last place is the waiting plate (SceneModel `requirement-group:waiting` — waiting:N · empty:k).
+// OWNER: C.
+import { memo } from 'react'
+import type { RequirementDto } from '../data/types'
+import { useOffice } from '../store'
+import { REQ_DECK, REQ_PLATE, reqPlateCenter, WORLD_SCALE } from '../theme/station/geometry'
+import { Bx, COLORS, Glow, basic, lam } from '../theme/station/parts'
+import { BADGE, REQUIREMENT_WAITING_KEY, REQUIREMENT_WAITING_ROLE } from './model/buildSceneModel'
+import { badgeCount, litCells, PLATE_CELLS, plateTag } from './requirementPlate'
+import { SceneHtml } from './shared'
+import { useStationScene } from './useStationScene'
+
+const CELL_COLUMNS = 5
+const ORANGE = '#f29a52'
+
+const PANEL = 0x2c4a7c
+const PANEL_OFF = 0x1b2540
+const CELL_OFF = 0x3d5d92
+const CELL_DEAD = 0x26324f
+const FRAME = 0xece2cf
+const OUTLINE = 0xd2c4ab
+
+/** deckPlan place of the waiting plate (the tail of `requirement:waiting`) */
+const WAITING_PLACE = REQUIREMENT_WAITING_ROLE.slice('requirement:'.length)
+
+const W = REQ_PLATE.width
+const D = REQ_PLATE.depth
+const Y = REQ_DECK.deckY + 0.08
+
+function Cells({ lit, dead }: { lit: number; dead: boolean }) {
+  const gap = 0.08
+  const cw = (W - 0.2 - gap * (CELL_COLUMNS - 1)) / CELL_COLUMNS
+  const cd = (D - 0.2 - gap) / 2
+  return (
+    <>
+      {Array.from({ length: PLATE_CELLS }, (_, i) => {
+        const col = i % CELL_COLUMNS
+        const row = Math.floor(i / CELL_COLUMNS)
+        const x = -W / 2 + 0.1 + cw / 2 + col * (cw + gap)
+        const z = -D / 2 + 0.1 + cd / 2 + row * (cd + gap)
+        return <Bx key={i} s={[cw, 0.03, cd]} p={[x, 0.135, z]} c={i < lit ? basic(COLORS.teal) : lam(dead ? CELL_DEAD : CELL_OFF)} />
+      })}
+    </>
+  )
+}
+
+/** Four thin bars around a w × d rectangle at height y */
+function Rim({ w, d, y, color, t = 0.08 }: { w: number; d: number; y: number; color: number; t?: number }) {
+  const c = color === COLORS.teal ? basic(color) : lam(color)
+  return (
+    <>
+      <Bx s={[w + t, 0.04, t]} p={[0, y, -d / 2]} c={c} />
+      <Bx s={[w + t, 0.04, t]} p={[0, y, d / 2]} c={c} />
+      <Bx s={[t, 0.04, d + t]} p={[-w / 2, y, 0]} c={c} />
+      <Bx s={[t, 0.04, d + t]} p={[w / 2, y, 0]} c={c} />
+    </>
+  )
+}
+
+const tagBox = {
+  display: 'grid',
+  justifyItems: 'center',
+  gap: 1,
+  maxWidth: 150,
+  padding: '3px 8px',
+  borderRadius: 9,
+  background: 'rgba(255,255,255,0.96)',
+  boxShadow: '0 3px 10px rgba(30,45,90,0.22)',
+  font: '600 11px var(--font, sans-serif)',
+  color: '#1b2333',
+  userSelect: 'none' as const,
+  whiteSpace: 'nowrap' as const,
+}
+const titleLine = { maxWidth: 134, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, fontSize: 10.5, color: '#6b7487' }
+
+function PlateTag({ head, sub, warn, title }: { head: string; sub: string | null; warn: string | null; title: string | null }) {
+  return (
+    <SceneHtml center position={[0, 1.3, 0]} zIndexRange={[0, 0]} pointerEvents="none">
+      <div style={tagBox} data-plate-tag="">
+        <div>
+          {head}
+          {sub && <span style={{ color: '#3a7d73' }}> · {sub}</span>}
+          {warn && <span style={{ color: ORANGE }}> · {warn}</span>}
+        </div>
+        {title && <div style={titleLine}>{title}</div>}
+      </div>
+    </SceneHtml>
+  )
+}
+
+const RequirementPlate = memo(function RequirementPlate({ slot, requirement }: { slot: number; requirement: RequirementDto }) {
+  const { x, z } = reqPlateCenter(slot)
+  const linked = requirement.linkedTaskCount
+  const done = requirement.doneTaskCount
+  const empty = linked === 0
+  const full = linked > 0 && done >= linked
+  const tag = plateTag(requirement)
+  return (
+    <group position={[x, Y, z]} name={`requirement:${requirement.id}`}>
+      <Bx s={[W + 0.24, 0.1, D + 0.24]} p={[0, 0, 0]} c={lam(empty ? COLORS.trim : FRAME)} />
+      <Bx s={[W, 0.12, D]} p={[0, 0.06, 0]} c={empty ? lam(PANEL_OFF) : lam(PANEL, { emissive: 0x0a1630 })} />
+      <Cells lit={litCells(done, linked)} dead={empty} />
+      {full && (
+        <>
+          <Rim w={W + 0.5} d={D + 0.5} y={0.04} color={COLORS.teal} />
+          <Glow color={COLORS.teal} size={2.6} p={[0, 0.35, 0]} opacity={0.3} />
+        </>
+      )}
+      <PlateTag head={tag.head} sub={tag.progress} warn={empty ? '연결 없음' : null} title={tag.title} />
+    </group>
+  )
+})
+
+/** A place on the deck with no requirement: only a faint outline on the floor */
+function OpenPlace({ slot }: { slot: number }) {
+  const { x, z } = reqPlateCenter(slot)
+  return (
+    <group position={[x, Y, z]}>
+      <Rim w={W} d={D} y={0} color={OUTLINE} t={0.06} />
+    </group>
+  )
+}
+
+/** The last place when requirements overflow: a stack of plates with how many wait (and how many of them have no issue) */
+function WaitingPlate({ slot, waiting, empty }: { slot: number; waiting: number; empty: number }) {
+  const { x, z } = reqPlateCenter(slot)
+  return (
+    <group position={[x, Y, z]}>
+      {[0, 1, 2].map((i) => (
+        // stacked straight up (a slight sideways lean only), so the stack stays inside its own place
+        <group key={i} position={[i * 0.08, i * 0.16, 0]}>
+          <Bx s={[W + 0.24, 0.1, D + 0.24]} p={[0, 0, 0]} c={lam(i === 2 ? FRAME : COLORS.frame)} />
+          <Bx s={[W, 0.12, D]} p={[0, 0.06, 0]} c={lam(PANEL)} />
+        </group>
+      ))}
+      <PlateTag head={`대기 ×${waiting}`} sub={null} warn={empty > 0 ? `빈 구역 ${empty}` : null} title={null} />
+    </group>
+  )
+}
+
+export function RequirementDeck() {
+  const scene = useStationScene()
+  const requirements = useOffice((s) => s.office?.snapshot?.requirements)
+  if (!scene || !requirements) return null
+  const byId = new Map(requirements.map((r) => [r.id, r]))
+  const waitingBadges = scene.entities.find((e) => e.key === REQUIREMENT_WAITING_KEY)?.badges ?? []
+  const { slots, places } = scene.deck
+  return (
+    <group scale={WORLD_SCALE}>
+      {Array.from({ length: slots }, (_, i) => {
+        const place = places[i]
+        if (place === WAITING_PLACE)
+          return <WaitingPlate key="waiting" slot={i} waiting={badgeCount(waitingBadges, BADGE.waiting)} empty={badgeCount(waitingBadges, BADGE.empty)} />
+        const r = place === undefined ? undefined : byId.get(place)
+        if (r) return <RequirementPlate key={`r:${r.id}`} slot={i} requirement={r} />
+        return <OpenPlace key={`open:${i}`} slot={i} />
+      })}
+    </group>
+  )
+}

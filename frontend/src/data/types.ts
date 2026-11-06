@@ -283,7 +283,7 @@ export interface GithubReviewDto {
 
 export interface RequirementDto {
   id: Id
-  /** ## 제목의 요구사항 ID (예: "FR-AUTH-01"). 묶음 키는 화면이 여기서 계산 */
+  /** ## 제목의 원본 ID (예: "FR-AUTH-01"). 없으면 null — 화면은 제목만 보인다. 판 배치 · 순서는 position (2026-11-06 — #194) */
   sourceKey: string | null
   /** 원본 ID를 뺀 정규화 제목 */
   title: string
@@ -301,6 +301,11 @@ export interface RequirementLinkDto {
   requirementId: Id
   taskId: Id
   linkedAt: Instant
+}
+/** `POST W/requirement-links` (CONTRACTS_API.md 「8」) */
+export interface RequirementLinkCreateRequest {
+  requirementId: Id
+  taskId: Id
 }
 
 /** 팀 단위 계산 값 — 사람별 합계 · 순위 없음 (P6) */
@@ -534,6 +539,10 @@ export interface HelpRequestCloseRequest {
   helpfulCommentId: Id | null
   learning: string
 }
+/** `POST W/help-requests/{helpRequestId}/to-agenda` — 요청자만. title 1~100자 */
+export interface HelpRequestToAgendaRequest {
+  title: string
+}
 /** `GET W/help-requests/{helpRequestId}` */
 export interface HelpRequestDetail extends HelpRequestSummary {
   /** createdAt 오름차순. 안건으로 전환해도 그대로 붙어 보인다 */
@@ -563,6 +572,11 @@ export interface StandupDto {
   yesterday: string
   blockers: string | null
   updatedAt: Instant
+}
+/** `PUT W/standups/{date}/mine` — 각 0~2000자. 있으면 고치고 없으면 만든다 */
+export interface StandupSaveRequest {
+  yesterday: string
+  blockers: string | null
 }
 /** {date}의 전날(한국 시간) 내 GitHub 활동 — "어제 한 일" 미리 채우기 (FR-MTG-01) */
 export interface StandupPrefill {

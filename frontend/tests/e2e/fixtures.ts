@@ -11,7 +11,6 @@
 //   Boxes are confirmed by hovering until `store.hover` is the task (probing a few pixels around the projection),
 //   drop targets by moving until `store.dropTarget` is what we want. No private hooks, no fixed sleeps.
 import { test as base, expect, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import type { Task, Workspace } from '../../src/data/types'
 import { API_URL } from './env'
 
 export type Source = 'mock' | 'api'
@@ -101,38 +100,6 @@ export function callStore<R = unknown>(page: Page, action: string, ...args: unkn
   )
 }
 
-export function findTask(page: Page, title: string): Promise<Task | null> {
-  return page.evaluate(async (t) => {
-    const path = '/src/store.ts'
-    const { useOffice } = await import(/* @vite-ignore */ path)
-    return (Object.values(useOffice.getState().tasks) as Task[]).find((x) => x.title === t) ?? null
-  }, title)
-}
-
-export async function taskByTitle(page: Page, title: string): Promise<Task> {
-  const t = await findTask(page, title)
-  if (!t) throw new Error(`no task titled "${title}"`)
-  return t
-}
-
-/** Create a task through the store (works for both sources) and return it. */
-export async function seedTask(page: Page, input: Record<string, unknown>): Promise<Task> {
-  const task = await callStore<Task | null>(page, 'createTask', { projectId: 'p_web', ...input })
-  if (!task) throw new Error('createTask failed')
-  return task
-}
-
-/** Server-side truth (api source only). */
-export async function serverWorkspace(api: APIRequestContext): Promise<Workspace> {
-  const res = await api.get('/api/workspace')
-  expect(res.ok()).toBe(true)
-  return (await res.json()) as Workspace
-}
-
-export async function serverTask(api: APIRequestContext, id: string): Promise<Task | undefined> {
-  return (await serverWorkspace(api)).tasks.find((t) => t.id === id)
-}
-
 // ---- opening the app ------------------------------------------------------------------------------------
 
 /** mock 팀 사무실 — 로그인돼 있으면(mock 기본) 고르기를 건너뛰고 바로 연다(진입 흐름 #64 · #68) */
@@ -145,7 +112,6 @@ export function appPath(source: Source): string {
 /** Open the app and wait until data is loaded, the link is up (api) and the 3D scene is framed. */
 export async function openApp(page: Page, source: Source, opts: { scene?: boolean } = {}): Promise<void> {
   await page.goto(appPath(source))
-  await expect.poll(() => readStore(page, (s) => s.status), { message: 'store ready' }).toBe('ready')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null), { message: 'office ready' }).toBe('ready')
   if (source === 'api') await expect.poll(() => readStore(page, (s) => s.connection), { message: 'api online' }).toBe('online')
   await expect(page.getByText('사무실을 여는 중…')).toBeHidden()
@@ -354,13 +320,6 @@ export async function hoverBox(page: Page, key: string): Promise<{ x: number; y:
   throw new Error(`could not hover box ${key} near (${Math.round(base.x)}, ${Math.round(base.y)})`)
 }
 
-/** Panel drop targets (the 3D view is read-only — #102 T5-c-2). */
-export type DropWant =
-  | { kind: 'member'; id: string }
-  | { kind: 'backlog' }
-  | { kind: 'status'; status: string }
-  | { kind: 'day'; date: string; memberId?: string | null }
-
 // ---- panel (DOM) drags ----------------------------------------------------------------------------------
 
 export async function centerOf(loc: Locator): Promise<{ x: number; y: number }> {
@@ -368,20 +327,6 @@ export async function centerOf(loc: Locator): Promise<{ x: number; y: number }> 
   const box = await loc.boundingBox()
   if (!box) throw new Error('element has no box')
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-}
-
-/** Real-mouse drag from a panel card; releases over `to` (a locator) after `ready` says the drop target is set. */
-export async function dragCard(page: Page, card: Locator, to: Locator, want?: DropWant): Promise<void> {
-  const a = await centerOf(card)
-  await page.mouse.move(a.x, a.y)
-  await page.mouse.down()
-  await page.mouse.move(a.x + 8, a.y + 8)
-  await expect.poll(() => readStore(page, (s) => s.drag !== null), { message: 'card drag started' }).toBe(true)
-  const b = await centerOf(to)
-  await page.mouse.move(b.x, b.y, { steps: 10 })
-  if (want) await expect.poll(() => readStore(page, (s) => JSON.stringify(s.dropTarget))).toBe(JSON.stringify(want))
-  await page.mouse.up()
-  await expect.poll(() => readStore(page, (s) => s.drag), { message: 'drag ended' }).toBeNull()
 }
 
 // ---- common locators ------------------------------------------------------------------------------------

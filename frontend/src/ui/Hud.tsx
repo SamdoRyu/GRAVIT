@@ -9,7 +9,6 @@ import './dialogs.css'
 import './meeting.css'
 import './responsive.css'
 import { Dialogs } from './Dialogs'
-import { DragGhost, useTrackPointer } from './DragGhost'
 import { OVERLAY_QUERY, useMediaQuery, useTouchDragGuard } from './hooks'
 import { Rail } from './RightPanel'
 import { Toasts } from './Toasts'
@@ -69,17 +68,13 @@ export function Hud() {
   const overlay = useMediaQuery(OVERLAY_QUERY)
   useViewInsets(root, overlay)
   useHotkeys()
-  useTrackPointer()
   useTouchDragGuard()
-  const status = useOffice((s) => s.status)
+  // 사무실(v1 Snapshot)을 읽는 중
+  const opening = useOffice((s) => s.office?.status === 'loading')
   const offline = useOffice((s) => s.connection === 'offline')
   const dragging = useOffice((s) => s.drag !== null)
-  const hasDetail = useOffice((s) => {
-    // v1 사무실 상세(#102 T5-c-2) — store가 Snapshot에 없는 선택은 비우므로 고른 것이 있으면 서랍이 있다
-    if (s.officeSelection && s.office?.snapshot) return true
-    if (!s.selection) return false
-    return s.selection.kind === 'task' ? !!s.tasks[s.selection.id] : !!s.members[s.selection.id]
-  })
+  // v1 사무실 상세(#102 T5-c-2) — store가 Snapshot에 없는 선택은 비우므로 고른 것이 있으면 서랍이 있다
+  const hasDetail = useOffice((s) => s.officeSelection !== null && s.office?.snapshot != null)
   const panelOpen = useUi((s) => s.panelOpen)
   const wide = useUi((s) => s.wide)
 
@@ -150,8 +145,7 @@ export function Hud() {
       </div>
       <Rail />
       <Dialogs />
-      <DragGhost />
-      {(status === 'loading' || status === 'idle') && !offline && (
+      {opening && !offline && (
         <div className="loader" role="status">
           <span className="spinner" />
           <span>사무실을 여는 중…</span>

@@ -3,7 +3,7 @@
 // 데모 화면(데모 지표 줄 · 오버레이 · 작업 만들기 · 데모 스위치 · 팀원 추가 · 초기화)도 뺐다 — v1은 GitHub가 원본이다.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useSession } from '../session'
-import { ongoingMeeting, useOffice } from '../store'
+import { useOffice } from '../store'
 import { AnimatedNumber } from './common'
 import type { FlowSummary, TeamSettings, WorkspaceSnapshot } from '../data/types'
 import { ddayText, kstToday, projectDay } from '../data/rules/period'
@@ -13,6 +13,7 @@ import { Icon } from './icons'
 import { useUi } from './uiState'
 import { ConnectionBanner } from './Toasts'
 import { SyncStatus } from './SyncStatus'
+import { confirmedAgenda, ongoingMeetingOf } from './meetingView'
 
 function Kpi({
   label,
@@ -113,24 +114,25 @@ function NoValue() {
   )
 }
 
-/** "회의" button with the agenda count; becomes a slim live pill while a meeting is ongoing. */
+/**
+ * "회의" button with the agenda count; becomes a slim live pill while a meeting is ongoing.
+ * v1 사무실(Snapshot)의 회의 · 안건을 본다 — 결정을 기다리는 안건(confirmed) 수, 진행 중 회의(#102 T5-c-2).
+ */
 function MeetingControl() {
-  const live = useOffice((s) => ongoingMeeting(s.meetings))
-  const agendaCount = useOffice((s) => {
-    let n = 0
-    for (const t of Object.values(s.tasks)) if (t.onAgenda === true && t.status !== 'done') n++
-    return n
-  })
+  const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   const now = useNow(15_000)
+  const live = snapshot ? ongoingMeetingOf(snapshot) : null
+  const agendaCount = snapshot ? confirmedAgenda(snapshot).length : 0
   if (live) {
     const elapsed = formatDuration(live.startedAt, null, now)
     const minutes = Math.max(0, Math.floor((now - Date.parse(live.startedAt)) / 60_000))
+    const attendees = live.attendeeMemberIds.length
     return (
-      <div className="meet-live" role="status" title={`${live.title} · 진행 중 ${elapsed} · 참석 ${live.attendeeIds.length}명 · 안건 ${live.agendaTaskIds.length}개`}>
+      <div className="meet-live" role="status" title={`회의 진행 중 ${elapsed} · 참석 ${attendees}명 · 결정할 안건 ${agendaCount}개`}>
         <i className="meet-dot" aria-hidden="true" />
         <b className="meet-elapsed">{minutes}분</b>
         <span className="meet-meta">
-          {live.title} · 참석 {live.attendeeIds.length} · 안건 {live.agendaTaskIds.length}
+          회의 · 참석 {attendees} · 안건 {agendaCount}
         </span>
         <button type="button" className="btn btn-sm meet-end" onClick={() => useOffice.getState().openDialog({ kind: 'endMeeting', meetingId: live.id })} title="회의 종료 (M)" aria-label="회의 종료">
           종료
@@ -252,15 +254,15 @@ function TapTip() {
 }
 
 export function TopBar() {
-  const sourceLabel = useOffice((s) => s.sourceLabel)
-  const status = useOffice((s) => s.status)
+  // 사무실을 읽지 못했다(받은 Snapshot이 없음) — 데모 모델의 상태가 아니다
+  const failed = useOffice((s) => s.office?.status === 'error')
   const connection = useOffice((s) => s.connection)
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   return (
     <div className="hud-top">
       <div className="top-head">
       <header className="topbar glass">
-        <div className="brand" title={sourceLabel ? `데이터: ${sourceLabel}` : undefined}>
+        <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <Icon name="cube" size={14} />
           </span>
@@ -273,7 +275,7 @@ export function TopBar() {
         <MeetingControl />
         <MoreMenu />
       </header>
-      {status === 'error' && (
+      {failed && (
         <div className="error-banner" role="alert">
           <span className="error-dot" />
           데이터를 불러오지 못했어요

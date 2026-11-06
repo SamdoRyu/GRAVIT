@@ -7,7 +7,7 @@
 
 # API 계약 — 오피스 v1
 
-> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-05
+> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-06
 > [CONTRACTS.md](CONTRACTS.md)의 상세편이다. 공통 규칙(ID · 시각 · 상태 코드 · 페이지 · 에러 · 검사 순서 · 익명성 · Snapshot 경계)은 CONTRACTS.md에 있고 여기서 다시 적지 않는다. 엔드포인트 · DTO는 **이 문서 한 곳**이 기준이다. 바꿀 때는 CONTRACTS.md 「9. 계약 변경 절차」(문서 담당자가 고치고 커밋을 공유).
 > 근거: 2026-11-03 결정(Q1~Q6), 03 · 05 · 06 · 07. 이 문서는 새 기능 · 새 정책을 만들지 않는다 — 정책에서 바로 나오지 않는 인터페이스 선택에는 `[구현 기본값]`을 붙였다.
 
@@ -337,7 +337,7 @@ interface GithubReviewDto {
 
 interface RequirementDto {
   id: Id;
-  sourceKey: string | null;           // ## 제목의 요구사항 ID (예: "FR-AUTH-01"). 묶음 키는 화면이 여기서 계산
+  sourceKey: string | null;           // ## 제목의 요구사항 ID (예: "FR-AUTH-01"). 요구사항 종류(groupKey)는 화면이 여기서 계산
   title: string;                      // 원본 ID를 뺀 정규화 제목
   position: number;                   // 문서 안 순서 (0부터)
   status: 'active' | 'missing' | 'needs_review';

@@ -9,7 +9,7 @@ export type PlaceRole =
   | 'done'
   | 'meeting'
   | 'board'
-  | `requirement:${string}` // requirement:<requirementId>
+  | `requirement:${string}` // requirement:<requirementId> · 대기 칸은 requirement:waiting(내부 ID는 숫자라 겹치지 않음)
 
 export type SceneEntityKind =
   | 'issue'
@@ -24,16 +24,16 @@ export type SceneEntityKind =
   | 'board'
 
 export interface SceneEntity {
-  /** 종류를 붙인 화면 키 — 'task:42' · 'submission:42' · 'agenda:7' · 'member:3' · 'requirement:5' · 'requirement-group:FR-AUTH' · 'board' */
+  /** 종류를 붙인 화면 키 — 'task:42' · 'submission:42' · 'agenda:7' · 'member:3' · 'requirement:5' · 'requirement-group:waiting' · 'board' */
   key: string
   kind: SceneEntityKind
-  /** 가리키는 도메인 내부 ID (묶음 · 게시판은 null) */
+  /** 가리키는 도메인 내부 ID (대기 칸 · 게시판은 null) */
   refId: string | null
   placeRole: PlaceRole
-  /** 막힘 · 추천·비추천 수 · 묶음 개수 · Draft · 미병합 종료 · 시연 데이터 등 */
+  /** 막힘 · 추천·비추천 수 · 대기 칸 waiting:N · empty:k · Draft · 미병합 종료 · 시연 데이터 등 */
   badges: string[]
   highlight?: 'blocked' | 'recent' | 'dim' | 'focus'
-  /** 요구사항 묶음 — 요구사항 종류(원본 ID 접두사), 없으면 "미분류" */
+  /** 요구사항 종류(원본 ID 접두사), 없으면 "미분류" — 이름표 · 분류 · 정렬용, 묶음 기준 아님 (2026-11-06) */
   groupKey?: string
 }
 

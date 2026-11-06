@@ -1,11 +1,16 @@
 // UI-only view state (panel layout etc.). Domain state stays in src/store.ts. OWNER: ui-builder.
 import { create } from 'zustand'
 import type { BoardColumn, BoardSortKey } from '../data/rules/board'
-import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 
-/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2) */
-export type Tab = 'kanban' | 'list' | 'week'
+/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190 */
+export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup'
+
+/** 도움 요청 쓰기 초안 — 스탠드업 "막힌 것"에서 넘길 때 (#190) */
+export interface HelpDraft {
+  content: string
+  fromStandupId: string | null
+}
 
 interface UiState {
   tab: Tab
@@ -36,13 +41,22 @@ interface UiState {
   /** 목록 정렬. 같은 열을 다시 누르면 방향이 바뀐다 */
   boardSort: { key: BoardSortKey; dir: 'asc' | 'desc' }
   setBoardSort: (key: BoardSortKey) => void
+
+  // ---- 도움 요청 탭 (#183) ----
+  /** 탭에서 연 도움 요청. null = 목록 */
+  helpRequestId: string | null
+  /** 도움 요청 탭으로 가서 그 글을 연다(null = 목록으로) */
+  openHelpRequest: (id: string | null) => void
+  /** 쓰기 폼이 받아 갈 초안. 받으면 비운다 */
+  helpDraft: HelpDraft | null
+  /** 도움 요청 탭 목록으로 가서 이 초안으로 쓰기 폼을 연다(null = 비우기) */
+  startHelpDraft: (draft: HelpDraft | null) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
   tab: 'kanban',
   setTab: (tab) => {
     const cur = get().tab
-    if (tab !== 'week') useOffice.getState().setPanelView(tab)
     if (tab === 'week' && cur !== 'week') set({ tab, prevWide: get().wide, wide: true })
     else if (tab !== 'week' && cur === 'week') set({ tab, wide: get().prevWide ?? get().wide, prevWide: null })
     else set({ tab })
@@ -67,5 +81,15 @@ export const useUi = create<UiState>((set, get) => ({
   setBoardSort: (key) => {
     const { boardSort } = get()
     set({ boardSort: boardSort.key === key ? { key, dir: boardSort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' } })
+  },
+  helpRequestId: null,
+  openHelpRequest: (helpRequestId) => {
+    if (get().tab !== 'help') get().setTab('help')
+    set({ helpRequestId })
+  },
+  helpDraft: null,
+  startHelpDraft: (helpDraft) => {
+    if (helpDraft) get().openHelpRequest(null)
+    set({ helpDraft })
   },
 }))

@@ -117,16 +117,17 @@ describe('slots — 역할 안의 순서 · 아카이브', () => {
 })
 
 describe('slots — 회의실의 안건 모양 (#30 · #26)', () => {
-  it('이슈 · PR 안건은 회의 탁자 자리(올린 순서), 원본은 제 자리 그대로, 다른 종류 안건은 아직 그리지 않는다', async () => {
+  it('이슈 · PR · 배운 점 · 기타 안건은 회의 탁자 자리(올린 순서), 원본은 제 자리 그대로', async () => {
     const ds = createV1MockDataSource({ storage: createMemoryStorage(), session: 'github', latencyMs: [0, 0], now: () => new Date('2026-11-05T03:00:00Z') })
     const before = await ds.load('ws_1')
     const t = before.tasks.find((x) => x.state === 'open')!
     const p = before.submissions.find((x) => x.state === 'open')!
-    const raise = (kind: 'issue' | 'pr' | 'learning', sourceId: string | null, title: string) =>
+    const raise = (kind: 'issue' | 'pr' | 'learning' | 'other', sourceId: string | null, title: string) =>
       ds.createAgendaItem('ws_1', { kind, sourceId, title, background: null, tried: null, unresolvedReason: null })
     const a1 = await raise('issue', t.id, '이슈 안건')
     const a2 = await raise('pr', p.id, 'PR 안건')
     const a3 = await raise('learning', null, '배운 점')
+    const a4 = await raise('other', null, '기타')
     const after = await ds.load('ws_1')
 
     const slotsOf = (snap: WorkspaceSnapshot) => {
@@ -139,7 +140,12 @@ describe('slots — 회의실의 안건 모양 (#30 · #26)', () => {
     assert.equal(s1?.home, 'agenda')
     assert.deepEqual([s1?.x, s1?.y, s1?.z], scene.layout.anchor('meeting', 0))
     assert.deepEqual([s2?.x, s2?.y, s2?.z], scene.layout.anchor('meeting', 1))
-    assert.ok(!slots.has(`agenda:${a3.id}`), '배운 점 모양은 #31에서')
+    for (const [i, a] of [a3, a4].entries()) {
+      const s = slots.get(`agenda:${a.id}`)
+      assert.equal(s?.home, 'agenda', a.kind)
+      assert.deepEqual([s?.x, s?.y, s?.z], scene.layout.anchor('meeting', 2 + i), a.kind)
+      assert.equal(scene.entities.find((e) => e.key === `agenda:${a.id}`)?.kind, a.kind, '모양 = 안건 종류 (팔면체 · 메모지)')
+    }
 
     // 원본 자리는 안건을 올리기 전과 같다
     const old = slotsOf(before).slots

@@ -36,6 +36,12 @@
 .decision-follow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .decision-foot { display: flex; justify-content: flex-end; }
 .raise-source { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
+/* 배운 점 · 기타 안건 쓰기 (#31) */
+.agenda-note-open { justify-self: start; gap: 4px; }
+.modal form.agenda-note { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.agenda-note .seg { justify-self: start; background: var(--soft); border-radius: 10px; padding: 2px; }
+.agenda-note .seg button.is-on { background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.agenda-note .decision-foot { gap: 8px; }
 .outcome-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .outcome-ctl .seg { background: var(--soft); border-radius: 10px; padding: 2px; }
 .outcome-ctl .seg button.is-on { background: #fff; box-shadow: 0 0 0 1px var(--line); }
