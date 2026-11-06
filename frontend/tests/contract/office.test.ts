@@ -66,6 +66,8 @@ const failingSync = (over: Partial<SyncStatus> = {}): SyncStatus => ({
 
 afterEach(() => {
   useOffice.getState().closeOffice()
+  // 알림은 최근 4개만 남는다 — 앞 테스트가 쌓은 알림 때문에 "개수 + 1" 검사가 깨지지 않게 비운다
+  useOffice.setState({ toasts: [] })
   mock.timers.reset()
 })
 
@@ -275,6 +277,41 @@ describe('store — 알림 반영', () => {
     release()
     await opening
     assert.equal(office()?.snapshot?.sync.isFailing, true)
+  })
+})
+
+describe('store — 수동 동기화 (#234)', () => {
+  it('requestOfficeSync: running으로 바꾸고, 진행 중 다시 누르면 conflict 알림 · false, 끝나면 SSE로 idle', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = harness()
+    await useOffice.getState().openOffice(h.source, TEAM_WS)
+    assert.equal(await useOffice.getState().requestOfficeSync(), true)
+    assert.equal(office()?.snapshot?.sync.state, 'running')
+    const toasts = useOffice.getState().toasts.length
+    assert.equal(await useOffice.getState().requestOfficeSync(), false)
+    assert.equal(useOffice.getState().toasts.length, toasts + 1)
+    assert.equal(office()?.snapshot?.sync.state, 'running')
+    mock.timers.tick(SYNC_MS)
+    assert.equal(office()?.snapshot?.sync.state, 'idle')
+  })
+
+  it('응답보다 먼저 온 SSE sync가 있으면 응답의 running으로 덮지 않는다', async () => {
+    const h = harness()
+    const done: SyncStatus = { state: 'idle', lastSucceededAt: '2026-11-05T03:00:01Z', lastFailedAt: null, lastFailureCode: null, lastFailureMessage: null, isFailing: false, specWarnings: [] }
+    const source: DataSource = {
+      ...h.source,
+      requestSync: async () => {
+        h.push({ type: 'sync', status: done }) // 시연 사무실처럼 바로 끝남
+        return { ...done, state: 'running' }
+      },
+    }
+    await useOffice.getState().openOffice(source, TEAM_WS)
+    assert.equal(await useOffice.getState().requestOfficeSync(), true)
+    assert.deepEqual(office()?.snapshot?.sync, done)
+  })
+
+  it('사무실이 없으면 보내지 않고 false', async () => {
+    assert.equal(await useOffice.getState().requestOfficeSync(), false)
   })
 })
 
