@@ -29,6 +29,7 @@
 | 2026-11-05 | CONTRACTS.md 「3」 평가 회차 · CONTRACTS_API.md 「10」 decision | 머지 · 닫힌 PR 안건에 `revise_and_reevaluate`면 `409`, 회차를 열지 않음 | #146 — #27 · #128 |
 | 2026-11-05 | CONTRACTS.md 「3」 막힘 신호 · 평균 리뷰 대기(새 절) · 「10」 목록 · CONTRACTS_API.md 「5」 `averageReviewWaitHours` | 막힘 판정 규칙(승인 후 머지 대기 포함)과 평균 리뷰 대기 계산 규칙 [구현 기본값] | #146 — #22 · #129 · #24 |
 | 2026-11-05 | CONTRACTS_API.md 「8」 `POST W/requirement-links` | 같은 연결이 이미 있으면 요구사항 상태와 상관없이 `200` | #146 — #18 · #130 |
+| 2026-11-06 | CONTRACTS.md 머리말 「마지막 갱신」 · 「5」 | 2026-11-06. 길이 1자부터인 글 필드는 공백만인 값을 `invalid`로 거부(저장 값은 그대로, `null` 허용 필드의 `null`은 검사 안 함) | #175 — #156 리뷰 |
 
 ## 계약 문서의 기준 위치
 
