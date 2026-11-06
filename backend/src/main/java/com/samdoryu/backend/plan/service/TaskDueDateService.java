@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 앱 저장 작업 마감(FR-PLAN-02 · 03 · P14). 지금은 다른 패키지가 쓰는 읽기만 있다 — 마감 바꾸기는 #39에서 더한다. */
+/** 앱 저장 작업 마감(FR-PLAN-02 · 03 · P14)의 읽기 — 다른 패키지(Snapshot 조각)가 쓴다. 바꾸기 · 지우기는 {@link TaskDueDateEditService}. */
 @Service
 public class TaskDueDateService {
 

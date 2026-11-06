@@ -23,6 +23,7 @@ import type {
   RetroReportDto,
   StandupDto,
   StandupPrefill,
+  TaskDueDateDto,
   TimelineEntry,
   WorkspaceSnapshot,
 } from '../../src/data/types'
@@ -138,6 +139,14 @@ export const standupPrefillExample = {
     { kind: 'issue_closed', title: 'GitHub 로그인', githubNumber: 12, occurredAt: '2026-11-04T09:00:00Z' },
   ],
 } satisfies StandupPrefill
+
+// contract/examples/plan/task-due-date.json — CONTRACTS_API.md 「13」
+export const taskDueDateExample = {
+  taskId: '12',
+  dueDate: '2026-11-07',
+  updatedAt: '2026-11-05T03:00:00Z',
+  updatedBy: { userId: '7', githubLogin: 'octo-kim', displayName: '김옥토', avatarUrl: 'https://avatars.githubusercontent.com/u/1001?v=4' },
+} satisfies TaskDueDateDto
 
 // contract/examples/report/timeline-page.json — CONTRACTS_API.md 「15」
 export const timelinePageExample = {
@@ -421,6 +430,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/meeting.json': meetingExample,
   'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,
+  'plan/task-due-date.json': taskDueDateExample,
   'report/retro-report.json': retroReportExample,
   'report/timeline-page.json': timelinePageExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,

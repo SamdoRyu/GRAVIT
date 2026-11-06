@@ -71,6 +71,14 @@ public class SyncedItemService {
                 .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
     }
 
+    /** 이슈의 담당자 팀원 ID 전부 — 마감을 고칠 수 있는지 볼 때(P14 · #39). 이슈는 {@link #requireTask}로 먼저 찾는다. */
+    @Transactional(readOnly = true)
+    public List<Long> assigneeMemberIds(Task task) {
+        return taskAssigneeRepository.findByTaskId(task.getId()).stream()
+                .map(assignee -> assignee.getMember().getId())
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public Submission requireSubmission(Long workspaceId, Long submissionId) {
         return submissionRepository.findByIdAndWorkspaceId(submissionId, workspaceId)
