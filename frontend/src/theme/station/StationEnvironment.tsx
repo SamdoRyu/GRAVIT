@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { DoubleSide, TorusGeometry } from 'three'
 import { noRaycast } from '../../scene/runtime'
-import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
+import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
 import { Bx, COLORS, Console, CutawayModule, Glow, Rack, Thruster, Tube, basic, lam } from './parts'
 
 const PI = Math.PI
@@ -177,6 +177,13 @@ function Scanner() {
   )
 }
 
+/** H. 요구사항 데크 — 시안에 없는 모듈(요구사항 구역 Must). 시안 컷어웨이 모듈 그대로, 판(구역)은 장면(RequirementDeck)이 그린다. */
+function RequirementDeckModule() {
+  return (
+    <CutawayModule x={REQ_DECK.x} z={REQ_DECK.z} axis="x" length={REQ_DECK.length} radius={REQ_DECK.radius} />
+  )
+}
+
 /** 주 트러스 · 태양광 날개 */
 function Truss() {
   const TZ = 20
@@ -218,6 +225,7 @@ export function StationEnvironment({ podsShown }: { podsShown: ReadonlySet<numbe
       <Archive />
       <LaunchRack />
       <Scanner />
+      <RequirementDeckModule />
       {TUBES.map((t) => (
         <Tube key={`${t.axis}${t.from}${t.at}`} {...t} />
       ))}

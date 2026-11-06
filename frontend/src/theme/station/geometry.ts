@@ -85,6 +85,26 @@ export const SCANNER = { x: 48, z: 29, radius: 2.6, length: 16, floorY: HULL_Y -
 /** G. 아카이브 화물칸 — 완료 선반 */
 export const ARCHIVE = { x: 47, z: 4.5, radius: 3.6, length: 9, deckY: deckY(3.6) } as const
 
+/**
+ * H. 요구사항 데크 — 시안에 없는 모듈(요구사항 구역은 Must — CLAUDE.md 「디자인 테마」). 스캐너 남쪽 빈자리에 시안의 컷어웨이
+ * 모듈을 하나 더 두고 스캐너와 통로로 잇는다(2026-11-06 결정 — A안 + 태양전지 판). 정거장 범위(STATION_BOUNDS) 안이다.
+ */
+export const REQ_DECK = { x: 47.5, z: 38.6, radius: 3.4, length: 13, deckY: deckY(3.4) } as const
+
+/**
+ * 데크 바닥의 요구사항 판 자리: 2줄 × 5칸, 앞줄(북쪽, 스캐너 쪽)부터 서쪽 → 동쪽. 판 하나 = 시안 panel()(크림 틀 + 남색 판 +
+ * 격자)을 바닥에 눕힌 것. 판 수는 요구사항 수에 따라 5~10장(stationScene `deckPlan`).
+ */
+export const REQ_PLATE = { columns: 5, rows: 2, pitchX: 2.45, rowZ: [-1.15, 1.15], width: 2.05, depth: 1.75 } as const
+export const REQ_PLATE_SLOTS = REQ_PLATE.columns * REQ_PLATE.rows
+
+/** 판 자리 i의 중심(시안 단위, 바닥 높이) */
+export function reqPlateCenter(slot: number): { x: number; z: number } {
+  const col = slot % REQ_PLATE.columns
+  const row = Math.floor(slot / REQ_PLATE.columns) % REQ_PLATE.rows
+  return { x: REQ_DECK.x + (col - (REQ_PLATE.columns - 1) / 2) * REQ_PLATE.pitchX, z: REQ_DECK.z + REQ_PLATE.rowZ[row] }
+}
+
 /** F. 발사 대기 거치대 — 장식(머지 준비 상태는 계약에 없다) */
 export const LAUNCH_RACK = { x: 47, z: 17.6, y: 2.0 } as const
 
@@ -100,6 +120,8 @@ export const TUBES: readonly { axis: Axis; from: number; to: number; at: number 
   { axis: 'x', from: 38.2, to: 40.2, at: 29.5 },
   { axis: 'z', from: 20.0, to: 26.6, at: 47 },
   { axis: 'z', from: 10.4, to: 15.6, at: 47 },
+  // 스캐너 → 요구사항 데크(H)
+  { axis: 'z', from: 31.6, to: 35.2, at: REQ_DECK.x },
 ]
 /** 추가 포드 deskIndex → 옆 시안 포드와 잇는 통로(포드가 그려질 때만 그린다) */
 export const EXTRA_POD_TUBES: Readonly<Record<number, { axis: Axis; from: number; to: number; at: number }>> = {

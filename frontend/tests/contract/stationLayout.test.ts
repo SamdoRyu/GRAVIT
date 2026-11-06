@@ -88,7 +88,7 @@ describe('stationLayout — 공용 구역', () => {
     }
   })
 
-  it('요구사항 구역은 아직 없다 (#15)', () => {
+  it('데크에 판이 없는 요구사항 구역은 호출 쪽 버그로 본다 (#16)', () => {
     assert.throws(() => layout.anchor('requirement:r_1', 0))
   })
 })

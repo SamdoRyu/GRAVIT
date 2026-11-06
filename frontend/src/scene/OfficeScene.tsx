@@ -9,6 +9,7 @@ import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
 import { MeetingRoomState } from './MeetingRoomState'
+import { RequirementDeck } from './RequirementDeck'
 import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
 import { TaskTooltip } from './TaskTooltip'
@@ -61,6 +62,7 @@ export function OfficeScene() {
         </Suspense>
         <TaskBoxes />
         <MeetingRoomState />
+        <RequirementDeck />
         <ArchiveTag />
       </group>
       <TaskTooltip />
