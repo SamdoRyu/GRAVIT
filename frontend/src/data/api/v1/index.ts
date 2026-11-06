@@ -31,6 +31,9 @@ import type {
   RepositoryChoiceResponse,
   ReviewLoginRequest,
   SnapshotResource,
+  StandupDto,
+  StandupPrefill,
+  StandupSaveRequest,
   SyncStatus,
   TeamSettings,
   WorkspaceListItem,
@@ -114,6 +117,7 @@ const submissionPath = (workspaceId: Id, submissionId: Id) => `${workspacePath(w
 const agendaPath = (workspaceId: Id, agendaItemId: Id) => `${workspacePath(workspaceId)}/agenda-items/${encodeURIComponent(agendaItemId)}`
 const taskPath = (workspaceId: Id, taskId: Id) => `${workspacePath(workspaceId)}/tasks/${encodeURIComponent(taskId)}`
 const helpPath = (workspaceId: Id, helpRequestId: Id) => `${workspacePath(workspaceId)}/help-requests/${encodeURIComponent(helpRequestId)}`
+const standupPath = (workspaceId: Id, date: string) => `${workspacePath(workspaceId)}/standups/${encodeURIComponent(date)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -358,6 +362,10 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     convertHelpRequestToAgenda: async (workspaceId, helpRequestId, request: HelpRequestToAgendaRequest) =>
       json<AgendaItemDto>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/to-agenda`, request)),
     requestInstructorHelp: async (workspaceId, helpRequestId) => json<HelpRequestSummary>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/instructor-request`)),
+
+    listStandups: async (workspaceId, date) => json<StandupDto[]>(await read(`${workspacePath(workspaceId)}/standups?date=${encodeURIComponent(date)}`)),
+    getStandupPrefill: async (workspaceId, date) => json<StandupPrefill>(await read(`${standupPath(workspaceId, date)}/mine/prefill`)),
+    saveMyStandup: async (workspaceId, date, request: StandupSaveRequest) => json<StandupDto>(await write('PUT', `${standupPath(workspaceId, date)}/mine`, request)),
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
     async clearDueDate(workspaceId, taskId) {

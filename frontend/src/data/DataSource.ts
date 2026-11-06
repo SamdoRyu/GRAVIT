@@ -22,6 +22,10 @@ import type {
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
   Id,
+  LocalDate,
+  StandupDto,
+  StandupPrefill,
+  StandupSaveRequest,
   LoginOptions,
   MeResponse,
   Meeting,
@@ -129,6 +133,14 @@ export interface DataSource {
   convertHelpRequestToAgenda(workspaceId: Id, helpRequestId: Id, request: HelpRequestToAgendaRequest): Promise<AgendaItemDto>
   /** POST W/help-requests/{id}/instructor-request — 요청자만. 이미 켜져 있으면 그대로 */
   requestInstructorHelp(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestSummary>
+
+  // ---- 「12」 스탠드업 (#190 — 날짜는 한국 시간 LocalDate) ----
+  /** GET W/standups?date= — 그날 쓴 팀원 것, memberId 순. 날짜 형식이 틀리면 invalid */
+  listStandups(workspaceId: Id, date: LocalDate): Promise<StandupDto[]>
+  /** GET W/standups/{date}/mine/prefill — {date}의 전날 내 GitHub 활동. 강사 forbidden_role */
+  getStandupPrefill(workspaceId: Id, date: LocalDate): Promise<StandupPrefill>
+  /** PUT W/standups/{date}/mine — 있으면 고치고 없으면 만든다. 오늘 뒤 날짜 · 2000자 초과 invalid, 강사 forbidden_role */
+  saveMyStandup(workspaceId: Id, date: LocalDate, request: StandupSaveRequest): Promise<StandupDto>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

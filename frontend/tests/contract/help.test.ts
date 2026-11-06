@@ -96,7 +96,7 @@ describe('mock v1 — 도움 요청', () => {
     await rejectsCode(source.getHelpRequest(TEAM_WS, 'hr_nope'), 'not_found')
   })
 
-  it('쓰기 — open으로 생기고 Snapshot · changed(help_requests). 공백만은 invalid, 내 것이 아닌 스탠드업은 forbidden_role', async () => {
+  it('쓰기 — open으로 생기고 Snapshot · changed(help_requests). 공백만은 invalid, 없는 스탠드업 not_found · 남의 스탠드업 forbidden_role', async () => {
     const source = make()
     const { changes, off } = listen(source)
     const created = await source.createHelpRequest(TEAM_WS, { content: '테스트 DB가 자꾸 잠겨요', fromStandupId: null })
@@ -106,7 +106,10 @@ describe('mock v1 — 도움 요청', () => {
     assert.deepEqual((await source.load(TEAM_WS)).helpRequests.at(-1), created)
     assert.deepEqual(changes, [{ type: 'changed', resources: ['help_requests'] }])
     await rejectsCode(source.createHelpRequest(TEAM_WS, { content: '   ', fromStandupId: null }), 'invalid', HELP_MSG.content)
-    await rejectsCode(source.createHelpRequest(TEAM_WS, { content: '막혔어요', fromStandupId: 'st_1' }), 'forbidden_role', HELP_MSG.notOwnStandup)
+    // seed 스탠드업: st_1 = 내 것(어제), st_2 = 이삼도 것 (#190)
+    await rejectsCode(source.createHelpRequest(TEAM_WS, { content: '막혔어요', fromStandupId: 'st_nope' }), 'not_found', HELP_MSG.standupNotFound)
+    await rejectsCode(source.createHelpRequest(TEAM_WS, { content: '막혔어요', fromStandupId: 'st_2' }), 'forbidden_role', HELP_MSG.notOwnStandup)
+    assert.equal((await source.createHelpRequest(TEAM_WS, { content: '막혔어요', fromStandupId: 'st_1' })).fromStandupId, 'st_1')
   })
 
   it('코멘트 — 남의 open 요청에 첫 코멘트면 discussing, 내 요청에 단 코멘트는 그대로, 해결된 요청은 conflict', async () => {

@@ -26,6 +26,7 @@ export const HELP_MSG = {
   notFound: '도움 요청을 찾을 수 없어요',
   notRequester: '요청한 사람만 할 수 있어요',
   notOwnStandup: '내 스탠드업에서만 도움 요청을 만들 수 있어요',
+  standupNotFound: '스탠드업을 찾을 수 없어요',
   closedForComments: '해결됐거나 끝난 도움 요청에는 코멘트를 달 수 없어요',
   notOpen: '열려 있거나 논의 중인 도움 요청만 할 수 있어요',
   helpfulNotHere: '도움이 된 코멘트는 이 도움 요청의 코멘트여야 해요',
