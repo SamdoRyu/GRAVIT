@@ -7,6 +7,7 @@ import { createV1ApiDataSource } from './data/api/v1'
 import { createV1MockDataSource } from './data/mock/v1'
 import { useSession } from './session'
 import { EntryScreen } from './ui/entry/EntryScreen'
+import { Landing } from './ui/entry/Landing'
 import { Hud } from './ui/Hud'
 import { SceneBoundary } from './app/SceneBoundary'
 
@@ -40,6 +41,8 @@ export default function App() {
 
   const signedIn = useSession((s) => s.status === 'signed_in')
   const officeOpen = useOffice((s) => s.office !== null)
+  // 계정마다 처음 사무실을 고를 때 한 번 — 도착 장면이 사무실 위를 덮었다가 걷힌다(그동안 사무실은 뒤에서 읽힌다)
+  const landing = useSession((s) => s.landing)
   // 로그인되면 3D 묶음을 미리 받아 둔다 — 사무실을 고르는 사이에 받아져 사무실이 빨리 뜬다
   useEffect(() => {
     if (signedIn) void loadScene().catch(() => {})
@@ -66,18 +69,21 @@ export default function App() {
   if (!signedIn || !officeOpen) return <EntryScreen />
 
   return (
-    <div className="app">
-      <SceneBoundary>
-        {(attempt) => {
-          const SceneCanvas = sceneFor(attempt)
-          return (
-            <Suspense fallback={null}>
-              <SceneCanvas />
-            </Suspense>
-          )
-        }}
-      </SceneBoundary>
-      <Hud />
-    </div>
+    <>
+      <div className="app" inert={landing}>
+        <SceneBoundary>
+          {(attempt) => {
+            const SceneCanvas = sceneFor(attempt)
+            return (
+              <Suspense fallback={null}>
+                <SceneCanvas />
+              </Suspense>
+            )
+          }}
+        </SceneBoundary>
+        <Hud />
+      </div>
+      {landing && <Landing />}
+    </>
   )
 }

@@ -198,3 +198,43 @@ describe('레포에서 사무실 열기 (#13 · #68)', () => {
     assert.equal(office(), null)
   })
 })
+
+describe('도착 장면 (로그인 디자인 전환 A)', () => {
+  it('계정마다 처음 사무실을 고를 때 한 번 — 두 번째 고르기 · 앱을 열 때 자동으로 들어가기는 장면 없이', async () => {
+    const source = make()
+    await st().start(source, { preferredWorkspace: TEAM_WS })
+    assert.equal(st().landing, false, '?workspace로 바로 들어가면 장면 없이')
+
+    st().leaveWorkspace()
+    await st().enterWorkspace(DEMO_WS)
+    assert.equal(st().landing, true, '처음 고르면 장면')
+    st().finishLanding()
+    assert.equal(st().landing, false)
+
+    st().leaveWorkspace()
+    await st().enterWorkspace(TEAM_WS)
+    assert.equal(st().landing, false, '두 번째 고르기는 장면 없이')
+
+    useOffice.getState().closeOffice()
+    resetSessionForTest()
+    await st().start(source)
+    assert.equal(office()?.workspaceId, TEAM_WS)
+    assert.equal(st().landing, false, '지난번 사무실로 자동으로 들어가면 장면 없이')
+  })
+
+  it('다른 계정은 따로 한 번 · 사무실을 나가거나 로그아웃하면 장면을 끈다', async () => {
+    await st().start(make())
+    await st().enterWorkspace(TEAM_WS)
+    assert.equal(st().landing, true)
+    st().leaveWorkspace()
+    assert.equal(st().landing, false, '사무실 바꾸기로 나가면 끈다')
+
+    await st().logout()
+    assert.equal(st().landing, false)
+    assert.equal(await st().loginForReview(MOCK_REVIEW_LOGIN.username, MOCK_REVIEW_LOGIN.password), null)
+    await st().enterWorkspace(DEMO_WS)
+    assert.equal(st().landing, true, '심사 계정은 처음 — 장면')
+    await st().logout()
+    assert.equal(st().landing, false, '로그아웃하면 끈다')
+  })
+})

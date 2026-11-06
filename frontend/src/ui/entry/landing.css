@@ -1,0 +1,253 @@
+/* 도착 장면 — GRAVIT 로그인 디자인 "전환 A · 행성 줌인" 값 그대로. OWNER: D.
+   단계(data-phase): 0 탑승 수속 · 1 글 사라짐 · 2 줌인 · 3 덮음 · 4 드러냄(뒤의 실제 사무실이 보인다) */
+.landing {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  font-family: 'IBM Plex Sans KR', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  color: #eef3ff;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.landing-scene {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 40% 30%, #1c2156 0%, #10153a 55%, #080b22 100%);
+  transition:
+    opacity 0.9s ease,
+    transform 1.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+/* 드러냄 — 덮개째 걷히며 뒤의 사무실이 보인다. 걷히는 동안 클릭은 사무실로 */
+.landing[data-phase='4'] {
+  pointer-events: none;
+}
+.landing[data-phase='4'] .landing-scene {
+  opacity: 0;
+  transform: scale(1.04);
+}
+
+.landing-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 30% 62%;
+  transition:
+    transform 2.6s cubic-bezier(0.65, 0, 0.3, 1),
+    opacity 2.2s ease;
+}
+.landing[data-phase='2'] .landing-stars,
+.landing[data-phase='3'] .landing-stars,
+.landing[data-phase='4'] .landing-stars {
+  transform: scale(1.35);
+  opacity: 0.25;
+}
+
+/* 글 · 카드 — 1단계부터 사라진다 */
+.landing-ui {
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+.landing:not([data-phase='0']) .landing-ui {
+  opacity: 0;
+}
+
+.landing-brand {
+  position: absolute;
+  left: clamp(16px, 4vw, 48px);
+  top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-family: Fredoka, 'IBM Plex Sans KR', sans-serif;
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: 2.4px;
+}
+
+.landing-hero {
+  position: absolute;
+  left: max(16px, calc(50% - 600px));
+  top: 15vh;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.landing:not([data-phase='0']) .landing-hero {
+  transform: translateY(-16px);
+}
+.landing-eyebrow {
+  font-family: Fredoka, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 3px;
+  color: #8ff0e0;
+}
+.landing-title {
+  margin: 0;
+  font-size: clamp(30px, 3.4vw, 46px);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.landing-planet {
+  position: absolute;
+  left: calc(30vw - 280px);
+  top: calc(62vh - 201px);
+  width: 560px;
+  height: 385px;
+  transform-origin: 280px 201px;
+  transition: transform 2.6s cubic-bezier(0.65, 0, 0.3, 1);
+  will-change: transform;
+}
+.landing-planet img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.landing[data-phase='2'] .landing-planet,
+.landing[data-phase='3'] .landing-planet,
+.landing[data-phase='4'] .landing-planet {
+  transform: translate(20vw, -12vh) scale(9);
+}
+
+/* 행성 표면빛으로 덮기 */
+.landing-wash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, #f5defc 0%, #decafb 55%, #c1b3f8 100%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+.landing[data-phase='3'] .landing-wash,
+.landing[data-phase='4'] .landing-wash {
+  opacity: 1;
+}
+
+.landing-card {
+  position: absolute;
+  right: max(16px, calc(50% - 600px));
+  top: 50%;
+  width: min(400px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 32px clamp(20px, 3vw, 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: #ffffff;
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.08),
+    0 24px 60px rgba(5, 8, 30, 0.6);
+  color: #10173a;
+  transform: translateY(-50%);
+}
+.landing:not([data-phase='0']) .landing-card {
+  transform: translateY(calc(-50% + 18px)) scale(0.97);
+}
+.landing-chip {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e6f8f5;
+  border: 1px solid #b4ebe2;
+  font-size: 13px;
+  color: #0b5a50;
+  font-weight: 700;
+}
+.landing-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.landing-card-head h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.landing-card-head p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #3d4670;
+}
+.landing-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: #ece8f6;
+  overflow: hidden;
+}
+.landing-progress > div {
+  width: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: #f29a52;
+  transition: width 1.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.landing-progress > div.is-filled {
+  width: 100%;
+}
+.landing-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #464f78;
+}
+.landing-who > span {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: #5fc4b8;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #d8dcef;
+  box-sizing: border-box;
+  color: #14193a;
+  font-family: Fredoka, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  /* 좁은 화면 — 머리글은 빼고 카드를 아래쪽에 */
+  .landing-hero {
+    display: none;
+  }
+  .landing-card {
+    top: auto;
+    bottom: 24px;
+    transform: none;
+  }
+  .landing:not([data-phase='0']) .landing-card {
+    transform: translateY(18px) scale(0.97);
+  }
+  .landing-planet {
+    left: calc(50vw - 280px);
+    top: calc(36vh - 201px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-scene,
+  .landing-stars,
+  .landing-ui,
+  .landing-planet,
+  .landing-wash,
+  .landing-progress > div {
+    transition: none;
+  }
+}
