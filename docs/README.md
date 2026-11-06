@@ -31,6 +31,7 @@
 | 2026-11-05 | CONTRACTS_API.md 「8」 `POST W/requirement-links` | 같은 연결이 이미 있으면 요구사항 상태와 상관없이 `200` | #146 — #18 · #130 |
 | 2026-11-06 | CONTRACTS.md 머리말 「마지막 갱신」 · 「5」 | 2026-11-06. 길이 1자부터인 글 필드는 공백만인 값을 `invalid`로 거부(저장 값은 그대로, `null` 허용 필드의 `null`은 검사 안 함) | #175 — #156 리뷰 |
 | 2026-11-06 | CONTRACTS.md 「2」 계산 값 · 「3」 요구사항 · 「8」 SceneModel · 「10」, CONTRACTS_API.md 머리말 「마지막 갱신」 · 「5」 `RequirementDto.sourceKey` 주석 | 요구사항 종류별 묶음 → 판 5\~10장 + 대기 칸(`requirement:waiting`, 배지 `waiting:N` · `empty:k`). 교환 결과는 보는 사람의 브라우저에만. `groupKey`는 이름표 · 분류 · 정렬용. "완료 요구사항 k/N" 묶음 배지 삭제. 빈 판은 드롭 구역 아님 | #14 — C 요청 · 2026-11-06 결정 |
+| 2026-11-06 | CONTRACTS.md 「8」 SceneModel | 게시판 배지 `help:N` · `candidate:k`(0이면 없음), 결정 기록 · 강사 피드백 · 배운 점은 세지 않음, 고르면 도움 요청 목록(결정 기록 · 강사 피드백 HUD가 생기면 그것도) | #205 — C 요청 · 2026-11-06 결정 |
 
 ## 계약 문서의 기준 위치
 
