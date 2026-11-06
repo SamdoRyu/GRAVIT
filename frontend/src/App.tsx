@@ -2,7 +2,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { useOffice } from './store'
 import { createMockDataSource } from './data/mock'
-import { createApiDataSource } from './data/api'
 import { createV1ApiDataSource } from './data/api/v1'
 import { createV1MockDataSource } from './data/mock/v1'
 import { useSession } from './session'
@@ -11,10 +10,11 @@ import { Hud } from './ui/Hud'
 import { SceneBoundary } from './app/SceneBoundary'
 
 // One source per page load (module scope, so StrictMode's double effects don't create two).
-// `?source=api` talks to the local server (docs/API.md); otherwise the in-browser mock.
 const params = new URLSearchParams(location.search)
 const apiMode = params.get('source') === 'api'
-const dataSource = apiMode ? createApiDataSource() : createMockDataSource()
+// 데모 모델(store의 데모 칸 — #102 ④에서 걷어낸다)은 mock에서만 띄운다. `?source=api`의 Spring에는 데모 API가 없어
+// (GET /api/workspace → 401 · 404) 띄우면 콘솔 오류와 "데이터를 불러오지 못했어요"만 남는다 (#102 T5-c-3)
+const demoSource = apiMode ? null : createMockDataSource()
 
 // v1 DataSource — 로그인 · 사무실 고르기 · 사무실(WorkspaceSnapshot). `?source=api`는 Spring /api, 아니면 브라우저 mock.
 // `?workspace=<id>`면 로그인돼 있고 들어갈 수 있을 때 바로 그 사무실을 연다(없으면 지난번 사무실, 그것도 없으면 고르기).
@@ -34,7 +34,7 @@ const sceneFor = (attempt: number) => {
 
 export default function App() {
   useEffect(() => {
-    void useOffice.getState().init(dataSource)
+    if (demoSource) void useOffice.getState().init(demoSource)
     void useSession.getState().start(officeSource, { preferredWorkspace })
   }, [])
 

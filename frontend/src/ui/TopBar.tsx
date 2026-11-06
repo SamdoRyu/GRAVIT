@@ -253,7 +253,8 @@ function TapTip() {
 
 export function TopBar() {
   const sourceLabel = useOffice((s) => s.sourceLabel)
-  const status = useOffice((s) => s.status)
+  // 사무실을 읽지 못했다(받은 Snapshot이 없음) — 데모 모델의 상태가 아니다
+  const failed = useOffice((s) => s.office?.status === 'error')
   const connection = useOffice((s) => s.connection)
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   return (
@@ -273,7 +274,7 @@ export function TopBar() {
         <MeetingControl />
         <MoreMenu />
       </header>
-      {status === 'error' && (
+      {failed && (
         <div className="error-banner" role="alert">
           <span className="error-dot" />
           데이터를 불러오지 못했어요
