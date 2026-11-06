@@ -23,6 +23,8 @@ interface SessionState {
   error: string | null
   /** mock DataSource인가 — GitHub 로그인 흉내 · 로그인 화면 안내 */
   mock: boolean
+  /** 도착 장면(행성 줌인 → 사무실)을 지금 보여 주는가 — 계정마다 처음 사무실을 고를 때 한 번 */
+  landing: boolean
   /** 앱을 열 때 한 번. 같은 source로 두 번 불러도(StrictMode) 한 번만 한다 */
   start: (source: DataSource, opts?: StartOptions) => Promise<void>
   /** 세션을 다시 확인한다(오류 화면의 다시 시도) */
@@ -35,8 +37,13 @@ interface SessionState {
   logout: () => Promise<void>
   /** 들어갈 수 있는 사무실 목록. 실패하면 알림 후 null */
   listWorkspaces: () => Promise<WorkspaceListItem[] | null>
-  /** 사무실에 들어간다 — 다음에 앱을 열면 다시 이 사무실로 */
+  /**
+   * 사람이 고른 사무실에 들어간다 — 다음에 앱을 열면 다시 이 사무실로.
+   * 이 계정이 처음 고른 것이면 도착 장면을 한 번 보여 준다(앱을 열 때 자동으로 들어가는 것은 장면 없이)
+   */
   enterWorkspace: (workspaceId: Id) => Promise<void>
+  /** 도착 장면이 끝났다 */
+  finishLanding: () => void
   /** 사무실을 닫고 사무실 고르기로 — 다음에 앱을 열어도 고르기부터 */
   leaveWorkspace: () => void
   /** 새 사무실을 열 수 있는 조직 · 레포(GET /api/repositories). 실패하면 알림 후 null */
@@ -65,6 +72,18 @@ function remember(userId: Id, workspaceId: Id | null) {
     else localStorage.setItem(LAST_KEY(userId), workspaceId)
   } catch {
     /* 저장소를 못 쓰면 다음에 고르기부터 */
+  }
+}
+
+// 도착 장면은 계정마다 한 번 — 본 계정을 기억한다(저장소를 못 쓰면 장면 없이)
+const LANDING_KEY = (userId: Id) => `gravit.landingSeen.${userId}`
+function takeFirstLanding(userId: Id): boolean {
+  try {
+    if (localStorage.getItem(LANDING_KEY(userId)) !== null) return false
+    localStorage.setItem(LANDING_KEY(userId), '1')
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -100,7 +119,7 @@ export const useSession = create<SessionState>((set, get) => {
         const list = await src.listWorkspaces()
         if (list.some((w) => w.id === target)) {
           set({ status: 'signed_in', me, loginOptions: null })
-          await get().enterWorkspace(target)
+          await open(target, false)
           return
         }
       } catch {
@@ -110,12 +129,23 @@ export const useSession = create<SessionState>((set, get) => {
     set({ status: 'signed_in', me, loginOptions: null })
   }
 
+  /** 사무실을 연다. arrive면 이 계정의 첫 고르기일 때 도착 장면을 켠다 */
+  async function open(workspaceId: Id, arrive: boolean) {
+    const src = source
+    const me = get().me
+    if (!src || !me) return
+    remember(me.user.userId, workspaceId)
+    if (arrive && takeFirstLanding(me.user.userId)) set({ landing: true })
+    await useOffice.getState().openOffice(src, workspaceId)
+  }
+
   return {
     status: 'idle',
     me: null,
     loginOptions: null,
     error: null,
     mock: false,
+    landing: false,
 
     start: async (src, opts = {}) => {
       if (started && src === source) return
@@ -153,7 +183,7 @@ export const useSession = create<SessionState>((set, get) => {
     logout: async () => {
       useOffice.getState().closeOffice()
       const src = source
-      set({ status: 'checking', me: null })
+      set({ status: 'checking', me: null, landing: false })
       try {
         await src?.logout()
       } catch {
@@ -175,17 +205,13 @@ export const useSession = create<SessionState>((set, get) => {
       }
     },
 
-    enterWorkspace: async (workspaceId) => {
-      const src = source
-      const me = get().me
-      if (!src || !me) return
-      remember(me.user.userId, workspaceId)
-      await useOffice.getState().openOffice(src, workspaceId)
-    },
+    enterWorkspace: (workspaceId) => open(workspaceId, true),
+    finishLanding: () => set({ landing: false }),
 
     leaveWorkspace: () => {
       const me = get().me
       if (me) remember(me.user.userId, null)
+      set({ landing: false })
       useOffice.getState().closeOffice()
     },
 
@@ -224,5 +250,5 @@ export const useSession = create<SessionState>((set, get) => {
 export function resetSessionForTest() {
   source = null
   started = false
-  useSession.setState({ status: 'idle', me: null, loginOptions: null, error: null, mock: false })
+  useSession.setState({ status: 'idle', me: null, loginOptions: null, error: null, mock: false, landing: false })
 }
