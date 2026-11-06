@@ -4,7 +4,7 @@
 // 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
-import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, InstructorFeedbackDto, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -112,6 +112,10 @@ interface OfficeState {
   withdrawAgendaItem: (agendaItemId: Id) => Promise<AgendaItemDto | null>
   /** POST W/agenda-items/{id}/decision — 결론 · 배운 점 · PR 결정 · 후속 담당 */
   recordAgendaDecision: (agendaItemId: Id, request: DecisionRequest) => Promise<AgendaItemDto | null>
+  /** POST W/agenda-items/{id}/feedback-request — 팀원만, 결정 기록에만. 이미 켜져 있으면 그대로 (#212) */
+  requestDecisionFeedback: (agendaItemId: Id) => Promise<AgendaItemDto | null>
+  /** POST W/agenda-items/{id}/instructor-feedback — 지정된 강사만, 요청이 켜진 결정 기록에만 (#212) */
+  addInstructorFeedback: (agendaItemId: Id, body: string) => Promise<InstructorFeedbackDto | null>
   /** PUT W/tasks/{id}/due-date — R2 또는 그 이슈 담당자 */
   setTaskDueDate: (taskId: Id, dueDate: LocalDate) => Promise<boolean>
   /** DELETE W/tasks/{id}/due-date */
@@ -427,6 +431,20 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeWrite(
         (src, ws) => src.recordDecision(ws, agendaItemId, request),
         (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+      ),
+    requestDecisionFeedback: (agendaItemId) =>
+      officeWrite(
+        (src, ws) => src.requestDecisionFeedback(ws, agendaItemId),
+        (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+      ),
+    // 응답은 피드백 하나 — 그 안건의 instructorFeedbacks 끝에 붙인다(서버 순서는 createdAt 오름차순)
+    addInstructorFeedback: (agendaItemId, body) =>
+      officeWrite(
+        (src, ws) => src.addInstructorFeedback(ws, agendaItemId, { body }),
+        (snap, feedback) => ({
+          ...snap,
+          agendaItems: snap.agendaItems.map((a) => (a.id === agendaItemId ? { ...a, instructorFeedbacks: upsert(a.instructorFeedbacks, feedback) } : a)),
+        }),
       ),
     setTaskDueDate: async (taskId, dueDate) =>
       (await officeWrite(

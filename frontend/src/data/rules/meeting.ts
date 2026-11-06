@@ -1,12 +1,13 @@
 // 회의 · 안건 · 작업 마감 요청 검사 (CONTRACTS_API.md 「10」 · 「13」). 순수 함수 — mock과 화면(C의 회의 대화상자 ·
 // 일정판)이 같은 규칙 · 문구를 쓴다. 서버는 같은 규칙으로 다시 검사한다(400 invalid). 소유: D.
-import type { AgendaItemCreateRequest, AgendaKind, DecisionRequest, EndMeetingRequest } from '../types'
+import type { AgendaDecisionDto, AgendaItemCreateRequest, AgendaItemDto, AgendaKind, DecisionRequest, EndMeetingRequest, InstructorFeedbackCreateRequest } from '../types'
 import { isLocalDate } from './period'
 
 export const AGENDA_TITLE_MAX = 100
 export const AGENDA_TEXT_MAX = 2000
 export const DECISION_TEXT_MAX = 2000
 export const MEETING_NOTES_MAX = 5000
+export const INSTRUCTOR_FEEDBACK_MAX = 2000
 
 export const MEETING_MSG = {
   agendaKind: '안건 종류가 올바르지 않아요',
@@ -22,6 +23,7 @@ export const MEETING_MSG = {
   followUpDate: '후속 기한 날짜 형식이 올바르지 않아요',
   notes: `회의록은 ${MEETING_NOTES_MAX}자까지 쓸 수 있어요`,
   dueDate: '마감 날짜 형식이 올바르지 않아요',
+  feedbackBody: `강사 피드백은 1~${INSTRUCTOR_FEEDBACK_MAX}자로 적어 주세요`,
   // 상태 · 권한 (mock이 쓰는 문구 — 서버 문구는 서버가 정한다)
   meetingOngoing: '이미 진행 중인 회의가 있어요',
   meetingEnded: '이미 끝난 회의예요',
@@ -35,6 +37,8 @@ export const MEETING_MSG = {
   reevaluateClosed: '머지되거나 닫힌 PR은 다시 평가할 수 없어요',
   taskNotFound: '이슈를 찾을 수 없어요',
   dueDateForbidden: '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요',
+  feedbackNotDiscussed: '결정을 기록한 안건에만 강사 피드백을 요청할 수 있어요',
+  feedbackInstructorOnly: '지정된 강사만 피드백을 쓸 수 있어요',
 } as const
 
 /** 앞뒤 공백을 뺀 글자 수(코드 포인트) */
@@ -64,6 +68,18 @@ export function decisionError(req: DecisionRequest, kind: AgendaKind): string | 
   if (req.prDecision !== null && !['revise_and_reevaluate', 'merge_as_is', 'close_pr'].includes(req.prDecision)) return MEETING_MSG.prDecisionRequired
   if (req.followUpDueDate !== null && !isLocalDate(req.followUpDueDate)) return MEETING_MSG.followUpDate
   return null
+}
+
+/** `POST W/agenda-items/{id}/instructor-feedback` 요청 검사 — 공백만 있으면 안 되고 1~2000자 (#212) */
+export function instructorFeedbackError(req: InstructorFeedbackCreateRequest): string | null {
+  return typeof req?.body === 'string' && len(req.body) >= 1 && len(req.body) <= INSTRUCTOR_FEEDBACK_MAX ? null : MEETING_MSG.feedbackBody
+}
+
+/** 결정 기록 탭 목록 — 다룬 안건(discussed)만, 결정 시각 최신 것부터 (#212) */
+export function decisionRecords(agendaItems: readonly AgendaItemDto[]): (AgendaItemDto & { decision: AgendaDecisionDto })[] {
+  return agendaItems
+    .filter((a): a is AgendaItemDto & { decision: AgendaDecisionDto } => a.status === 'discussed' && a.decision !== null)
+    .sort((a, b) => Date.parse(b.decision.decidedAt) - Date.parse(a.decision.decidedAt))
 }
 
 /** `POST W/meetings/{id}/end` 요청 검사 — 회의록 0~5000자 */

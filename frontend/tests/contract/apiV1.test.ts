@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -132,7 +132,8 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/meetings$/.test(path)) return sendJson(res, 201, meetingExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/meetings\/[^/]+\/end$/.test(path)) return sendJson(res, 200, { ...meetingExample, status: 'ended' })
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items$/.test(path)) return sendJson(res, 201, agendaItemExample)
-    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/(withdraw|decision)$/.test(path)) return sendJson(res, 200, agendaItemExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/(withdraw|decision|feedback-request)$/.test(path)) return sendJson(res, 200, agendaItemExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/instructor-feedback$/.test(path)) return sendJson(res, 201, agendaItemExample.instructorFeedbacks[0])
     // 「11」 도움 요청 (#183)
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+$/.test(path)) return sendJson(res, 200, helpRequestDetailExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests$/.test(path)) return sendJson(res, 201, helpRequestSummaryExample)
@@ -395,6 +396,22 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.closeHelpRequest('3', '12', close), 'forbidden_role', '요청한 사람만 할 수 있어요')
     fake.next.push((_r, res) => sendError(res, 409, 'conflict', '해결됐거나 끝난 도움 요청이에요'))
     await rejectsWith(api.addHelpComment('3', '12', { content: '늦은 코멘트' }), 'conflict', '해결됐거나 끝난 도움 요청이에요')
+  })
+
+  it('강사 피드백 — 요청 POST(본문 없음) · 쓰기 POST(JSON 본문), 둘 다 CSRF, 403 · 409를 그대로 (#212)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.deepEqual(await api.requestDecisionFeedback('3', '7'), agendaItemExample)
+    assert.deepEqual(await api.addInstructorFeedback('3', '7', instructorFeedbackCreateRequestExample), agendaItemExample.instructorFeedbacks[0])
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      ['POST /api/workspaces/3/agenda-items/7/feedback-request tok-1 -', `POST /api/workspaces/3/agenda-items/7/instructor-feedback tok-1 ${JSON.stringify(instructorFeedbackCreateRequestExample)}`],
+    )
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '결정을 기록한 안건에만 강사 피드백을 요청할 수 있어요'))
+    await rejectsWith(api.requestDecisionFeedback('3', '8'), 'conflict', '결정을 기록한 안건에만 강사 피드백을 요청할 수 있어요')
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '이 작업을 할 권한이 없어요'))
+    await rejectsWith(api.addInstructorFeedback('3', '8', { body: '피드백' }), 'forbidden_role', '이 작업을 할 권한이 없어요')
   })
 
   it('스탠드업 — 날짜 쿼리 GET · 미리 채우기 GET · 내 것 PUT(CSRF · JSON 본문), 400 · 403을 그대로 (#190)', async () => {

@@ -1,0 +1,5 @@
+/* 관리 패널 "결정 기록" 탭 (#212). 도움 요청 탭(help.css)의 카드 · 폼 · 칩을 그대로 쓰고, 여기에는 결정 내용 표만 둔다. */
+.decision-facts { display: grid; gap: 6px; margin: 0; }
+.decision-fact { display: grid; grid-template-columns: 7.5em 1fr; gap: 8px; }
+.decision-fact dt { color: var(--text-dim); font-weight: 600; }
+.decision-fact dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

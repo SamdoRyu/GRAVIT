@@ -27,6 +27,8 @@ import type {
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
   Id,
+  InstructorFeedbackCreateRequest,
+  InstructorFeedbackDto,
   LoginOptions,
   MeResponse,
   OpenWorkspaceRequest,
@@ -365,6 +367,9 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     createAgendaItem: async (workspaceId, request: AgendaItemCreateRequest) => json<AgendaItemDto>(await write('POST', `${workspacePath(workspaceId)}/agenda-items`, request)),
     withdrawAgendaItem: async (workspaceId, agendaItemId) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/withdraw`)),
     recordDecision: async (workspaceId, agendaItemId, request: DecisionRequest) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/decision`, request)),
+    requestDecisionFeedback: async (workspaceId, agendaItemId) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/feedback-request`)),
+    addInstructorFeedback: async (workspaceId, agendaItemId, request: InstructorFeedbackCreateRequest) =>
+      json<InstructorFeedbackDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/instructor-feedback`, request)),
 
     getHelpRequest: async (workspaceId, helpRequestId) => json<HelpRequestDetail>(await read(helpPath(workspaceId, helpRequestId))),
     createHelpRequest: async (workspaceId, request: HelpRequestCreateRequest) => json<HelpRequestSummary>(await write('POST', `${workspacePath(workspaceId)}/help-requests`, request)),

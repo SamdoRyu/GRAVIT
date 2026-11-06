@@ -7,7 +7,7 @@ import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
-import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
+import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
@@ -562,6 +562,33 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       save()
       emit(workspaceId, { type: 'changed', resources })
       return structuredClone(item)
+    },
+
+    // 강사 피드백 요청 (#212 — FR-LRN-22). 서버 순서: 팀원(403) → 대상(404) → 결정 기록 전(409). mock 사용자는 모두 팀원이다.
+    // 이미 켜져 있으면 그대로 돌려주고 알림을 보내지 않는다(서버와 같다)
+    async requestDecisionFeedback(workspaceId, agendaItemId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const item = findAgendaItem(ws, agendaItemId)
+      if (item.status !== 'discussed') throw new DataError(MEETING_MSG.feedbackNotDiscussed, 'conflict')
+      if (!item.feedbackRequested) {
+        item.feedbackRequested = true
+        item.feedbackRequestedAt = toInstant(now())
+        save()
+        emit(workspaceId, { type: 'changed', resources: ['agenda_items'] })
+      }
+      return structuredClone(item)
+    },
+
+    // 강사 피드백 쓰기 (#212). 서버 순서: 요청 본문(400) → 지정된 강사(403) → 대상(404) → 요청이 꺼짐(403).
+    // mock에는 강사 계정이 없어 본문 검사 뒤 언제나 forbidden_role이다 — 강사 흐름은 ?source=api로 확인한다
+    async addInstructorFeedback(workspaceId, _agendaItemId, request) {
+      await wait()
+      const user = requireUser()
+      const error = instructorFeedbackError(request)
+      if (error) throw new DataError(error, 'invalid')
+      accessible(workspaceId, user)
+      throw new DataError(MEETING_MSG.feedbackInstructorOnly, 'forbidden_role')
     },
 
     // ---- 「11」 도움 요청 — 검사 순서는 서버(HelpRequestService)와 같다: 요청(400) → 대상(404) → 요청자(403) → 상태(409) ----
