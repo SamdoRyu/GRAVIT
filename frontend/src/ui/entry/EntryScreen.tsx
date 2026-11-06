@@ -1,4 +1,5 @@
 // 사무실 밖 화면 — 로그인(LoginScreen.tsx) · 사무실 고르기 (#64 · #68 화면 몫, CONTRACTS_API.md 「2」 · 「3」). 소유: D.
+// 모양은 로그인 디자인(#171)의 우주 배경 · 흰 카드 · 글꼴을 같이 쓴다(SpaceShell · login.css, #166).
 // 사무실이 열리면 App이 3D · HUD로 바꾼다. 레포를 골라 새 사무실을 여는 부분은 OpenWorkspace.tsx(#13 · #68).
 import { useEffect, useState } from 'react'
 import type { WorkspaceListItem } from '../../data/types'
@@ -8,18 +9,8 @@ import { Toasts } from '../Toasts'
 import { formatDate } from '../format'
 import { LoginScreen } from './LoginScreen'
 import { RepositoryChoices } from './OpenWorkspace'
+import { SpaceShell } from './SpaceShell'
 import './entry.css'
-
-function Brand() {
-  return (
-    <div className="entry-brand">
-      <span className="brand-mark" aria-hidden="true">
-        <Icon name="cube" size={16} />
-      </span>
-      <span className="entry-brand-name">팀 오피스</span>
-    </div>
-  )
-}
 
 const ROLE_LABEL: Record<WorkspaceListItem['myRole'], string> = { repo_admin: '레포 관리자', participant: '참여자', instructor: '강사' }
 
@@ -50,9 +41,11 @@ function WorkspacePicker() {
   }, [])
 
   return (
-    <section className="entry-card entry-wide glass" aria-labelledby="picker-title">
-      <header className="entry-head">
-        <Brand />
+    <section className="entry-card entry-wide" aria-labelledby="picker-title">
+      <div className="entry-head">
+        <h1 id="picker-title" className="entry-title">
+          사무실 고르기
+        </h1>
         <span className="grow" />
         {me && (
           <span className="entry-me" title={me.user.githubLogin ? `@${me.user.githubLogin}` : '심사용 계정'}>
@@ -62,10 +55,7 @@ function WorkspacePicker() {
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => void useSession.getState().logout()}>
           로그아웃
         </button>
-      </header>
-      <h1 id="picker-title" className="entry-title">
-        사무실 고르기
-      </h1>
+      </div>
       {list === null ? (
         failed ? (
           <div className="entry-state">
@@ -127,24 +117,25 @@ export function EntryScreen() {
   // 로그인 화면은 자기 배경 · 레이아웃을 갖는다(GRAVIT 로그인 디자인)
   if (status === 'signed_out') return <LoginScreen />
   return (
-    <main className="entry">
-      {status === 'signed_in' ? (
-        <WorkspacePicker />
-      ) : status === 'error' ? (
-        <section className="entry-card glass" role="alert">
-          <Brand />
-          <h1 className="entry-title">서버에 연결할 수 없어요</h1>
-          <p className="entry-lead">{error}</p>
-          <button type="button" className="btn btn-primary" onClick={() => void useSession.getState().retry()}>
-            다시 시도
-          </button>
-        </section>
-      ) : (
-        <p className="entry-state" role="status">
-          로그인 확인 중…
-        </p>
-      )}
+    <SpaceShell>
+      <main className="entry">
+        {status === 'signed_in' ? (
+          <WorkspacePicker />
+        ) : status === 'error' ? (
+          <section className="entry-card" role="alert">
+            <h1 className="entry-title">서버에 연결할 수 없어요</h1>
+            <p className="entry-lead">{error}</p>
+            <button type="button" className="btn btn-primary" onClick={() => void useSession.getState().retry()}>
+              다시 시도
+            </button>
+          </section>
+        ) : (
+          <p className="entry-state entry-checking" role="status">
+            로그인 확인 중…
+          </p>
+        )}
+      </main>
       <Toasts />
-    </main>
+    </SpaceShell>
   )
 }
