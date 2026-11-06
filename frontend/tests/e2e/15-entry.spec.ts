@@ -6,6 +6,14 @@ import { expect, readStore, test } from './fixtures'
 const picker = (page: Page) => page.getByRole('region', { name: '사무실 고르기' })
 const login = (page: Page) => page.getByRole('region', { name: '정거장에 탑승하기' })
 
+/** 계정마다 처음 사무실을 고르면 도착 장면(행성 줌인) → 사무실이 드러나고 도착 알림 → 장면이 걷힌다 */
+async function arrive(page: Page, who: string, repo: string) {
+  const landing = page.getByRole('region', { name: `어서 와요, ${who} 님` })
+  await expect(landing).toBeVisible()
+  await expect(page.getByText(`${repo} 정거장에 도착했어요`)).toBeVisible({ timeout: 15_000 })
+  await expect(landing).toHaveCount(0)
+}
+
 async function openMenu(page: Page) {
   await page.getByRole('banner').getByRole('button', { name: '더보기' }).click()
   return page.getByRole('menu')
@@ -18,6 +26,7 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   const offices = picker(page).getByRole('list', { name: '들어갈 수 있는 사무실' }).getByRole('button')
   await expect(offices).toHaveCount(2)
   await offices.filter({ hasText: 'gitvillage' }).click()
+  await arrive(page, '김옥토', 'team-samdo/gitvillage')
 
   // 사무실 — 상단 바와 v1 데이터
   await expect(page.getByRole('banner').getByText('팀 오피스')).toBeVisible()
@@ -60,6 +69,7 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await expect(offices).toHaveCount(1)
   await expect(offices.first()).toContainText('시연')
   await offices.first().click()
+  await arrive(page, '심사 계정', '시연 사무실')
   await expect.poll(() => readStore(page, (s) => s.office?.workspaceId ?? null)).toBe('ws_2')
 
   // 메뉴에서 로그아웃 → GitHub 로그인(mock은 바로 로그인) → 고르기
@@ -100,7 +110,8 @@ test('open a new office from a repository: admin form with period and spec path,
   await form.getByLabel(/활동 기록/).check()
   await form.getByRole('button', { name: '사무실 열기' }).click()
 
-  // 새 사무실에 바로 들어간다 — 레포 관리자, 기간 · 경로가 팀 설정에
+  // 새 사무실에 바로 들어간다(이 계정의 첫 사무실 — 도착 장면) — 레포 관리자, 기간 · 경로가 팀 설정에
+  await arrive(page, '김옥토', 'team-samdo/side-lab')
   await expect.poll(() => readStore(page, (s) => s.office?.snapshot?.workspace.displayName ?? null)).toBe('team-samdo/side-lab')
   const settings = await readStore(page, (s) => s.office!.snapshot!.settings)
   expect([settings.projectStartDate, settings.projectEndDate, settings.specDocumentPath]).toEqual([start, end, 'docs/requirements.md'])
