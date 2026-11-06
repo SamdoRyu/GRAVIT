@@ -71,8 +71,8 @@ const HOME: Record<'desk' | 'backlog' | 'review' | 'agenda', { jitter: number; s
   agenda: { jitter: 0.14, scale: 0.95 },
 }
 
-/** Agenda shapes on the bridge table: issue cube · PR prism (#30 · #26) · learning octahedron · other memo pad (#31). Help comes with #47. */
-const AGENDA_SHAPES: ReadonlySet<SceneEntityKind> = new Set<SceneEntityKind>(['issue', 'pr', 'learning', 'other'])
+/** Agenda shapes on the bridge table: issue cube · PR prism (#30 · #26) · learning octahedron · other memo pad (#31) · help sphere (#205). */
+const AGENDA_SHAPES: ReadonlySet<SceneEntityKind> = new Set<SceneEntityKind>(['issue', 'pr', 'learning', 'other', 'help'])
 export const isAgendaCargo = (e: SceneEntity) => e.key.startsWith('agenda:') && AGENDA_SHAPES.has(e.kind)
 
 /**

@@ -155,3 +155,26 @@ describe('slots — 회의실의 안건 모양 (#30 · #26)', () => {
     }
   })
 })
+
+describe('slots — 도움 요청 안건 구 (#205)', () => {
+  it('도움 요청을 안건으로 올리면 회의 탁자에 help 모양 하나(올린 순서), 원본 도움 요청은 3D 자리가 없다', async () => {
+    const ds = createV1MockDataSource({ storage: createMemoryStorage(), session: 'github', latencyMs: [0, 0], now: () => new Date('2026-11-05T03:00:00Z') })
+    const before = await ds.load('ws_1')
+    const mine = before.helpRequests.find((h) => h.requesterMemberId === before.viewer.memberId && (h.status === 'open' || h.status === 'discussing'))
+    assert.ok(mine, 'seed에 보는 사람의 열린 도움 요청이 있어야 한다')
+    const t = before.tasks.find((x) => x.state === 'open')!
+    const first = await ds.createAgendaItem('ws_1', { kind: 'issue', sourceId: t.id, title: '이슈 안건', background: null, tried: null, unresolvedReason: null })
+    const help = await ds.convertHelpRequestToAgenda('ws_1', mine.id, { title: '도움 요청 안건' })
+    assert.equal(help.kind, 'help_request')
+    const after = await ds.load('ws_1')
+
+    const scene = stationSceneOf(after)
+    const slots = computeSlots(scene.entities, after, scene.layout, new Map(), new Map())
+    assert.equal(scene.entities.find((e) => e.key === `agenda:${help.id}`)?.kind, 'help')
+    const s = slots.get(`agenda:${help.id}`)
+    assert.equal(s?.home, 'agenda')
+    assert.deepEqual([s?.x, s?.y, s?.z], scene.layout.anchor('meeting', 1), '이슈 안건 다음 자리')
+    assert.ok(slots.has(`agenda:${first.id}`))
+    assert.ok(![...slots.keys()].some((k) => k.includes(mine.id) && !k.startsWith('agenda:')), '도움 요청 자체는 3D에 자리가 없다(게시판 오브젝트는 #205 2단계)')
+  })
+})
