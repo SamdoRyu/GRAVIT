@@ -10,3 +10,5 @@
 .retro-cells { display: grid; gap: 6px; margin: 0; }
 .retro-cells dt { font-size: var(--fs-s); font-weight: 600; color: var(--text-dim); }
 .retro-cells dd { margin: 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 기술 결정 카드(#218) — 확인 체크 한 줄 */
+.retro-check { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
