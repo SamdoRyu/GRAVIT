@@ -192,8 +192,8 @@ export function LoginScreen() {
   const [leaving, setLeaving] = useState(false)
 
   const github = () => {
-    // 서버면 GitHub로 이동한다 — 페이지가 바뀔 때까지 "이동하는 중"
-    if (!mock) setLeaving(true)
+    // 서버면 GitHub로 이동한다 — 페이지가 바뀔 때까지 "이동하는 중". 이동할 주소가 없으면 버튼을 그대로 둔다
+    if (!mock && options?.githubLoginUrl) setLeaving(true)
     useSession.getState().loginWithGithub()
   }
 
