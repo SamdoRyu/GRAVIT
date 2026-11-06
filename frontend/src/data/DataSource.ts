@@ -37,7 +37,13 @@ import type {
   MemberInput,
   MemberPatch,
   OpenWorkspaceRequest,
+  PageResponse,
   Reassign,
+  ReportCreateRequest,
+  ReportLearningRequest,
+  RetroReportDto,
+  RetroReportSummary,
+  TimelineEntry,
   RepositoryChoiceResponse,
   ReviewLoginRequest,
   SyncStatus,
@@ -152,6 +158,21 @@ export interface DataSource {
   linkRequirement(workspaceId: Id, request: RequirementLinkCreateRequest): Promise<RequirementLinkDto>
   /** DELETE W/requirement-links/{linkId} — 204. R2만(forbidden_role) */
   unlinkRequirement(workspaceId: Id, linkId: Id): Promise<void>
+
+  // ---- 「15」 개인 API — 학습 타임라인 · 회고 리포트 (#209). Snapshot · SSE에 실리지 않는다 — 화면을 열 때 읽는다 ----
+  // 경로 팀원(빠진 팀원 포함)이 아니면 not_found, 읽기는 본인 · 지정된 강사, 쓰기는 본인만(아니면 forbidden_role)
+  /** GET W/members/{memberId}/timeline?page=&size= — occurredAt 내림차순. page 0부터, size 1~100(기본 20), 범위 밖 invalid */
+  getTimeline(workspaceId: Id, memberId: Id, page?: number, size?: number): Promise<PageResponse<TimelineEntry>>
+  /** GET W/members/{memberId}/reports — createdAt 내림차순 */
+  listReports(workspaceId: Id, memberId: Id): Promise<RetroReportSummary[]>
+  /** POST W/members/{memberId}/reports — 201. 본인만, kind는 final · midterm(아니면 invalid) */
+  createReport(workspaceId: Id, memberId: Id, request: ReportCreateRequest): Promise<RetroReportDto>
+  /** GET W/members/{memberId}/reports/{reportId} — 계산 칸은 읽을 때 계산. 다른 팀원의 리포트 ID면 not_found */
+  getReport(workspaceId: Id, memberId: Id, reportId: Id): Promise<RetroReportDto>
+  /** PUT W/members/{memberId}/reports/{reportId}/learning — 본인만, 0~5000자(아니면 invalid) */
+  updateReportLearning(workspaceId: Id, memberId: Id, reportId: Id, request: ReportLearningRequest): Promise<RetroReportDto>
+  /** GET W/members/{memberId}/reports/{reportId}/markdown — text/markdown 본문. 팀원 이름은 "팀원 A"처럼 바뀐다 (FR-REP-03) */
+  exportReportMarkdown(workspaceId: Id, memberId: Id, reportId: Id): Promise<string>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

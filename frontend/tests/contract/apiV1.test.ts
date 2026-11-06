@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, standupExample, standupPrefillExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -144,6 +144,16 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/standups\?date=[^&]+$/.test(path)) return sendJson(res, 200, [standupExample])
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/standups\/[^/]+\/mine\/prefill$/.test(path)) return sendJson(res, 200, standupPrefillExample)
     if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/standups\/[^/]+\/mine$/.test(path)) return sendJson(res, 200, { ...standupExample, ...(JSON.parse(r.body) as object) })
+    // 「15」 학습 타임라인 · 회고 리포트 (#209)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/timeline\?page=\d+&size=\d+$/.test(path)) return sendJson(res, 200, timelinePageExample)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/reports$/.test(path)) return sendJson(res, 200, [{ id: retroReportExample.id, kind: retroReportExample.kind, createdAt: retroReportExample.createdAt }])
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/reports$/.test(path)) return sendJson(res, 201, { ...retroReportExample, ...(JSON.parse(r.body) as object) })
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/reports\/[^/]+$/.test(path)) return sendJson(res, 200, retroReportExample)
+    if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/reports\/[^/]+\/learning$/.test(path)) return sendJson(res, 200, { ...retroReportExample, ...(JSON.parse(r.body) as object) })
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/reports\/[^/]+\/markdown$/.test(path)) {
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' })
+      return res.end('# 최종 회고 리포트\n\n- 팀원 A와 함께')
+    }
     // 「8」 요구사항 연결 (#197)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
     if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
@@ -408,6 +418,40 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.saveMyStandup('3', '2026-11-30', save), 'invalid', '오늘 이후 날짜의 스탠드업은 쓸 수 없어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '팀원만 쓸 수 있어요'))
     await rejectsWith(api.getStandupPrefill('3', '2026-11-05'), 'forbidden_role', '팀원만 쓸 수 있어요')
+  })
+
+  it('학습 타임라인 · 회고 리포트 — 읽기 GET · 쓰기 POST/PUT(CSRF · JSON 본문) · 마크다운 본문, 400 · 403 · 404를 그대로 (#209)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.deepEqual(await api.getTimeline('3', '4'), timelinePageExample)
+    assert.deepEqual(await api.getTimeline('3', '4', 2, 50), timelinePageExample)
+    assert.deepEqual(await api.listReports('3', '4'), [{ id: retroReportExample.id, kind: 'final', createdAt: retroReportExample.createdAt }])
+    assert.equal((await api.createReport('3', '4', { kind: 'midterm' })).kind, 'midterm')
+    assert.deepEqual(await api.getReport('3', '4', '6'), retroReportExample)
+    assert.equal((await api.updateReportLearning('3', '4', '6', { learning: '계약 먼저' })).learning, '계약 먼저')
+    assert.equal(await api.exportReportMarkdown('3', '4', '6'), '# 최종 회고 리포트\n\n- 팀원 A와 함께')
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      [
+        'GET /api/workspaces/3/members/4/timeline?page=0&size=20 -',
+        'GET /api/workspaces/3/members/4/timeline?page=2&size=50 -',
+        'GET /api/workspaces/3/members/4/reports -',
+        'POST /api/workspaces/3/members/4/reports tok-1',
+        'GET /api/workspaces/3/members/4/reports/6 -',
+        'PUT /api/workspaces/3/members/4/reports/6/learning tok-1',
+        'GET /api/workspaces/3/members/4/reports/6/markdown -',
+      ],
+    )
+    assert.deepEqual(JSON.parse(fake.requests[3].body), { kind: 'midterm' })
+    assert.deepEqual(JSON.parse(fake.requests[5].body), { learning: '계약 먼저' })
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '본인 것만 볼 수 있어요'))
+    await rejectsWith(api.getTimeline('3', '5'), 'forbidden_role', '본인 것만 볼 수 있어요')
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '내가 배운 점은 5000자까지 쓸 수 있어요'))
+    await rejectsWith(api.updateReportLearning('3', '4', '6', { learning: 'x' }), 'invalid', '내가 배운 점은 5000자까지 쓸 수 있어요')
+    // 마크다운도 실패는 JSON 에러 본문이다
+    fake.next.push((_r, res) => sendError(res, 404, 'not_found', '리포트를 찾을 수 없어요'))
+    await rejectsWith(api.exportReportMarkdown('3', '4', '99'), 'not_found', '리포트를 찾을 수 없어요')
   })
 
   it('PR 평가 — GET rounds · PUT evaluations/mine, PUT은 CSRF와 JSON 본문, 400 · 403 · 409를 그대로 (#19 · #20)', async () => {

@@ -30,7 +30,12 @@ import type {
   LoginOptions,
   MeResponse,
   OpenWorkspaceRequest,
+  PageResponse,
+  ReportCreateRequest,
+  ReportLearningRequest,
   RepositoryChoiceResponse,
+  RetroReportDto,
+  RetroReportSummary,
   ReviewLoginRequest,
   SnapshotResource,
   StandupDto,
@@ -38,10 +43,12 @@ import type {
   StandupSaveRequest,
   SyncStatus,
   TeamSettings,
+  TimelineEntry,
   WorkspaceListItem,
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../../types'
+import { TIMELINE_PAGE_SIZE } from '../../rules/report'
 import { createSseParser } from '../sse'
 
 export const CSRF_COOKIE = 'XSRF-TOKEN'
@@ -120,6 +127,8 @@ const agendaPath = (workspaceId: Id, agendaItemId: Id) => `${workspacePath(works
 const taskPath = (workspaceId: Id, taskId: Id) => `${workspacePath(workspaceId)}/tasks/${encodeURIComponent(taskId)}`
 const helpPath = (workspaceId: Id, helpRequestId: Id) => `${workspacePath(workspaceId)}/help-requests/${encodeURIComponent(helpRequestId)}`
 const standupPath = (workspaceId: Id, date: string) => `${workspacePath(workspaceId)}/standups/${encodeURIComponent(date)}`
+const memberPath = (workspaceId: Id, memberId: Id) => `${workspacePath(workspaceId)}/members/${encodeURIComponent(memberId)}`
+const reportPath = (workspaceId: Id, memberId: Id, reportId: Id) => `${memberPath(workspaceId, memberId)}/reports/${encodeURIComponent(reportId)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -372,6 +381,23 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     linkRequirement: async (workspaceId, request: RequirementLinkCreateRequest) => json<RequirementLinkDto>(await write('POST', `${workspacePath(workspaceId)}/requirement-links`, request)),
     async unlinkRequirement(workspaceId, linkId) {
       await write('DELETE', `${workspacePath(workspaceId)}/requirement-links/${encodeURIComponent(linkId)}`)
+    },
+
+    getTimeline: async (workspaceId, memberId, page = 0, size = TIMELINE_PAGE_SIZE) =>
+      json<PageResponse<TimelineEntry>>(await read(`${memberPath(workspaceId, memberId)}/timeline?page=${page}&size=${size}`)),
+    listReports: async (workspaceId, memberId) => json<RetroReportSummary[]>(await read(`${memberPath(workspaceId, memberId)}/reports`)),
+    createReport: async (workspaceId, memberId, request: ReportCreateRequest) => json<RetroReportDto>(await write('POST', `${memberPath(workspaceId, memberId)}/reports`, request)),
+    getReport: async (workspaceId, memberId, reportId) => json<RetroReportDto>(await read(reportPath(workspaceId, memberId, reportId))),
+    updateReportLearning: async (workspaceId, memberId, reportId, request: ReportLearningRequest) =>
+      json<RetroReportDto>(await write('PUT', `${reportPath(workspaceId, memberId, reportId)}/learning`, request)),
+    // text/markdown 본문 그대로 — 실패는 다른 API처럼 JSON 에러(read가 DataError로 바꾼다)
+    async exportReportMarkdown(workspaceId, memberId, reportId) {
+      const res = await read(`${reportPath(workspaceId, memberId, reportId)}/markdown`)
+      try {
+        return await res.text()
+      } catch {
+        throw new DataError('서버 응답을 읽을 수 없어요', 'unavailable')
+      }
     },
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),

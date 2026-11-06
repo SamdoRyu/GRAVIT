@@ -9,6 +9,7 @@ import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
+import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
@@ -148,6 +149,17 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
     const ws = state.workspaces.find((w) => w.snapshot.workspace.id === workspaceId)
     if (!ws || !currentMember(ws, user)) throw new DataError(MSG.workspaceNotFound, 'not_found')
     return ws
+  }
+
+  /**
+   * 개인 API의 경로 팀원(「15」 공통 접근 규칙) — 사무실 팀원(빠진 팀원 포함)이 아니면 not_found, 본인이 아니면 forbidden_role.
+   * mock에는 강사가 없어 읽기도 본인만이다(서버는 지정된 강사도 읽는다).
+   */
+  function personalTarget(ws: MockWorkspace, memberId: Id, mode: 'read' | 'write'): MemberDto {
+    const target = ws.snapshot.members.find((m) => m.id === memberId)
+    if (!target) throw new DataError(REPORT_MSG.memberNotFound, 'not_found')
+    if (target.id !== currentMember(ws, requireUser())?.id) throw new DataError(mode === 'read' ? REPORT_MSG.notSelf : REPORT_MSG.notSelfWrite, 'forbidden_role')
+    return target
   }
 
   /**
@@ -772,6 +784,79 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       emit(workspaceId, { type: 'changed', resources: ['requirements'] })
     },
 
+    // ---- 「15」 개인 API — 학습 타임라인 · 회고 리포트 (#209). 서버와 같은 계산(rules/report.ts) ----
+    // mock에는 강사 계정이 없어 읽기 · 쓰기 모두 본인만이다. 활동 기록 · 기술 결정 카드가 mock에 없어 그 칸은 빈 목록이다.
+    // 개인 데이터라 Snapshot · SSE에 싣지 않는다(알림 없음).
+
+    async getTimeline(workspaceId, memberId, page = 0, size = TIMELINE_PAGE_SIZE) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const pageError = timelinePageError(page, size)
+      if (pageError) throw new DataError(pageError, 'invalid')
+      const target = personalTarget(ws, memberId, 'read')
+      const entries = timelineEntries({
+        memberId: target.id,
+        submissions: ws.snapshot.submissions,
+        roundsOf: (sub) => [
+          ...(sub.currentRound ? [viewRound(ws, sub, sub.currentRound, target, true)] : []),
+          ...(ws.pastRounds ?? []).filter((p) => p.submissionId === sub.id).map((p) => viewRound(ws, sub, p.round, target, false)),
+        ],
+        evaluationsGiven: (ws.evaluations ?? []).filter((e) => e.memberId === target.id),
+        agendaItems: ws.snapshot.agendaItems,
+      })
+      return structuredClone(slicePage(entries, page, size))
+    },
+
+    async listReports(workspaceId, memberId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const target = personalTarget(ws, memberId, 'read')
+      return (ws.reports ?? [])
+        .filter((r) => r.memberId === target.id)
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .map((r) => ({ id: r.id, kind: r.kind, createdAt: r.createdAt }))
+    },
+
+    async createReport(workspaceId, memberId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      // 요청 본문 검사가 먼저다 — 서버는 @Valid로 컨트롤러 전에 400
+      const error = reportCreateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const target = personalTarget(ws, memberId, 'write')
+      const report: StoredReport = { id: nextId('rp'), memberId: target.id, kind: request.kind, createdAt: toInstant(now()), learning: null }
+      ws.reports ??= []
+      ws.reports.push(report)
+      save()
+      return reportView(ws, report)
+    },
+
+    async getReport(workspaceId, memberId, reportId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const target = personalTarget(ws, memberId, 'read')
+      return reportView(ws, findReport(ws, target, reportId))
+    },
+
+    async updateReportLearning(workspaceId, memberId, reportId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const error = reportLearningError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const target = personalTarget(ws, memberId, 'write')
+      const report = findReport(ws, target, reportId)
+      report.learning = request.learning
+      save()
+      return reportView(ws, report)
+    },
+
+    async exportReportMarkdown(workspaceId, memberId, reportId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const target = personalTarget(ws, memberId, 'read')
+      return anonymizeMembers(reportMarkdown(reportView(ws, findReport(ws, target, reportId))), ws.snapshot.members)
+    },
+
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----
 
     async setDueDate(workspaceId, taskId, request) {
@@ -850,6 +935,19 @@ function findTaskFor(ws: MockWorkspace, taskId: Id, me: MemberDto): TaskDto {
   if (!task) throw new DataError(MEETING_MSG.taskNotFound, 'not_found')
   if (!me.isRepoAdmin && !task.assigneeMemberIds.includes(me.id)) throw new DataError(MEETING_MSG.dueDateForbidden, 'forbidden_role')
   return task
+}
+
+/** 그 팀원의 리포트 — 없거나 다른 팀원 것이면 not_found */
+function findReport(ws: MockWorkspace, member: MemberDto, reportId: Id): StoredReport {
+  const report = (ws.reports ?? []).find((r) => r.id === reportId && r.memberId === member.id)
+  if (!report) throw new DataError(REPORT_MSG.reportNotFound, 'not_found')
+  return report
+}
+
+/** 저장된 리포트 + 지금 사무실 데이터 → 응답. mock에는 활동 기록 · 기술 결정 카드가 없다 */
+function reportView(ws: MockWorkspace, report: StoredReport) {
+  const { tasks, submissions, agendaItems } = ws.snapshot
+  return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution: [], decisionCards: [] }))
 }
 
 function findSubmission(ws: MockWorkspace, submissionId: Id): SubmissionDto {

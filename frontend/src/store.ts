@@ -4,7 +4,7 @@
 // 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
-import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -165,6 +165,20 @@ interface OfficeState {
   loadStandupPrefill: (date: LocalDate) => Promise<StandupPrefill | null>
   /** PUT W/standups/{date}/mine — 팀원만, 오늘 뒤 날짜는 안 됨 */
   saveMyStandup: (date: LocalDate, request: StandupSaveRequest) => Promise<StandupDto | null>
+
+  // ---- 학습 타임라인 · 회고 리포트 (#209 — 「15」). 개인 API라 Snapshot · SSE 밖 — 화면이 열 때 읽는다. 실패하면 알림 후 null ----
+  /** GET W/members/{memberId}/timeline — 본인 · 지정된 강사 */
+  loadTimeline: (memberId: Id, page?: number, size?: number) => Promise<PageResponse<TimelineEntry> | null>
+  /** GET W/members/{memberId}/reports — 본인 · 지정된 강사 */
+  loadReports: (memberId: Id) => Promise<RetroReportSummary[] | null>
+  /** POST W/members/{memberId}/reports — 본인만 */
+  createReport: (memberId: Id, request: ReportCreateRequest) => Promise<RetroReportDto | null>
+  /** GET W/members/{memberId}/reports/{reportId} */
+  loadReport: (memberId: Id, reportId: Id) => Promise<RetroReportDto | null>
+  /** PUT …/reports/{reportId}/learning — 본인만 */
+  updateReportLearning: (memberId: Id, reportId: Id, request: ReportLearningRequest) => Promise<RetroReportDto | null>
+  /** GET …/reports/{reportId}/markdown — 팀원 이름이 익명화된 마크다운 */
+  exportReportMarkdown: (memberId: Id, reportId: Id) => Promise<string | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * selection(3D가 아직 읽는 옛 선택 칸)과 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -495,6 +509,22 @@ export const useOffice = create<OfficeState>((set, get) => {
         (src, ws) => src.saveMyStandup(ws, date, request),
         (snap) => snap,
       ),
+
+    // ---- 학습 타임라인 · 회고 리포트 (#209) — Snapshot에 없다. 화면이 열 때 읽고, 쓴 뒤 응답으로 바꾼다 ----
+    loadTimeline: (memberId, page, size) => officeRead((src, ws) => src.getTimeline(ws, memberId, page, size)),
+    loadReports: (memberId) => officeRead((src, ws) => src.listReports(ws, memberId)),
+    createReport: (memberId, request) =>
+      officeWrite(
+        (src, ws) => src.createReport(ws, memberId, request),
+        (snap) => snap,
+      ),
+    loadReport: (memberId, reportId) => officeRead((src, ws) => src.getReport(ws, memberId, reportId)),
+    updateReportLearning: (memberId, reportId, request) =>
+      officeWrite(
+        (src, ws) => src.updateReportLearning(ws, memberId, reportId, request),
+        (snap) => snap,
+      ),
+    exportReportMarkdown: (memberId, reportId) => officeRead((src, ws) => src.exportReportMarkdown(ws, memberId, reportId)),
 
     selection: null,
     // 옛 선택 칸을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
