@@ -83,7 +83,7 @@ cd backend
 
 - 기본 포트 `8080`. MySQL이 떠 있어야 시작됩니다(Flyway가 시작할 때 DB에 접속).
 - IntelliJ에서는 `backend/build.gradle`을 Gradle 프로젝트로 열고, 실행 설정의 Working directory를 `backend/`로 둡니다(그래야 `../.env`를 찾음).
-- 지금은 보안 설정을 따로 두지 않아 Spring Security 기본값(모든 요청 인증 필요)이 적용됩니다. `/api/**`는 `401`이 정상입니다.
+- 로그인하지 않은 `/api/**` 요청은 `401 unauthorized`가 정상입니다. 실제 GitHub 사무실을 쓰려면 아래 「5. GitHub App 설정」을 먼저 합니다.
 
 ### 4. 프론트엔드 실행
 
@@ -96,6 +96,24 @@ npm run dev
 - 브라우저: <http://localhost:5173> — 기본은 **브라우저 mock 데이터**라 백엔드 없이도 3D 화면 · 드래그가 동작합니다.
 - 화면 메뉴의 「데이터 초기화」로 mock 데이터를 처음 상태로 되돌릴 수 있습니다.
 
+### 5. GitHub App 설정 (실제 GitHub 사무실 — 선택)
+
+mock만 쓸 때는 필요 없습니다. 팀에서 앱 하나를 만들어 같이 써도 됩니다(값은 만든 사람이 안전한 경로로 나눠 준다).
+
+1. GitHub → Settings → Developer settings → **GitHub Apps → New GitHub App**
+   - Callback URL: `http://localhost:5173/login/oauth2/code/github` (Vite가 `/oauth2` · `/login/oauth2`를 Spring으로 넘긴다)
+   - **Expire user authorization tokens: 끔** — 서버가 사용자 토큰을 갱신하지 않는다
+   - Webhook: **Active 끔**
+   - 권한(전부 **Read-only**): Repository — Metadata · Contents · Issues · Pull requests, Organization — Members
+   - **공개 앱(Any account)으로 만든다.** "Only on this account"면 그 계정(조직)의 멤버만 로그인할 수 있어, 외부 콜라보레이터 · 강사 계정은 승인 화면이 GitHub 404로 뜬다. 권한은 읽기 전용이고 앱을 설치한 계정이 고른 레포만 읽는다. 이미 만들었다면 앱 설정 → Advanced → Make public
+2. 앱 화면에서 **Generate a new client secret**, **Generate a private key**(`.pem` 내려받기)
+3. 키 파일을 **레포 루트의 `secrets/`**에 둔다(예: `secrets/github-app.pem`, Git에 안 올라감)
+4. `.env`의 GitHub 값 다섯 개를 채운다 — `GITHUB_APP_CLIENT_ID` · `GITHUB_APP_CLIENT_SECRET` · `GITHUB_APP_SLUG`(앱 주소 `github.com/apps/<slug>`) · `GITHUB_APP_ID` · `GITHUB_APP_PRIVATE_KEY_PATH`
+   - **키 경로는 절대 경로**로 적는다(예: `C:/work/GRAVIT/secrets/github-app.pem`). Spring은 `backend/`에서 실행되어 `./secrets/...`가 `backend/secrets/`로 풀리고, 첫 동기화가 `GitHub App 개인 키 파일을 읽지 못함`으로 실패한다
+   - 강사로 볼 계정이 있으면 `INSTRUCTOR_GITHUB_USER_IDS`에 GitHub 사용자 **ID**(숫자 — `https://api.github.com/users/<login>`의 `id`)를 넣는다
+5. 앱 화면 → **Install App** → 팀 레포가 있는 계정(조직)에 설치하고, 그 레포만 고른다
+6. Spring을 다시 시작하고 브라우저는 **`http://localhost:5173/?source=api`**로 연다(`127.0.0.1`이면 쓰기 요청의 Origin이 `APP_ORIGIN`과 달라 `403`). GitHub로 로그인 → 사무실 열기 → 첫 동기화
+
 ## 프론트엔드 ↔ 백엔드 연결
 
 ```text
@@ -105,7 +123,7 @@ npm run dev
 - 화면은 항상 같은 출처의 상대 경로 `/api/**`를 부릅니다. 개발 중엔 Vite가 Spring으로 넘깁니다(`frontend/vite.config.ts`).
 - 프록시는 `Host`를 바꾸지 않습니다(`changeOrigin: false`). 세션 쿠키 · CSRF 쿠키 · 리다이렉트가 화면 출처(`localhost:5173`) 기준으로 만들어지게 하려는 것입니다.
 - Spring 포트를 바꿨다면 Vite를 띄우는 셸에서 지정합니다: `$env:API_PORT=8081; npm run dev`
-- 데이터 소스 선택은 주소로 합니다: `/` = mock, `/?source=api` = 서버. **지금 `?source=api`는 동작하지 않습니다** — 데모 API(`/api/workspace` 등)는 Spring에 없고, v1 API는 아직 구현 전입니다.
+- 데이터 소스 선택은 주소로 합니다: `/` = mock, `/?source=api` = 서버(Spring v1 API — GitHub 로그인은 위 「5. GitHub App 설정」이 필요).
 
 ## 빌드 · 테스트 명령
 
