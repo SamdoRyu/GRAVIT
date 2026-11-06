@@ -4,7 +4,7 @@
 // 3D(C)가 읽어 #102 ④ 다음 단계에서 같이 정리한다.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
-import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, InstructorFeedbackDto, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot, InstructorFeedbackDto } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -175,6 +175,18 @@ interface OfficeState {
   updateReportLearning: (memberId: Id, reportId: Id, request: ReportLearningRequest) => Promise<RetroReportDto | null>
   /** GET …/reports/{reportId}/markdown — 팀원 이름이 익명화된 마크다운 */
   exportReportMarkdown: (memberId: Id, reportId: Id) => Promise<string | null>
+
+  // ---- 기술 결정 카드 · 강사 꼬리질문 (#218 — 「15」). 개인 API라 Snapshot · SSE 밖. 실패하면 알림 후 null ----
+  /** GET W/members/{memberId}/decision-cards — 본인 · 지정된 강사 */
+  loadDecisionCards: (memberId: Id) => Promise<DecisionCardDto[] | null>
+  /** POST W/members/{memberId}/decision-cards — 본인만, 머지되거나 닫힌 내 PR */
+  createDecisionCard: (memberId: Id, request: DecisionCardCreateRequest) => Promise<DecisionCardDto | null>
+  /** PUT …/decision-cards/{cardId} — 본인만, 확인하려면 배운 점 필수 */
+  updateDecisionCard: (memberId: Id, cardId: Id, request: DecisionCardUpdateRequest) => Promise<DecisionCardDto | null>
+  /** POST …/decision-cards/{cardId}/follow-up-request — 본인만 */
+  requestFollowUp: (memberId: Id, cardId: Id) => Promise<DecisionCardDto | null>
+  /** POST …/decision-cards/{cardId}/follow-up-questions — 지정된 강사, 요청된 카드만 */
+  addFollowUpQuestion: (memberId: Id, cardId: Id, request: FollowUpQuestionCreateRequest) => Promise<FollowUpQuestionDto | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * selection(3D가 아직 읽는 옛 선택 칸)과 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -185,9 +197,12 @@ interface OfficeState {
   // ---- view state ----
   selection: Selection | null
   select: (s: Selection | null) => void
-  /** Hovered thing in either the 3D view or the panel; both highlight it. */
-  hover: Selection | null
-  setHover: (s: Selection | null) => void
+  /**
+   * Hovered thing as its SceneModel key ('task:t_1' · 'submission:s_1' · 'agenda:a_1' · 'member:m_1') — the 3D view and the
+   * weekly board highlight the same one (#102 ④ — C).
+   */
+  hover: string | null
+  setHover: (key: string | null) => void
   dialog: Dialog | null
   openDialog: (d: Dialog | null) => void
   /** Camera fly-to request. Scene resolves the target's position, then clears it. */
@@ -534,14 +549,35 @@ export const useOffice = create<OfficeState>((set, get) => {
       ),
     exportReportMarkdown: (memberId, reportId) => officeRead((src, ws) => src.exportReportMarkdown(ws, memberId, reportId)),
 
+    // ---- 기술 결정 카드 (#218) — Snapshot에 없다. 화면이 열 때 읽고, 쓴 뒤 응답으로 바꾼다 ----
+    loadDecisionCards: (memberId) => officeRead((src, ws) => src.listDecisionCards(ws, memberId)),
+    createDecisionCard: (memberId, request) =>
+      officeWrite(
+        (src, ws) => src.createDecisionCard(ws, memberId, request),
+        (snap) => snap,
+      ),
+    updateDecisionCard: (memberId, cardId, request) =>
+      officeWrite(
+        (src, ws) => src.updateDecisionCard(ws, memberId, cardId, request),
+        (snap) => snap,
+      ),
+    requestFollowUp: (memberId, cardId) =>
+      officeWrite(
+        (src, ws) => src.requestFollowUp(ws, memberId, cardId),
+        (snap) => snap,
+      ),
+    addFollowUpQuestion: (memberId, cardId, request) =>
+      officeWrite(
+        (src, ws) => src.addFollowUpQuestion(ws, memberId, cardId, request),
+        (snap) => snap,
+      ),
+
     selection: null,
     // 옛 선택 칸을 고르면 v1 상세는 닫는다(상세 서랍은 하나)
     select: (selection) => set(selection ? { selection, officeSelection: null } : { selection }),
     hover: null,
     setHover: (hover) => {
-      const cur = get().hover
-      if (cur === hover || (cur && hover && cur.kind === hover.kind && cur.id === hover.id)) return
-      set({ hover })
+      if (get().hover !== hover) set({ hover })
     },
     dialog: null,
     openDialog: (dialog) => set({ dialog }),

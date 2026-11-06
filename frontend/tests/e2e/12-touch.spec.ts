@@ -37,9 +37,18 @@ test('a quick swipe on a card scrolls the list and does not drag', async ({ page
   const from = await center(card)
   await touch(cdp, 'touchStart', from)
   for (let i = 1; i <= 6; i++) await touch(cdp, 'touchMove', { x: from.x, y: from.y - i * 30 })
-  expect(await readStore(page, (s) => s.drag), 'no drag during a swipe').toBeNull()
+  expect(await draggedCargo(page), 'no drag during a swipe').toBeNull()
   await touch(cdp, 'touchEnd')
 
   await expect.poll(() => body.evaluate((el) => el.scrollTop), { message: 'the list scrolled' }).toBeGreaterThan(scrollBefore)
-  expect(await readStore(page, (s) => s.drag)).toBeNull()
+  expect(await draggedCargo(page)).toBeNull()
 })
+
+/** The shape being dragged in the 3D view (runtime cargoDrag — the store has no drag state, #102 ④), null when none */
+function draggedCargo(page: Page) {
+  return page.evaluate(async () => {
+    const rtPath = '/src/scene/runtime.ts'
+    const rt = await import(/* @vite-ignore */ rtPath)
+    return rt.cargoDrag.key as string | null
+  })
+}

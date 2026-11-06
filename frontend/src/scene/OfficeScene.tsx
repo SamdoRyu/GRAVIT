@@ -46,7 +46,6 @@ export function OfficeScene() {
           if (e.delta > clickSlop(e)) return
           const s = useOffice.getState()
           if (s.officeSelection) s.selectInOffice(null)
-          if (s.selection) s.select(null)
         }}
       >
         {/* Large invisible plane so clicks around the station count too. */}

@@ -314,7 +314,7 @@ export async function hoverBox(page: Page, key: string): Promise<{ x: number; y:
     const y = base.y + dy
     await page.mouse.move(x, y)
     const hover = await readStore(page, (s) => s.hover)
-    if (hover?.kind !== 'task' || hover.id !== key) continue
+    if (hover !== key) continue
     if (await canvasOnTop(page, x, y)) return { x, y }
   }
   throw new Error(`could not hover box ${key} near (${Math.round(base.x)}, ${Math.round(base.y)})`)

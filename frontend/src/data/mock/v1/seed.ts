@@ -3,6 +3,7 @@
 // 다루면 바로 드러나게 한다(CONTRACTS.md 「2」 변환 경계). GitHub 식별자는 10진 문자열이다.
 // 안건 · 회의 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []). 요구사항 · 연결은 #197, 도움 요청은 #183.
 import type {
+  DecisionCardDto,
   EvaluationRoundDto,
   FlowSummary,
   HelpCommentDto,
@@ -49,6 +50,8 @@ export interface MockWorkspace {
   standups?: StandupDto[]
   /** 회고 리포트 (#209) — 저장하는 칸만(종류 · 배운 점 · 만든 시각), 나머지는 읽을 때 계산한다. 없으면 빈 목록 */
   reports?: StoredReport[]
+  /** 기술 결정 카드 (#218) — 꼬리질문 포함 응답 모양 그대로. mock에는 강사가 없어 꼬리질문은 늘 비어 있다. 없으면 빈 목록 */
+  decisionCards?: DecisionCardDto[]
 }
 
 export interface MockHelpThread {

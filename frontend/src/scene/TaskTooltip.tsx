@@ -13,7 +13,8 @@ const ISSUE_STATE = { open: '열림', closed: '닫힘' } as const
 
 /** "#12 · 열림" and the title of the hovered box (hover id = SceneModel key, 'task:<id>' · 'submission:<id>' · 'agenda:<id>') */
 function useHovered(): { key: string; head: string; title: string } | null {
-  const key = useOffice((s) => (s.hover?.kind === 'task' ? s.hover.id : null))
+  // cargo and agenda shapes only — a hovered crew member ('member:…') has its own ring, no tooltip
+  const key = useOffice((s) => (s.hover !== null && !s.hover.startsWith('member:') ? s.hover : null))
   const head = useOffice((s) => {
     const snap = s.office?.snapshot
     if (!key || !snap) return null
