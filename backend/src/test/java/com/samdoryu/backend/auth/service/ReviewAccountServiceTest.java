@@ -15,6 +15,7 @@ import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.auth.repository.ReviewAccountRepository;
 import com.samdoryu.backend.auth.security.ReviewLoginProperties;
+import com.samdoryu.backend.auth.security.ReviewLoginThrottle;
 import com.samdoryu.backend.common.security.AppProperties;
 import com.samdoryu.backend.workspace.service.DemoWorkspaceService;
 import java.time.Instant;
@@ -63,7 +64,7 @@ class ReviewAccountServiceTest {
     }
 
     private ReviewAccountService newService(boolean enabled, String config) {
-        return new ReviewAccountService(reviewAccounts, appUsers, demoWorkspaceService, encoder,
+        return new ReviewAccountService(reviewAccounts, appUsers, demoWorkspaceService, encoder, new ReviewLoginThrottle(),
                 new AppProperties("http://localhost:5173", Set.of(), enabled, null, null),
                 new ReviewLoginProperties(config));
     }
@@ -129,6 +130,18 @@ class ReviewAccountServiceTest {
         assertThat(authenticate(null, null)).isEmpty();
         assertThat(authenticate("rev-student", null)).isEmpty();
         verifyNoInteractions(appUsers, demoWorkspaceService);
+    }
+
+    /** #165 — 여러 번 틀리면 맞는 비밀번호도 같은 실패(DB를 건드리지 않음). 다른 계정은 영향이 없다. */
+    @Test
+    void repeatedWrongPasswordsLockOnlyThatAccount() {
+        for (int i = 0; i < 5; i++) {
+            assertThat(authenticate("rev-student", "wrong-" + i)).isEmpty();
+        }
+
+        assertThat(authenticate("rev-student", STUDENT_PASSWORD)).isEmpty();
+        verifyNoInteractions(appUsers, demoWorkspaceService);
+        assertThat(authenticate("rev-mentor", MENTOR_PASSWORD)).isPresent();
     }
 
     /** 운영자가 DB에서 막은 계정은 설정에 있어도 로그인할 수 없다. */
