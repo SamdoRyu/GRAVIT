@@ -785,12 +785,13 @@ interface InboxItem {
   workspaceDisplayName: string;
   targetId: Id;            // helpRequestId · agendaItemId · cardId
   ownerMemberId: Id;       // 요청자 · 안건을 올린 사람 · 카드 주인
-  title: string;
+  title: string;           // 도움 요청 내용의 첫 줄 · 안건 제목 · 카드의 PR 제목 (아래)
   requestedAt: Instant;
   answeredAt: Instant | null; // 강사 답변 · 피드백 · 꼬리질문이 하나라도 있으면 그 첫 시각
 }
 ```
 
+- `title`은 읽을 때 원본에서 만든다 [구현 기본값]. `help_request` — 도움 요청에는 제목이 없어 `content`에서 빈 줄을 건너뛴 첫 줄의 앞뒤 공백을 뺀 값, 최대 100자(유니코드 문자 단위라 이모지를 반으로 자르지 않는다. 말줄임표는 붙이지 않는다). `decision_feedback` — 안건 `title`. `follow_up_question` — 카드가 가리키는 PR의 `SubmissionDto.title`.
 - 답은 각 원래 API로 쓴다 — 도움 요청 코멘트(「11」), 강사 피드백(「10」), 꼬리질문(「15」). 요청함은 계산 값이라 저장하지 않는다(FR-LRN-23).
 
 ## 17. 컨벤션 라이브러리
