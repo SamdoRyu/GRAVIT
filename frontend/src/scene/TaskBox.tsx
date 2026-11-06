@@ -135,7 +135,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
   const kind = entity.kind === 'pr' || entity.kind === 'learning' || entity.kind === 'other' || entity.kind === 'help' ? entity.kind : 'issue'
   const opens = select !== null || helpRequestId !== null
   const selected = useOffice((s) => select !== null && s.officeSelection?.kind === select.kind && s.officeSelection.id === select.id)
-  const hovered = useOffice((s) => s.hover?.kind === 'task' && s.hover.id === key)
+  const hovered = useOffice((s) => s.hover === key)
 
   const body = useMemo(() => new MeshStandardMaterial({ roughness: 0.55, metalness: 0, emissive: new Color(PALETTE.overdueGlow), emissiveIntensity: 0 }), [])
   const band = useMemo(() => new MeshStandardMaterial({ roughness: 0.5, metalness: 0 }), [])
@@ -175,7 +175,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
     return () => {
       if (boxLive.get(key) === l) boxLive.delete(key)
       const s = useOffice.getState()
-      if (s.hover?.kind === 'task' && s.hover.id === key) s.setHover(null)
+      if (s.hover === key) s.setHover(null)
     }
   }, [key])
 
@@ -288,12 +288,12 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
       onPointerOver={(e) => {
         if (cargoDrag.key !== null) return
         e.stopPropagation()
-        useOffice.getState().setHover({ kind: 'task', id: key })
+        useOffice.getState().setHover(key)
         setCursor(raise ? 'grab' : opens ? 'pointer' : '')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
-        if (s.hover?.kind === 'task' && s.hover.id === key) s.setHover(null)
+        if (s.hover === key) s.setHover(null)
         if (cargoDrag.key === null) setCursor('')
       }}
       onPointerDown={(e) => {
@@ -408,7 +408,7 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
       navigator.vibrate?.(12)
     }
     const s = useOffice.getState()
-    if (s.hover?.kind === 'task' && s.hover.id === key) s.setHover(null)
+    if (s.hover === key) s.setHover(null)
     cargoDrag.key = key
     follow(px, py)
     setCursor('grabbing')

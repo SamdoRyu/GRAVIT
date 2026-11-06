@@ -104,7 +104,7 @@ export const Avatar = memo(function Avatar({ member, seat, blocked, spawn, leavi
   const signalColor = blocked ? GEM_COLOR.blocked : GEM_COLOR.calm
 
   const selected = useOffice((s) => s.officeSelection?.kind === 'member' && s.officeSelection.id === id)
-  const hovered = useOffice((s) => s.hover?.kind === 'member' && s.hover.id === hoverKey)
+  const hovered = useOffice((s) => s.hover === hoverKey)
 
   // ---- the glTF crew: one skinned clone per member, with its own materials so each can fade on its own ----
   const gltf = useGLTF(CREW_MODEL_URL)
@@ -190,7 +190,7 @@ export const Avatar = memo(function Avatar({ member, seat, blocked, spawn, leavi
     return () => {
       if (avatarLive.get(id) === l) avatarLive.delete(id)
       const s = useOffice.getState()
-      if (s.hover?.kind === 'member' && s.hover.id === hoverKey) s.setHover(null)
+      if (s.hover === hoverKey) s.setHover(null)
     }
   }, [id, hoverKey])
 
@@ -268,12 +268,12 @@ export const Avatar = memo(function Avatar({ member, seat, blocked, spawn, leavi
       onPointerOver={(e) => {
         if (!live.current.visible) return
         e.stopPropagation()
-        useOffice.getState().setHover({ kind: 'member', id: hoverKey })
+        useOffice.getState().setHover(hoverKey)
         setCursor('pointer')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
-        if (s.hover?.kind === 'member' && s.hover.id === hoverKey) s.setHover(null)
+        if (s.hover === hoverKey) s.setHover(null)
         setCursor('')
       }}
       onClick={(e) => {

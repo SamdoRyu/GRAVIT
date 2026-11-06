@@ -181,9 +181,12 @@ interface OfficeState {
   // ---- view state ----
   selection: Selection | null
   select: (s: Selection | null) => void
-  /** Hovered thing in either the 3D view or the panel; both highlight it. */
-  hover: Selection | null
-  setHover: (s: Selection | null) => void
+  /**
+   * Hovered thing as its SceneModel key ('task:t_1' · 'submission:s_1' · 'agenda:a_1' · 'member:m_1') — the 3D view and the
+   * weekly board highlight the same one (#102 ④ — C).
+   */
+  hover: string | null
+  setHover: (key: string | null) => void
   dialog: Dialog | null
   openDialog: (d: Dialog | null) => void
   /** Camera fly-to request. Scene resolves the target's position, then clears it. */
@@ -521,9 +524,7 @@ export const useOffice = create<OfficeState>((set, get) => {
     select: (selection) => set(selection ? { selection, officeSelection: null } : { selection }),
     hover: null,
     setHover: (hover) => {
-      const cur = get().hover
-      if (cur === hover || (cur && hover && cur.kind === hover.kind && cur.id === hover.id)) return
-      set({ hover })
+      if (get().hover !== hover) set({ hover })
     },
     dialog: null,
     openDialog: (dialog) => set({ dialog }),

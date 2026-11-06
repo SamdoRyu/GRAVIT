@@ -1,14 +1,12 @@
-// Orbit camera with limits, floor-clamped target, drag lock and fly-to-focus.
+// Orbit camera with limits and a floor-clamped target, framing the station in the area the HUD leaves free. Dragging a box
+// locks it through runtime cameraLock (TaskBox) — the store's old drag / focus state is gone (#102 ④).
 import { OrbitControls } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import { MathUtils, PerspectiveCamera as ScratchCamera, TOUCH, Vector3, type PerspectiveCamera } from 'three'
 import { useOffice } from '../store'
 import { STATION_BOUNDS, WORLD_SCALE } from '../theme/station/geometry'
-import { crewSpot } from '../theme/station/spots'
-import type { Selection } from '../store'
-import { avatarLive, boxLive, cameraGesture, cameraLock, type ControlsImpl } from './runtime'
-import { stationSceneFor } from './stationScene'
+import { cameraGesture, cameraLock, type ControlsImpl } from './runtime'
 
 // Station extent in world units (the station is drawn at WORLD_SCALE).
 const B = {
@@ -26,8 +24,6 @@ const MIN_DIST = 7
 const MAX_DIST = 80
 /** Share of the free area the station may span (the rest is margin). */
 const SPAN = 0.94
-const FOCUS_MEMBER = 12
-const FOCUS_TASK = 14
 const offset = new Vector3()
 const dir = new Vector3()
 const lastPos = new Vector3()
@@ -84,56 +80,14 @@ function fitDistance(d: Vector3, tgt: Vector3, W: number, H: number, availW: num
   return { dist, cx: box.cx, cy: box.cy }
 }
 
-interface Fly {
-  active: boolean
-  tx: number
-  ty: number
-  tz: number
-  dist: number
-  follow: Selection | null
-  t: number
-}
-
-/** Resolve where a focus target currently is. Returns false when unknown. */
-function resolve(sel: Selection, out: Fly): boolean {
-  if (sel.kind === 'member') {
-    const live = avatarLive.get(sel.id)
-    if (live && live.visible) {
-      out.tx = live.x
-      out.tz = live.z
-      out.ty = live.y + 0.6
-      return true
-    }
-    const snapshot = useOffice.getState().office?.snapshot
-    const seat = snapshot ? stationSceneFor(snapshot, useOffice.getState().requirementDeckOrder).seats.get(sel.id) : undefined
-    const spot = seat === undefined ? null : crewSpot(seat, true)
-    if (spot) {
-      out.tx = spot.x
-      out.tz = spot.z
-      out.ty = spot.y + 0.6
-      return true
-    }
-    return false
-  }
-  const b = boxLive.get(sel.id)
-  if (!b) return false
-  out.tx = b.x
-  out.tz = b.z
-  out.ty = Math.min(b.y, 1.2)
-  return true
-}
-
 export function CameraRig() {
   const ref = useRef<ControlsImpl>(null)
   const camera = useThree((s) => s.camera) as PerspectiveCamera
   const size = useThree((s) => s.size)
   const gl = useThree((s) => s.gl)
   const insets = useOffice((s) => s.viewInsets)
-  /** True once the camera was moved by the user (or a focus fly): from then on the distance is theirs. */
+  /** True once the camera was moved by the user: from then on the distance is theirs. */
   const userMoved = useRef(false)
-  const dragging = useOffice((s) => s.drag !== null)
-  const focus = useOffice((s) => s.focus)
-  const fly = useRef<Fly>({ active: false, tx: 0, ty: 0, tz: 0, dist: FOCUS_MEMBER, follow: null, t: 0 })
   const [maxDist, setMaxDist] = useState(MAX_DIST)
   // Framing goals; the camera eases toward them (distance) and the view offset eases toward its goal.
   const goal = useRef({ dist: 0, ox: 0, oy: 0, has: false })
@@ -245,31 +199,10 @@ export function CameraRig() {
     lastTarget.copy(tgt)
   }, [camera, size.width, size.height, insets])
 
-  // Controls are off while a task is being dragged (from the scene or the panel).
-  useEffect(() => {
-    if (ref.current) ref.current.enabled = !dragging
-  }, [dragging])
-
-  useEffect(() => {
-    if (!focus) return
-    const f = fly.current
-    if (resolve(focus.target, f)) {
-      f.active = true
-      userMoved.current = true
-      f.follow = focus.target
-      f.t = 0
-      const want = focus.target.kind === 'member' ? FOCUS_MEMBER : FOCUS_TASK
-      const cur = ref.current ? camera.position.distanceTo(ref.current.target) : want
-      f.dist = MathUtils.clamp(Math.min(cur, want), MIN_DIST, MAX_DIST)
-    }
-    useOffice.getState().clearFocus()
-  }, [focus, camera])
-
   useFrame((_, delta) => {
     const c = ref.current
     if (!c) return
     const dt = Math.min(delta, 0.1)
-    const f = fly.current
 
     // Orbit/zoom/pan deltas since we last wrote the camera (our own writes are excluded) add up while a gesture is
     // running or settling (damping); a click or tap's few px of jitter stays under the thresholds.
@@ -290,7 +223,7 @@ export function CameraRig() {
     // Smooth re-framing when the free area changes: ease the distance (until the user takes over) and the centring.
     if (framed.current && goal.current.has) {
       const k = 1 - Math.exp(-6 * dt)
-      if (!userMoved.current && !f.active) {
+      if (!userMoved.current) {
         offset.copy(camera.position).sub(c.target)
         const len = offset.length()
         const dd = goal.current.dist - len
@@ -305,27 +238,6 @@ export function CameraRig() {
         const snap = Math.abs(ex) < 0.3 && Math.abs(ey) < 0.3
         applyOffset(snap ? goal.current.ox : curOff.current.x + ex * k, snap ? goal.current.oy : curOff.current.y + ey * k, size.width, size.height)
       }
-    }
-
-    if (f.active) {
-      if (f.follow) resolve(f.follow, f)
-      const k = 1 - Math.exp(-5 * dt)
-      const dx = (f.tx - c.target.x) * k
-      const dy = (f.ty - c.target.y) * k
-      const dz = (f.tz - c.target.z) * k
-      c.target.x += dx
-      c.target.y += dy
-      c.target.z += dz
-      camera.position.x += dx
-      camera.position.y += dy
-      camera.position.z += dz
-      offset.copy(camera.position).sub(c.target)
-      const len = offset.length()
-      offset.setLength(len + (f.dist - len) * k)
-      camera.position.copy(c.target).add(offset)
-      f.t += dt
-      const rem = Math.hypot(f.tx - c.target.x, f.tz - c.target.z)
-      if ((rem < 0.05 && Math.abs(len - f.dist) < 0.15) || f.t > 3) f.active = false
     }
 
     // Keep the look-at point over the station; shift the camera by the same amount.
@@ -363,7 +275,6 @@ export function CameraRig() {
       maxDistance={maxDist}
       touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }}
       onStart={() => {
-        fly.current.active = false
         const g = gesture.current
         g.active = true
         g.angle = g.dist = g.target = 0

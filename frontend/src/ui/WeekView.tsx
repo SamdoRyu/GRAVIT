@@ -38,7 +38,7 @@ function weekLabel(offset: number) {
 const hoverKey = (taskId: Id) => `task:${taskId}`
 
 const Chip = memo(function Chip({ task, overdue }: { task: TaskDto; overdue: boolean }) {
-  const hovered = useOffice((s) => s.hover?.kind === 'task' && s.hover.id === hoverKey(task.id))
+  const hovered = useOffice((s) => s.hover === hoverKey(task.id))
   const selected = useOffice((s) => s.officeSelection?.kind === 'task' && s.officeSelection.id === task.id)
   const select = () => useOffice.getState().selectInOffice({ kind: 'task', id: task.id })
   return (
@@ -49,7 +49,7 @@ const Chip = memo(function Chip({ task, overdue }: { task: TaskDto; overdue: boo
       aria-current={selected ? 'true' : undefined}
       className={`wk-chip${hovered ? ' is-hover' : ''}${selected ? ' is-selected' : ''}${overdue ? ' is-overdue' : ''}`}
       title={`#${task.githubIssueNumber} · ${task.title}`}
-      onPointerEnter={() => useOffice.getState().setHover({ kind: 'task', id: hoverKey(task.id) })}
+      onPointerEnter={() => useOffice.getState().setHover(hoverKey(task.id))}
       onPointerLeave={() => useOffice.getState().setHover(null)}
       onClick={select}
       onKeyDown={(e) => {

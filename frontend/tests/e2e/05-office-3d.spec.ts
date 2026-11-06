@@ -35,7 +35,7 @@ async function hoverMember(page: Page, id: string): Promise<void> {
   for (const dy of [0, 6, 12, -6, 18, -12, 24]) {
     await page.mouse.move(base.x, base.y + dy)
     const hover = await readStore(page, (s) => s.hover)
-    if (hover?.kind === 'member' && hover.id === `member:${id}`) return
+    if (hover === `member:${id}`) return
   }
   throw new Error(`could not hover member ${id}`)
 }
@@ -48,11 +48,10 @@ test('the 3D station shows the v1 crew and boxes, opens the detail on click, and
   test.skip(facts.issue === null, 'mock seed에 포드 위 이슈가 없다')
   const issue = facts.issue!
 
-  // Pressing a box, moving it a little and letting go off the bridge: no store drag, no dialog, nothing raised.
+  // Pressing a box, moving it a little and letting go off the bridge: no dialog, nothing raised.
   const at = await hoverBox(page, issue.key)
   await page.mouse.down()
   await page.mouse.move(at.x + 40, at.y + 30, { steps: 6 })
-  expect(await readStore(page, (s) => s.drag)).toBeNull()
   await page.mouse.up()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(await readStore(page, (s) => s.office.snapshot.agendaItems.length)).toBe(0)
@@ -70,7 +69,7 @@ test('the 3D station shows the v1 crew and boxes, opens the detail on click, and
   await hoverMember(page, member.id)
   const pos = await settled(page, { kind: 'member', id: member.id })
   const hovered = await readStore(page, (s) => s.hover)
-  expect(hovered).toEqual({ kind: 'member', id: `member:${member.id}` })
+  expect(hovered).toBe(`member:${member.id}`)
   await page.mouse.down()
   await page.mouse.up()
   await expect.poll(() => readStore(page, (s) => s.officeSelection)).toEqual({ kind: 'member', id: member.id })
