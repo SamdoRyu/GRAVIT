@@ -84,7 +84,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 5 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197)
+export const MOCK_STATE_VERSION = 6 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 내 머지된 PR s_4 · 기술 결정 카드 (#218)
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -340,7 +340,7 @@ function teamWorkspace(now: Date): MockWorkspace {
   const tasks = [
     task({ id: 't_1', n: 3, title: '프로젝트 골격 만들기', assignees: ['m_2'], labels: ['area:infra'], closed: 'completed', createdHoursAgo: 50, changedHoursAgo: 40 }, c),
     task({ id: 't_2', n: 5, title: 'GitHub 로그인', assignees: ['m_1'], labels: ['area:auth', 'priority:high'], dueDate: kstDate(now, 2), submissions: ['s_1'], createdHoursAgo: 46, changedHoursAgo: 20 }, c),
-    task({ id: 't_3', n: 6, title: '레포 선택 화면', assignees: ['m_1'], labels: ['area:workspace'], createdHoursAgo: 46, changedHoursAgo: 18 }, c),
+    task({ id: 't_3', n: 6, title: '레포 선택 화면', assignees: ['m_1'], labels: ['area:workspace'], submissions: ['s_4'], createdHoursAgo: 46, changedHoursAgo: 18 }, c),
     task({ id: 't_4', n: 8, title: '동기화 상태 표시', assignees: ['m_2', 'm_3'], labels: ['area:sync', 'priority:medium'], createdHoursAgo: 45, changedHoursAgo: 12 }, c),
     task({ id: 't_5', n: 9, title: '요구사항 패널', labels: ['area:requirement', 'priority:low'], createdHoursAgo: 44, changedHoursAgo: 44 }, c),
     task({ id: 't_6', n: 11, title: '3D 상자 배치', assignees: ['m_3'], labels: ['area:office'], blocked: true, createdHoursAgo: 55, changedHoursAgo: 52 }, c),
@@ -349,6 +349,23 @@ function teamWorkspace(now: Date): MockWorkspace {
     task({ id: 't_9', n: 14, title: '회고 리포트', assignees: ['m_4'], labels: ['area:report'], submissions: ['s_2'], createdHoursAgo: 30, changedHoursAgo: 6 }, c),
   ]
   const submissions = [
+    // 로그인 사용자(김옥토)의 머지된 PR — 기술 결정 카드를 만들어 볼 재료 (#218). 이유 없는 회차라 학습 타임라인은 그대로다
+    submission(
+      {
+        id: 's_4',
+        n: 7,
+        title: 'feat(workspace): 레포 선택 목록',
+        author: { memberId: 'm_1', login: 'octo-kim' },
+        state: 'merged',
+        headSha: 'b2c3d4e5f6a70819203a4b5c6d7e8f9012345679',
+        labels: ['area:workspace'],
+        tasks: ['t_3'],
+        round: { id: 'r_4', reasons: [] },
+        createdHoursAgo: 44,
+        changedHoursAgo: 30,
+      },
+      c,
+    ),
     submission(
       {
         id: 's_3',

@@ -1,5 +1,5 @@
 // 20. 회고 (#209 — FR-LRN-08 · FR-REP-01 · 02 · 03 · 05): 관리 패널 "회고" 탭에서 내 학습 타임라인을 보고, 회고 리포트를 만들고,
-// "내가 배운 점"을 쓰고, 마크다운으로 내보낸다. mock seed: 나(김옥토)의 PR #15가 받은 이유 2개(추천 · 비추천), 내 이슈 2개, 안건 없음.
+// "내가 배운 점"을 쓰고, 마크다운으로 내보낸다. mock seed: 나(김옥토)의 PR #15가 받은 이유 2개(추천 · 비추천) · 머지된 #7(이유 없음, #218), 내 이슈 2개, 안건 없음.
 // 계산 규칙(정렬 · 페이지 · 익명화 순서)은 계약 테스트(report.test.ts)가 맡는다. 강사 화면은 mock에 강사가 없어 ?source=api로 본다.
 import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
@@ -35,7 +35,7 @@ test('create a final report, write what I learned, and export markdown with team
   await panel.getByRole('button', { name: '최종 리포트 만들기' }).click()
   await expect(page.getByText('최종 회고 리포트를 만들었어요')).toBeVisible()
   const report = panel.getByRole('article', { name: '최종 회고 리포트' })
-  await expect(report.getByRole('region', { name: '요약' })).toContainText('맡은 이슈 2개(닫힘 0) · 작성한 PR 1개(머지 0) · 올린 안건 0건(결론 0)')
+  await expect(report.getByRole('region', { name: '요약' })).toContainText('맡은 이슈 2개(닫힘 0) · 작성한 PR 2개(머지 1) · 올린 안건 0건(결론 0)')
   await expect(report.getByRole('list', { name: '담당 기능 영역' }).getByRole('listitem')).toHaveText(['auth', 'workspace'])
 
   const form = report.getByRole('form', { name: '내가 배운 점 쓰기' })
