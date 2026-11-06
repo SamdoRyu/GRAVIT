@@ -71,7 +71,8 @@ export function Hud() {
   useHotkeys()
   useTrackPointer()
   useTouchDragGuard()
-  const status = useOffice((s) => s.status)
+  // 사무실(v1 Snapshot)을 읽는 중 — 데모 모델의 상태가 아니다(api에서는 데모 모델을 띄우지 않는다)
+  const opening = useOffice((s) => s.office?.status === 'loading')
   const offline = useOffice((s) => s.connection === 'offline')
   const dragging = useOffice((s) => s.drag !== null)
   const hasDetail = useOffice((s) => {
@@ -151,7 +152,7 @@ export function Hud() {
       <Rail />
       <Dialogs />
       <DragGhost />
-      {(status === 'loading' || status === 'idle') && !offline && (
+      {opening && !offline && (
         <div className="loader" role="status">
           <span className="spinner" />
           <span>사무실을 여는 중…</span>
