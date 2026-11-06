@@ -141,6 +141,9 @@ textarea.select { height: auto; padding: 7px 8px; resize: vertical; line-height:
   gap: 8px;
   pointer-events: none;
   transition: right 0.25s ease;
+  /* 상단 바(.glass)는 backdrop-filter로 쌓임 맥락을 만들어 더보기 메뉴의 z-index가 그 안에서만 먹는다. 드로어(.rail 15)는
+     상단 바 아래에서 시작하므로, 이 줄 전체를 그 위로 올려 아래로 펼친 메뉴만 상세 카드 위에 뜨게 한다 (#235) */
+  z-index: 16;
 }
 .topbar { container-type: inline-size; width: 100%; display: flex; align-items: center; flex-wrap: nowrap; gap: 8px 16px; min-height: 52px; padding: 6px 8px 6px 16px; animation: slide-down 0.35s ease both; }
 .brand { display: flex; align-items: center; gap: 8px; flex: none; }
