@@ -699,3 +699,16 @@ export interface FollowUpQuestionDto {
   body: string
   createdAt: Instant
 }
+/** `POST W/members/{memberId}/decision-cards` — 본인만, 머지되거나 닫힌 내 PR */
+export interface DecisionCardCreateRequest {
+  submissionId: Id
+}
+/** `PUT W/members/{memberId}/decision-cards/{cardId}` — 9칸을 통째로 바꾼다. `confirmed: true`면 `learning` 칸 필수 (P11) */
+export interface DecisionCardUpdateRequest {
+  cells: DecisionCardCells
+  confirmed: boolean
+}
+/** `POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions` — R4, 1~1000자 (FR-REP-11) */
+export interface FollowUpQuestionCreateRequest {
+  body: string
+}

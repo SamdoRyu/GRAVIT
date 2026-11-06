@@ -154,6 +154,12 @@ async function startFake(): Promise<Fake> {
       res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' })
       return res.end('# 최종 회고 리포트\n\n- 팀원 A와 함께')
     }
+    // 「15」 기술 결정 카드 · 강사 꼬리질문 (#218)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards$/.test(path)) return sendJson(res, 200, retroReportExample.decisionCards)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards$/.test(path)) return sendJson(res, 201, { ...retroReportExample.decisionCards[0], ...(JSON.parse(r.body) as object) })
+    if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+$/.test(path)) return sendJson(res, 200, { ...retroReportExample.decisionCards[0], ...(JSON.parse(r.body) as object) })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+\/follow-up-request$/.test(path)) return sendJson(res, 200, { ...retroReportExample.decisionCards[0], followUpRequested: true })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+\/follow-up-questions$/.test(path)) return sendJson(res, 201, { id: '21', instructor: meResponseExample.user, ...(JSON.parse(r.body) as object), createdAt: '2026-11-06T02:00:00Z' })
     // 「8」 요구사항 연결 (#197)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
     if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
@@ -452,6 +458,38 @@ describe('v1 api — 쓰기 · CSRF', () => {
     // 마크다운도 실패는 JSON 에러 본문이다
     fake.next.push((_r, res) => sendError(res, 404, 'not_found', '리포트를 찾을 수 없어요'))
     await rejectsWith(api.exportReportMarkdown('3', '4', '99'), 'not_found', '리포트를 찾을 수 없어요')
+  })
+
+  it('기술 결정 카드 · 강사 꼬리질문 — 읽기 GET · 쓰기 POST/PUT(CSRF · JSON 본문), 400 · 403 · 409를 그대로 (#218)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    const card = retroReportExample.decisionCards[0]
+    assert.deepEqual(await api.listDecisionCards('3', '4'), retroReportExample.decisionCards)
+    assert.equal((await api.createDecisionCard('3', '4', { submissionId: '9' })).submissionId, '9')
+    const update = { cells: { ...card.cells, learning: '계약 먼저' }, confirmed: true }
+    assert.equal((await api.updateDecisionCard('3', '4', '8', update)).cells.learning, '계약 먼저')
+    assert.equal((await api.requestFollowUp('3', '4', '8')).followUpRequested, true)
+    assert.deepEqual(await api.addFollowUpQuestion('3', '4', '8', { body: '왜 그렇게 정했나요?' }), { id: '21', instructor: meResponseExample.user, body: '왜 그렇게 정했나요?', createdAt: '2026-11-06T02:00:00Z' })
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      [
+        'GET /api/workspaces/3/members/4/decision-cards -',
+        'POST /api/workspaces/3/members/4/decision-cards tok-1',
+        'PUT /api/workspaces/3/members/4/decision-cards/8 tok-1',
+        'POST /api/workspaces/3/members/4/decision-cards/8/follow-up-request tok-1',
+        'POST /api/workspaces/3/members/4/decision-cards/8/follow-up-questions tok-1',
+      ],
+    )
+    assert.deepEqual(JSON.parse(fake.requests[1].body), { submissionId: '9' })
+    assert.deepEqual(JSON.parse(fake.requests[2].body), update)
+    assert.deepEqual(JSON.parse(fake.requests[4].body), { body: '왜 그렇게 정했나요?' })
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '이 PR의 카드가 이미 있어요'))
+    await rejectsWith(api.createDecisionCard('3', '4', { submissionId: '9' }), 'conflict', '이 PR의 카드가 이미 있어요')
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '확인하려면 내가 배운 점을 써 주세요'))
+    await rejectsWith(api.updateDecisionCard('3', '4', '8', { cells: card.cells, confirmed: true }), 'invalid', '확인하려면 내가 배운 점을 써 주세요')
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '꼬리질문을 요청한 카드에만 쓸 수 있어요'))
+    await rejectsWith(api.addFollowUpQuestion('3', '4', '8', { body: '왜요?' }), 'forbidden_role', '꼬리질문을 요청한 카드에만 쓸 수 있어요')
   })
 
   it('PR 평가 — GET rounds · PUT evaluations/mine, PUT은 CSRF와 JSON 본문, 400 · 403 · 409를 그대로 (#19 · #20)', async () => {
