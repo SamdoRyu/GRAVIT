@@ -5,6 +5,7 @@
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
+import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, openWorkspaceError, settingsError } from '../../rules/period'
@@ -197,7 +198,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       meetings: s.meetings,
       helpRequests,
       activityNotes: s.activityNotes,
-      flow: s.flow,
+      // 평균 리뷰 대기는 응답 시각에 계산한다 — 서버와 같은 규칙(CONTRACTS.md 「3」, #24)
+      flow: { ...s.flow, averageReviewWaitHours: averageReviewWaitHours(s.submissions, at) },
       generatedAt: toInstant(at),
     }
   }

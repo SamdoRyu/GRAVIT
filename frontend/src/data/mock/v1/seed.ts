@@ -370,8 +370,8 @@ function teamWorkspace(now: Date): MockWorkspace {
       submissions,
       ...emptyCollections(),
       helpRequests: help.summaries,
-      // 평균 리뷰 대기는 서버가 계산한다(FR-FLOW-05). mock은 상단 바를 그려 보려고 예시 값만 둔다
-      flow: { ...computeFlow({ members, tasks, submissions }), averageReviewWaitHours: 6.5 },
+      // 평균 리뷰 대기는 응답 시각에 계산한다(rules/flow.ts — mock의 toSnapshot) — 저장해 두지 않는다
+      flow: computeFlow({ members, tasks, submissions }),
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
     helpThreads: help.threads,
