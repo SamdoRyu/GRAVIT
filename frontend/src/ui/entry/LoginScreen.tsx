@@ -1,6 +1,6 @@
 // 로그인 화면 — GRAVIT 로그인 디자인("로그인-원본" 아트보드)을 옮긴 것 (#64 · #63 화면 몫, CONTRACTS_API.md 「2」). 소유: D.
 // 디자인에 없는 보안 심사용 ID/PW 폼(#63 — 켜진 환경에서만)은 카드 안 접기 칸으로 더했다.
-// 로그인 성공 뒤 전환(로딩) 장면은 팀 상의 뒤에 넣는다 — 여기에는 없다.
+// 로그인 뒤 처음 사무실을 고르면 나오는 도착 장면(전환 A · 행성 줌인)은 Landing.tsx.
 import { useState, type FormEvent } from 'react'
 import { MOCK_REVIEW_LOGIN } from '../../data/mock/v1'
 import { useSession } from '../../session'
