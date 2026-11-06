@@ -458,7 +458,7 @@ interface SceneEntity {
   kind: 'issue' | 'pr' | 'help' | 'learning' | 'other' | 'activity' | 'avatar' | 'requirement' | 'requirementGroup' | 'board';
   refId: string | null;      // 가리키는 도메인 내부 ID (대기 칸 · 게시판은 null)
   placeRole: PlaceRole;
-  badges: string[];          // 막힘 · 추천·비추천 수 · 대기 칸 waiting:N · empty:k · Draft · 미병합 종료 · 시연 데이터 등
+  badges: string[];          // 막힘 · 추천·비추천 수 · 대기 칸 waiting:N · empty:k · 게시판 help:N · candidate:k · Draft · 미병합 종료 · 시연 데이터 등
   highlight?: 'blocked' | 'recent' | 'dim' | 'focus';
   groupKey?: string;         // 요구사항 종류(원본 ID 접두사), 없으면 "미분류" — 이름표 · 분류 · 정렬용, 묶음 기준 아님
 }
@@ -476,6 +476,7 @@ interface ThemeLayout {
 - ThemeLayout 구현은 기본 테마(우주정거장 — 확정 시안 `frontend/public/station/`, 2026-11-04) 하나다. 테마 엔진은 만들지 않는다 [확정].
 - 드롭 결과: `requirement:*` → `linkRequirement`(상자는 제자리), `meeting` → `createAgendaItem`(원본은 제자리), 그 밖은 아무 일도 없음 [확정 — 위치 규칙]. 단, 대기 칸(`requirement:waiting`)에 놓으면 대기 목록에서 요구사항을 하나 고른 뒤 `linkRequirement`. 요구사항이 없는 빈 판은 드롭 구역이 아니다(`dropZoneAt` → `null`, 드롭 빛 없음) [2026-11-06 결정].
 - 요구사항 판 배치 [2026-11-06 결정]: 판 수 · 기본 순서 · 대기 칸 · 교환은 「10」과 ARCHITECTURE.md 「요구사항 묶음 표시」를 따른다. 대기 칸 교환 결과(판에 올린 요구사항 ID 목록, `string[] | null`)는 사무실별로 보는 사람의 브라우저에만 둔다 — 서버 저장 · API 없음. 스토어가 내주고 SceneModel이 입력으로 받는다. 보는 사람마다 배치가 다를 수 있다.
+- 게시판 [2026-11-06 결정]: `board` 오브젝트 하나. 배지는 `help:N`(`open` · `discussing` 도움 요청 수) · `candidate:k`(그중 `isAgendaCandidate`, k > 0일 때만)이고 0이면 붙이지 않는다. 회의 결정 기록 · 강사 피드백 · 배운 점은 세지 않는다. 고르면 HUD의 도움 요청 목록을 연다 — 회의 결정 기록 · 강사 피드백을 보는 HUD가 생기면 그것도 연다(FR-LRN-22). 도움 요청마다 3D 도형을 두지 않는다(시안 선반의 도형은 장식). 팀원 · 강사 모두 같은 값이고 사람별 값은 없다.
 
 ## 9. 계약 변경 절차 [계약]
 
