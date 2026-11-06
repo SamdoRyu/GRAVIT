@@ -23,7 +23,7 @@ GRAVIT/
 │   ├── src/             app · scene(3D) · ui(HUD) · data(DataSource · mock · api) · store.ts
 │   ├── tests/contract/  DataSource 계약 · 규칙 · API 클라이언트 테스트 (node:test)
 │   ├── tests/e2e/       Playwright E2E (mock 데이터)
-│   └── scripts/         check-bundle(빌드 후 검사) · data-smoke
+│   └── scripts/         check-bundle(빌드 후 검사)
 ├── backend/             Spring Boot (com.samdoryu.backend)
 │   └── src/main/resources/
 │       ├── application.yaml
@@ -119,7 +119,6 @@ npm run dev
 | `npm run test:contract` | mock DataSource 계약 · 규칙 · API 클라이언트 테스트 |
 | `npm run test:e2e` | Playwright E2E (mock). Chrome 필요, 포트 5180 사용 |
 | `npm run preview` | 빌드 결과 미리 보기 |
-| `npx tsx scripts/data-smoke.ts` | mock 데이터 소스 스모크 검사 |
 
 ### 백엔드 (`backend/`)
 
