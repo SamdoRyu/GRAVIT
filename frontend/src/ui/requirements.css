@@ -1,0 +1,43 @@
+/* 관리 패널 "요구사항" 탭 (#197). OWNER: D. 카드 톤은 도움 요청 탭(help.css)과 같다. */
+.req { display: grid; gap: 12px; align-content: start; }
+.req-lead { line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
+.req-lead code { padding: 0 4px; border-radius: 4px; background: var(--soft); font-size: 11.5px; }
+.req-section { display: grid; gap: 6px; }
+.req-section-title { margin: 0; font-size: var(--fs-s); font-weight: 600; color: var(--text-dim); }
+.req-list, .req-issues { list-style: none; margin: 0; padding: 0; display: grid; }
+.req-list { gap: 8px; }
+.req-issues { gap: 2px; }
+
+.req-item { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+/* 연결 없는 구역(FR-REQ-06) — 3D의 꺼진 판과 같은 주황 */
+.req-item.is-empty { box-shadow: 0 0 0 1px rgba(242, 154, 82, 0.55); }
+.req-item.is-off { background: var(--soft); }
+.req-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.req-key { font-size: 11px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.02em; }
+.req-title { flex: 1 1 auto; min-width: 0; font-weight: 600; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
+.req-status { padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 17px; }
+.req-status-missing { background: var(--bad-soft); color: var(--ink-bad); }
+.req-status-needs_review { background: var(--warn-soft); color: var(--ink-warn); }
+.req-hint { margin: 0; font-size: var(--fs-s); line-height: 1.45; color: var(--text-dim); word-break: keep-all; }
+
+.req-progress { display: flex; align-items: center; gap: 8px; }
+.req-bar { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.req-bar > i { display: block; height: 100%; border-radius: 3px; background: #2bb3a3; }
+.req-bar.is-done > i { background: var(--good); }
+.req-empty { color: #b8621f; font-weight: 600; }
+
+.req-issue { display: flex; align-items: center; gap: 6px; min-height: 32px; }
+.req-issue-open {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin-left: -6px;
+  border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: var(--fs-s); text-align: left; cursor: pointer;
+}
+.req-issue-open:hover { background: var(--soft); }
+.req-issue-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.req-issue-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-s); }
+.req-closed { flex: none; padding: 0 5px; border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 16px; background: var(--good-soft); color: var(--ink-good); }
+.req-unlink, .req-confirm { flex: none; }
+.req-confirm { display: inline-flex; gap: 2px; }
+@media (pointer: coarse) {
+  .req-issue { min-height: 44px; }
+  .req-issue-open { min-height: 40px; }
+}
