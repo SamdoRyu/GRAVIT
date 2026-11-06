@@ -28,9 +28,8 @@ test('loads the office: HUD, KPI numbers, 3D canvas, no console errors', async (
   await expect(value('열린 PR')).toHaveText(String(flow.openSubmissionCount))
   await expect(kpis.locator('.kpi').first().locator('.kpi-label')).toHaveText(/^(시작 전|종료까지|오늘 종료|종료됨)$/)
 
-  // The data source matches the project.
-  const label = await readStore(page, (s) => s.sourceLabel)
-  expect(label).toBe(source === 'api' ? '로컬 서버' : '로컬 데모 데이터')
+  // 서버에 붙으면 상단 바에 "서버" 배지 (v1 연결 상태 — #164)
   if (source === 'api') await expect(page.getByText('서버', { exact: true })).toBeVisible()
-  expect(await readStore(page, (s) => Object.keys(s.members).length)).toBe(7)
+  // 데모 모델은 없다 — 사무실 데이터는 v1 Snapshot뿐 (#102 ④)
+  expect(await readStore(page, (s) => 'tasks' in s || 'members' in s || 'init' in s)).toBe(false)
 })

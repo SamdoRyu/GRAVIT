@@ -254,7 +254,6 @@ function TapTip() {
 }
 
 export function TopBar() {
-  const sourceLabel = useOffice((s) => s.sourceLabel)
   // 사무실을 읽지 못했다(받은 Snapshot이 없음) — 데모 모델의 상태가 아니다
   const failed = useOffice((s) => s.office?.status === 'error')
   const connection = useOffice((s) => s.connection)
@@ -263,7 +262,7 @@ export function TopBar() {
     <div className="hud-top">
       <div className="top-head">
       <header className="topbar glass">
-        <div className="brand" title={sourceLabel ? `데이터: ${sourceLabel}` : undefined}>
+        <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <Icon name="cube" size={14} />
           </span>

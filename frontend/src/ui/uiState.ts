@@ -1,7 +1,6 @@
 // UI-only view state (panel layout etc.). Domain state stays in src/store.ts. OWNER: ui-builder.
 import { create } from 'zustand'
 import type { BoardColumn, BoardSortKey } from '../data/rules/board'
-import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
 
 /** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 탭 — #183 */
@@ -48,7 +47,6 @@ export const useUi = create<UiState>((set, get) => ({
   tab: 'kanban',
   setTab: (tab) => {
     const cur = get().tab
-    if (tab === 'kanban' || tab === 'list') useOffice.getState().setPanelView(tab)
     if (tab === 'week' && cur !== 'week') set({ tab, prevWide: get().wide, wide: true })
     else if (tab !== 'week' && cur === 'week') set({ tab, wide: get().prevWide ?? get().wide, prevWide: null })
     else set({ tab })
