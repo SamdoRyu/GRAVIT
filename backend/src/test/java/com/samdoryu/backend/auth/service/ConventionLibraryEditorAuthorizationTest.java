@@ -11,6 +11,7 @@ import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.security.AppProperties;
 import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
+import com.samdoryu.backend.workspace.service.DemoWorkspaceService;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +30,8 @@ class ConventionLibraryEditorAuthorizationTest {
     private final InstructorAssignmentService assignments = mock(InstructorAssignmentService.class);
     private final AuthorizationService authorizationService = new AuthorizationService(
             new AppProperties("http://localhost:5173", Set.of(INSTRUCTOR_GITHUB_ID), true, null, null),
-            assignments, mock(WorkspaceService.class), mock(ReviewAccountService.class));
+            assignments, mock(WorkspaceService.class), mock(ReviewAccountService.class),
+            mock(DemoWorkspaceService.class));
 
     @AfterEach
     void clearSession() {
