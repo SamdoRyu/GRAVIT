@@ -1,0 +1,124 @@
+<!-- 로그인 화면 일러스트 — GRAVIT 로그인 디자인(로그인-원본) 그대로. 애니메이션은 SVG(SMIL) 안에 있다 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 440" role="img" aria-label="보랏빛 행성 주위를 이슈 · PR · 도움 요청 · 배운 점 화물이 궤도를 따라 도는 정거장 일러스트">
+  <title>GRAVIT 정거장 일러스트</title>
+  <defs>
+    <radialGradient id="gv-planet" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#ffd9cf"></stop><stop offset=".55" stop-color="#f6b9b0"></stop><stop offset="1" stop-color="#d99aa6"></stop></radialGradient>
+    <radialGradient id="gv-orb" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#ffffff"></stop><stop offset=".5" stop-color="#f6ecd9"></stop><stop offset="1" stop-color="#c3aed6"></stop></radialGradient>
+    <g id="gv-cube"><polygon points="0,-21 10,-16 0,-11 -10,-16" fill="#fffaf0"></polygon><polygon points="-10,-16 0,-11 0,0 -10,-5" fill="#efe0c6"></polygon><polygon points="0,-11 10,-16 10,-5 0,0" fill="#d5bf9f"></polygon><path d="M-10 -10.5 L0 -5.5 L10 -10.5" fill="none" stroke="#f29a52" stroke-width="2"></path></g>
+    <g id="gv-prism"><polygon points="-12,0 0,6 6,-10 -6,-16" fill="#fff6e6"></polygon><polygon points="0,6 12,0 6,-10" fill="#d5bf9f"></polygon><path d="M-9 -8 L3 -2" stroke="#f29a52" stroke-width="2"></path></g>
+    <g id="gv-sphere"><circle cx="0" cy="-12" r="9.5" fill="url(#gv-orb)"></circle><polygon points="-6,-18 1,-21 -1,-14" fill="#ffffff" opacity=".75"></polygon><circle cx="0" cy="-21.5" r="2" fill="#ff9d4d"></circle></g>
+    <g id="gv-octa"><polygon points="0,-28 -10,-16 0,-11" fill="#ffffff"></polygon><polygon points="0,-28 0,-11 10,-16" fill="#e6d3b6"></polygon><polygon points="-10,-16 0,-11 0,-4" fill="#d7c2a6"></polygon><polygon points="0,-11 10,-16 0,-4" fill="#b9a2c0"></polygon></g>
+    <g id="gv-sat"><rect x="-7" y="-4" width="14" height="8" rx="2" fill="#fffaf0"></rect><rect x="-21" y="-3" width="11" height="6" fill="#8ff0e0" opacity=".8"></rect><rect x="10" y="-3" width="11" height="6" fill="#8ff0e0" opacity=".8"></rect><circle cx="0" cy="-6" r="1.6" fill="#ff9d4d"></circle></g>
+    <filter id="gv-terrain" filterUnits="userSpaceOnUse" x="0" y="0" width="300" height="240" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016 0.034" numOctaves="3" seed="11" stitchTiles="stitch" result="n1"></feTurbulence>
+      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="4" stitchTiles="stitch" result="n2"></feTurbulence>
+      <feColorMatrix in="n1" type="matrix" values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 0 1" result="g1"></feColorMatrix>
+      <feComponentTransfer in="g1" result="albedo">
+        <feFuncR type="table" tableValues="0.66 0.76 0.83 0.88 0.96"></feFuncR>
+        <feFuncG type="table" tableValues="0.61 0.70 0.76 0.81 0.87"></feFuncG>
+        <feFuncB type="table" tableValues="0.91 0.97 0.98 0.98 0.99"></feFuncB>
+      </feComponentTransfer>
+      <feColorMatrix in="n1" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="h1"></feColorMatrix>
+      <feColorMatrix in="n2" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" result="h2"></feColorMatrix>
+      <feComposite in="h1" in2="h2" operator="arithmetic" k1="0" k2=".75" k3=".45" k4="0" result="h"></feComposite>
+      <feDiffuseLighting in="h" surfaceScale="4" diffuseConstant="1.3" lighting-color="#ffffff" result="light"><feDistantLight azimuth="225" elevation="48"></feDistantLight></feDiffuseLighting>
+      <feBlend in="albedo" in2="light" mode="multiply"></feBlend>
+    </filter>
+    <filter id="gv-rough" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="3" result="t"></feTurbulence>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="7" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+    <mask id="gv-planet-mask" maskUnits="userSpaceOnUse" x="190" y="100" width="260" height="260"><circle cx="320" cy="230" r="112" fill="#ffffff" filter="url(#gv-rough)"></circle></mask>
+    <g id="gv-crater">
+      <ellipse cx="0" cy="0" rx="10" ry="8.5" fill="#6a58b8" fill-opacity=".3"></ellipse>
+      <path d="M -10 0 A 10 8.5 0 0 1 10 0" fill="none" stroke="#4a3d8f" stroke-opacity=".38" stroke-width="1.6"></path>
+      <path d="M -9 3 A 10 8.5 0 0 0 9 3" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1.4"></path>
+    </g>
+    <pattern id="gv-surface" patternUnits="userSpaceOnUse" x="0" y="110" width="300" height="240">
+      <animateTransform attributeName="patternTransform" type="translate" from="0 0" to="300 0" dur="30s" repeatCount="indefinite"></animateTransform>
+      <rect x="0" y="0" width="300" height="240" fill="#decafb" filter="url(#gv-terrain)"></rect>
+      <use href="#gv-crater" transform="translate(50 60) scale(1.2)"></use>
+      <use href="#gv-crater" transform="translate(130 150) scale(1.8)"></use>
+      <use href="#gv-crater" transform="translate(212 82) scale(.9)"></use>
+      <use href="#gv-crater" transform="translate(252 190) scale(1.3)"></use>
+      <use href="#gv-crater" transform="translate(88 204) scale(.7)"></use>
+      <use href="#gv-crater" transform="translate(176 40) scale(.6)"></use>
+    </pattern>
+    <radialGradient id="gv-atmo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#d6c6ff" stop-opacity="0"></stop><stop offset=".8" stop-color="#d6c6ff" stop-opacity="0"></stop><stop offset=".855" stop-color="#d6c6ff" stop-opacity=".4"></stop><stop offset=".93" stop-color="#d6c6ff" stop-opacity=".12"></stop><stop offset="1" stop-color="#d6c6ff" stop-opacity="0"></stop></radialGradient>
+    <radialGradient id="gv-hi" cx=".32" cy=".27" r=".42"><stop offset="0" stop-color="#ffffff" stop-opacity=".5"></stop><stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop></radialGradient>
+    <radialGradient id="gv-shade" cx=".34" cy=".3" r=".85"><stop offset="0" stop-color="#2a2366" stop-opacity="0"></stop><stop offset=".45" stop-color="#2a2366" stop-opacity="0"></stop><stop offset=".72" stop-color="#2a2366" stop-opacity=".32"></stop><stop offset=".9" stop-color="#2a2366" stop-opacity=".7"></stop><stop offset="1" stop-color="#2a2366" stop-opacity=".85"></stop></radialGradient>
+    <linearGradient id="gv-rim" x1=".15" y1=".1" x2=".7" y2=".8"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"></stop><stop offset=".5" stop-color="#ffffff" stop-opacity="0"></stop></linearGradient>
+  </defs>
+
+  <ellipse cx="320" cy="230" rx="300" ry="96" fill="none" stroke="#8ff0e0" stroke-opacity=".18" stroke-width="1.2" stroke-dasharray="3 6" transform="rotate(-16 320 230)"></ellipse>
+
+  <g transform="translate(320 230) rotate(-16)">
+    <g>
+      <animateMotion dur="44s" repeatCount="indefinite" path="M 300 0 A 300 96 0 1 1 -300 0 A 300 96 0 1 1 300 0"></animateMotion>
+      <use href="#gv-sat"></use>
+    </g>
+    <path d="M -240 0 A 240 64 0 0 1 240 0" fill="none" stroke="#8ff0e0" stroke-opacity=".08" stroke-width="12"></path>
+    <path d="M -240 0 A 240 64 0 0 1 240 0" fill="none" stroke="#8ff0e0" stroke-opacity=".55" stroke-width="2.2"></path>
+
+    <g opacity=".8">
+      <g>
+        <animateMotion dur="32s" begin="0s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+        <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="0s" repeatCount="indefinite"></animateTransform><g transform="scale(2.2)"><use href="#gv-cube"></use></g></g>
+      </g>
+      <g>
+        <animateMotion dur="32s" begin="-8s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+        <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-8s" repeatCount="indefinite"></animateTransform><g transform="scale(2.2)"><use href="#gv-prism"></use></g></g>
+      </g>
+      <g>
+        <animateMotion dur="32s" begin="-16s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+        <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-16s" repeatCount="indefinite"></animateTransform><g transform="scale(2.1)"><use href="#gv-sphere"></use></g></g>
+      </g>
+      <g>
+        <animateMotion dur="32s" begin="-24s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+        <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-24s" repeatCount="indefinite"></animateTransform><g transform="scale(1.6)"><use href="#gv-octa"></use></g></g>
+      </g>
+    </g>
+  </g>
+
+  <circle cx="320" cy="230" r="132" fill="url(#gv-atmo)"></circle>
+  <g mask="url(#gv-planet-mask)">
+    <circle cx="320" cy="230" r="116" fill="#decafb"></circle>
+    <circle cx="320" cy="230" r="116" fill="url(#gv-surface)"></circle>
+    <path d="M200 200 Q320 182 440 200" stroke="#ffffff" stroke-opacity=".16" stroke-width="14" fill="none"></path>
+    <circle cx="320" cy="230" r="116" fill="url(#gv-hi)"></circle>
+    <circle cx="320" cy="230" r="116" fill="url(#gv-shade)"></circle>
+    <circle cx="320" cy="230" r="110" fill="none" stroke="url(#gv-rim)" stroke-width="3"></circle>
+  </g>
+
+  <g transform="translate(320 230) rotate(-16)">
+    <path d="M -240 0 A 240 64 0 0 0 240 0" fill="none" stroke="#8ff0e0" stroke-opacity=".14" stroke-width="12"></path>
+    <path d="M -240 0 A 240 64 0 0 0 240 0" fill="none" stroke="#8ff0e0" stroke-width="2.6"></path>
+
+    <g>
+      <animateMotion dur="32s" begin="0s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+      <animate attributeName="opacity" values="1;0" keyTimes="0;.5" calcMode="discrete" dur="32s" begin="0s" repeatCount="indefinite"></animate>
+      <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="0s" repeatCount="indefinite"></animateTransform><g transform="scale(2.2)"><use href="#gv-cube"></use></g></g>
+    </g>
+    <g>
+      <animateMotion dur="32s" begin="-8s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+      <animate attributeName="opacity" values="1;0" keyTimes="0;.5" calcMode="discrete" dur="32s" begin="-8s" repeatCount="indefinite"></animate>
+      <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-8s" repeatCount="indefinite"></animateTransform><g transform="scale(2.2)"><use href="#gv-prism"></use></g></g>
+    </g>
+    <g>
+      <animateMotion dur="32s" begin="-16s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+      <animate attributeName="opacity" values="1;0" keyTimes="0;.5" calcMode="discrete" dur="32s" begin="-16s" repeatCount="indefinite"></animate>
+      <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-16s" repeatCount="indefinite"></animateTransform><g transform="scale(2.1)"><use href="#gv-sphere"></use></g></g>
+    </g>
+    <g>
+      <animateMotion dur="32s" begin="-24s" repeatCount="indefinite" path="M 240 0 A 240 64 0 1 1 -240 0 A 240 64 0 1 1 240 0"></animateMotion>
+      <animate attributeName="opacity" values="1;0" keyTimes="0;.5" calcMode="discrete" dur="32s" begin="-24s" repeatCount="indefinite"></animate>
+      <g transform="rotate(16)"><animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.12;1;.82;1" keyTimes="0;.25;.5;.75;1" dur="32s" begin="-24s" repeatCount="indefinite"></animateTransform><g transform="scale(1.6)"><use href="#gv-octa"></use></g></g>
+    </g>
+
+    <g>
+      <animateMotion dur="44s" repeatCount="indefinite" path="M 300 0 A 300 96 0 1 1 -300 0 A 300 96 0 1 1 300 0"></animateMotion>
+      <animate attributeName="opacity" values="1;0" keyTimes="0;.5" calcMode="discrete" dur="44s" repeatCount="indefinite"></animate>
+      <use href="#gv-sat"></use>
+    </g>
+  </g>
+</svg>

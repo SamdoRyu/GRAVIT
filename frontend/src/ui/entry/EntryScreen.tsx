@@ -1,12 +1,12 @@
-// 사무실 밖 화면 — 로그인 · 사무실 고르기 (#64 · #68 화면 몫, CONTRACTS_API.md 「2」 · 「3」). 소유: D.
+// 사무실 밖 화면 — 로그인(LoginScreen.tsx) · 사무실 고르기 (#64 · #68 화면 몫, CONTRACTS_API.md 「2」 · 「3」). 소유: D.
 // 사무실이 열리면 App이 3D · HUD로 바꾼다. 레포를 골라 새 사무실을 여는 부분은 OpenWorkspace.tsx(#13 · #68).
-import { useEffect, useState, type FormEvent } from 'react'
-import { MOCK_REVIEW_LOGIN } from '../../data/mock/v1'
+import { useEffect, useState } from 'react'
 import type { WorkspaceListItem } from '../../data/types'
 import { useSession } from '../../session'
 import { Icon } from '../icons'
 import { Toasts } from '../Toasts'
 import { formatDate } from '../format'
+import { LoginScreen } from './LoginScreen'
 import { RepositoryChoices } from './OpenWorkspace'
 import './entry.css'
 
@@ -18,79 +18,6 @@ function Brand() {
       </span>
       <span className="entry-brand-name">팀 오피스</span>
     </div>
-  )
-}
-
-function LoginScreen() {
-  const options = useSession((s) => s.loginOptions)
-  const mock = useSession((s) => s.mock)
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (busy) return
-    if (!username.trim() || !password) {
-      setError('아이디와 비밀번호를 입력해 주세요')
-      return
-    }
-    setBusy(true)
-    const failed = await useSession.getState().loginForReview(username.trim(), password)
-    setBusy(false)
-    setError(failed)
-    if (failed) setPassword('')
-  }
-
-  return (
-    <section className="entry-card glass" aria-labelledby="login-title">
-      <Brand />
-      <h1 id="login-title" className="entry-title">
-        로그인
-      </h1>
-      <p className="entry-lead">GitHub 레포의 이슈 · PR을 팀 사무실에서 함께 봐요.</p>
-      <button type="button" className="btn btn-primary entry-github" onClick={() => useSession.getState().loginWithGithub()}>
-        GitHub로 로그인
-      </button>
-      {options?.reviewLoginEnabled && (
-        <form className="entry-review" onSubmit={submit} noValidate aria-label="보안 심사용 로그인">
-          <div className="entry-or" aria-hidden="true">
-            <span>또는</span>
-          </div>
-          <h2 className="entry-subtitle">보안 심사용 로그인</h2>
-          <label className="fld">
-            <span className="fld-label">아이디</span>
-            <input className="select" type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-          </label>
-          <label className="fld">
-            <span className="fld-label">비밀번호</span>
-            <input
-              className="select"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              aria-invalid={!!error}
-              aria-describedby={error ? 'review-login-error' : undefined}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          {error && (
-            <em id="review-login-error" className="fld-error" role="alert">
-              {error}
-            </em>
-          )}
-          <button type="submit" className="btn" disabled={busy}>
-            심사용 계정으로 로그인
-          </button>
-        </form>
-      )}
-      {mock && (
-        <p className="entry-note">
-          로컬 mock 데이터 — GitHub 로그인은 바로 로그인돼요. 심사용 계정은 {MOCK_REVIEW_LOGIN.username} / {MOCK_REVIEW_LOGIN.password}
-        </p>
-      )}
-    </section>
   )
 }
 
@@ -197,11 +124,11 @@ function WorkspacePicker() {
 export function EntryScreen() {
   const status = useSession((s) => s.status)
   const error = useSession((s) => s.error)
+  // 로그인 화면은 자기 배경 · 레이아웃을 갖는다(GRAVIT 로그인 디자인)
+  if (status === 'signed_out') return <LoginScreen />
   return (
     <main className="entry">
-      {status === 'signed_out' ? (
-        <LoginScreen />
-      ) : status === 'signed_in' ? (
+      {status === 'signed_in' ? (
         <WorkspacePicker />
       ) : status === 'error' ? (
         <section className="entry-card glass" role="alert">

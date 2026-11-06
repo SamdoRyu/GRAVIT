@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test'
 import { expect, readStore, test } from './fixtures'
 
 const picker = (page: Page) => page.getByRole('region', { name: '사무실 고르기' })
-const login = (page: Page) => page.getByRole('region', { name: '로그인' })
+const login = (page: Page) => page.getByRole('region', { name: '정거장에 탑승하기' })
 
 async function openMenu(page: Page) {
   await page.getByRole('banner').getByRole('button', { name: '더보기' }).click()
@@ -40,9 +40,11 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   // 로그아웃 → 로그인 화면
   await picker(page).getByRole('button', { name: '로그아웃' }).click()
   await expect(login(page)).toBeVisible()
-  await expect(login(page).getByRole('button', { name: 'GitHub로 로그인' })).toBeVisible()
+  await expect(login(page).getByRole('button', { name: 'GitHub로 계속하기' })).toBeVisible()
 
   // 심사용 로그인 — 비어 있으면 · 틀리면 안내(어느 값인지 말하지 않음), 맞으면 시연 사무실만
+  // 심사용 폼은 접혀 있다 — 펼쳐서 쓴다
+  await login(page).getByText('보안 심사용 계정으로 로그인', { exact: true }).click()
   const form = login(page).getByRole('form', { name: '보안 심사용 로그인' })
   await form.getByRole('button', { name: '심사용 계정으로 로그인' }).click()
   await expect(form.getByRole('alert')).toHaveText('아이디와 비밀번호를 입력해 주세요')
@@ -64,7 +66,7 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await (await openMenu(page)).getByRole('menuitem', { name: '로그아웃' }).click()
   await expect(login(page)).toBeVisible()
   await expect.poll(() => readStore(page, (s) => s.office)).toBeNull()
-  await login(page).getByRole('button', { name: 'GitHub로 로그인' }).click()
+  await login(page).getByRole('button', { name: 'GitHub로 계속하기' }).click()
   await expect(picker(page)).toBeVisible()
   await expect(picker(page).getByText('김옥토')).toBeVisible()
 })

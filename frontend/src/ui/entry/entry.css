@@ -1,4 +1,4 @@
-/* 사무실 밖 화면 — 로그인 · 사무실 고르기. OWNER: D. 버튼 · 입력 · 표시 태그는 hud · panel · dialogs의 것을 쓴다. */
+/* 사무실 밖 화면 — 사무실 고르기 · 오류(로그인은 login.css). OWNER: D. 버튼 · 입력 · 표시 태그는 hud · panel · dialogs의 것을 쓴다. */
 .entry {
   position: absolute;
   inset: 0;
@@ -35,11 +35,6 @@
 .entry-title { margin: 4px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .entry-subtitle { margin: 0; font-size: var(--fs-m, 14px); font-weight: 600; }
 .entry-lead { margin: 0; color: var(--text-dim); line-height: 1.5; }
-.entry-github { height: 40px; font-size: 15px; }
-.entry-review { display: grid; gap: 10px; }
-.entry-or { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 12px; }
-.entry-or::before, .entry-or::after { content: ''; flex: 1; height: 1px; background: var(--line, rgba(20, 30, 60, 0.1)); }
-.entry-note { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--soft, rgba(20, 30, 60, 0.04)); color: var(--text-dim); font-size: 12px; line-height: 1.45; }
 .entry-state { margin: 0; color: var(--text-dim); text-align: center; line-height: 1.5; }
 .entry-state .btn { margin-top: 8px; }
 
