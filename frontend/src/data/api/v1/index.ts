@@ -24,6 +24,8 @@ import type {
   RequirementLinkDto,
   InstructorAssignmentDto,
   InstructorCandidateDto,
+  ConventionLibraryItemDto,
+  ConventionLibraryItemRequest,
   EvaluateRequest,
   EvaluationRoundDto,
   HelpCommentCreateRequest,
@@ -429,6 +431,11 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     requestFollowUp: async (workspaceId, memberId, cardId) => json<DecisionCardDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-request`)),
     addFollowUpQuestion: async (workspaceId, memberId, cardId, request: FollowUpQuestionCreateRequest) =>
       json<FollowUpQuestionDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-questions`, request)),
+
+    listConventionLibrary: async () => json<ConventionLibraryItemDto[]>(await read('/api/convention-library')),
+    createConventionLibraryItem: async (request: ConventionLibraryItemRequest) => json<ConventionLibraryItemDto>(await write('POST', '/api/convention-library', request)),
+    updateConventionLibraryItem: async (itemId, request: ConventionLibraryItemRequest) =>
+      json<ConventionLibraryItemDto>(await write('PUT', `/api/convention-library/${encodeURIComponent(itemId)}`, request)),
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
     async clearDueDate(workspaceId, taskId) {

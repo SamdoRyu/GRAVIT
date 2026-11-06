@@ -1,0 +1,6 @@
+{
+  "target": "branch_name",
+  "name": "브랜치 이름",
+  "content": "<type>/<이슈번호>-<설명>",
+  "description": "Git 전략"
+}

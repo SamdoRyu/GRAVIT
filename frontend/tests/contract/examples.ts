@@ -6,6 +6,8 @@
 import type {
   AgendaItemCreateRequest,
   AgendaItemDto,
+  ConventionLibraryItemDto,
+  ConventionLibraryItemRequest,
   DecisionRequest,
   ErrorResponse,
   EvaluateRequest,
@@ -411,6 +413,25 @@ export const instructorCandidateExample = {
   isAssigned: false,
 } satisfies InstructorCandidateDto
 
+// contract/examples/instructor/convention-library-item.json — CONTRACTS_API.md 「17」
+export const conventionLibraryItemExample = {
+  id: '3',
+  target: 'pr_title',
+  name: 'PR 제목 규칙',
+  content: '<type>(<scope>)?: <설명>',
+  description: null,
+  author: { userId: '40', githubLogin: 'instructor-kim', displayName: '김강사', avatarUrl: null },
+  updatedAt: '2026-11-05T03:00:00Z',
+} satisfies ConventionLibraryItemDto
+
+// contract/examples/instructor/convention-library-item-request.json — CONTRACTS_API.md 「17」
+export const conventionLibraryItemRequestExample = {
+  target: 'branch_name',
+  name: '브랜치 이름',
+  content: '<type>/<이슈번호>-<설명>',
+  description: 'Git 전략',
+} satisfies ConventionLibraryItemRequest
+
 /** contract/examples/ 기준 상대 경로 → TS 사본. 공통 JSON마다 하나씩 있어야 한다(④가 검사). */
 export const EXAMPLES: Record<string, unknown> = {
   'auth/me-response.json': meResponseExample,
@@ -421,6 +442,8 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-create-request.json': helpRequestCreateRequestExample,
   'help/help-request-detail.json': helpRequestDetailExample,
   'help/help-request-summary.json': helpRequestSummaryExample,
+  'instructor/convention-library-item-request.json': conventionLibraryItemRequestExample,
+  'instructor/convention-library-item.json': conventionLibraryItemExample,
   'instructor/instructor-assignment.json': instructorAssignmentExample,
   'instructor/instructor-candidate.json': instructorCandidateExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,
