@@ -1,6 +1,7 @@
 package com.samdoryu.backend.instructor.dto;
 
 import com.samdoryu.backend.instructor.domain.ConventionTarget;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -13,7 +14,7 @@ import jakarta.validation.constraints.Size;
  */
 public record ConventionLibraryItemRequest(
         @NotNull ConventionTarget target,
-        @NotNull @Size(min = 1, max = 100) String name,
-        @NotNull @Size(min = 1, max = 20000) String content,
+        @NotBlank @Size(max = 100) String name,
+        @NotBlank @Size(max = 20000) String content,
         @Size(max = 2000) String description) {
 }
