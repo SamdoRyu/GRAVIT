@@ -1,30 +1,25 @@
-// 10. The requirement deck (#16 · #17 — CONTRACTS.md 「8」 요구사항 판 배치): each active requirement is a plate on the deck,
-// in document order; a plate shows its source key and progress, an empty zone says "연결 없음", and past ten requirements
-// the last place is the waiting plate ("대기 ×N · 빈 구역 k"). The mock seed has no requirements yet (#197), so the test
-// puts them into the open office's Snapshot.
+// 10. The requirement deck (#16 · #17 · #15 — CONTRACTS.md 「8」 요구사항 판 배치 · 드롭 결과), on the mock seed (#199):
+// - team office (ws_1, 5 active): one plate per active requirement in document order, progress / "연결 없음" on the tags,
+//   missing · needs_review not on the deck. The viewer is not R2 there: linking is refused (403) and nothing changes.
+// - demo office (ws_2, 12 active, the viewer is R2): 9 plates + the waiting plate. Dragging an issue box onto a plate lights it
+//   and links the issue to that requirement (progress updates, the box flies back); doing it again only says it is linked.
 import type { Page } from '@playwright/test'
-import { expect, openApp, test } from './fixtures'
+import { expect, hoverBox, readStore, settled, test, waitForScene } from './fixtures'
 
-/** Replace the open office's requirements: n active ones (every third has no linked issue) and one missing */
-async function setRequirements(page: Page, n: number) {
-  await page.evaluate(async (count) => {
-    const storePath = '/src/store.ts'
-    const { useOffice } = await import(/* @vite-ignore */ storePath)
-    const s = useOffice.getState()
-    const requirements = Array.from({ length: count }, (_, i) => ({
-      id: String(500 + i),
-      sourceKey: `FR-E2E-${String(i + 1).padStart(2, '0')}`,
-      title: `E2E 요구사항 ${i + 1}`,
-      position: i,
-      status: 'active',
-      linkedTaskCount: i % 3 === 0 ? 0 : 2,
-      doneTaskCount: i % 3 === 2 ? 2 : 1,
-      lastSeenAt: '2026-11-06T00:00:00Z',
-    }))
-    requirements.push({ ...requirements[0], id: '599', sourceKey: 'FR-E2E-99', title: '사라진 요구사항', position: 99, status: 'missing' })
-    useOffice.setState({ office: { ...s.office, snapshot: { ...s.office.snapshot, requirements } } })
-  }, n)
+async function openOffice(page: Page, workspaceId: string) {
+  await page.goto(`/?workspace=${workspaceId}`)
+  await expect.poll(() => readStore(page, (s) => s.office?.status ?? null), { message: 'office ready' }).toBe('ready')
+  await expect.poll(() => readStore(page, (s) => s.office?.snapshot?.workspace.id ?? null)).toBe(workspaceId)
+  // The deck is at the station's east end, under the right panel: close the panel so it is on the canvas.
+  await page.evaluate(async () => {
+    const uiPath = '/src/ui/uiState.ts'
+    const { useUi } = await import(/* @vite-ignore */ uiPath)
+    useUi.getState().setPanelOpen(false)
+  })
+  await waitForScene(page)
 }
+
+const tags = (page: Page) => page.locator('[data-plate-tag]')
 
 /** Names of the requirement plates in the 3D scene */
 function plates(page: Page) {
@@ -39,26 +34,92 @@ function plates(page: Page) {
   })
 }
 
-test('requirement plates in document order, empty zones, and the waiting plate past ten', async ({ page, source }) => {
-  await openApp(page, source)
+/** The world point of a requirement plate (its ThemeLayout anchor) */
+function plateWorld(page: Page, requirementId: string) {
+  return page.evaluate(async (id) => {
+    const storePath = '/src/store.ts'
+    const scenePath = '/src/scene/stationScene.ts'
+    const { useOffice } = await import(/* @vite-ignore */ storePath)
+    const { stationSceneFor } = await import(/* @vite-ignore */ scenePath)
+    const [x, y, z] = stationSceneFor(useOffice.getState().office.snapshot).layout.anchor(`requirement:${id}`, 0)
+    return { x: x as number, y: y as number, z: z as number }
+  }, requirementId)
+}
 
-  const tags = page.locator('[data-plate-tag]')
+/** An open issue of the open office that has a box in the scene */
+function openIssueWithBox(page: Page) {
+  return page.evaluate(async () => {
+    const storePath = '/src/store.ts'
+    const rtPath = '/src/scene/runtime.ts'
+    const { useOffice } = await import(/* @vite-ignore */ storePath)
+    const rt = await import(/* @vite-ignore */ rtPath)
+    const t = useOffice.getState().office.snapshot.tasks.find((x: { id: string; state: string }) => x.state === 'open' && rt.boxLive.has(`task:${x.id}`))
+    return t ? (t.id as string) : null
+  })
+}
 
-  // 7 requirements → 7 plates in document order; the missing one is not on the deck
-  await setRequirements(page, 7)
-  await expect.poll(() => plates(page)).toEqual(Array.from({ length: 7 }, (_, i) => `requirement:${500 + i}`))
-  await expect(tags).toHaveCount(7)
-  await expect(tags.nth(1)).toContainText('FR-E2E-02 · 1/2')
-  await expect(tags.nth(1)).toContainText('E2E 요구사항 2')
-  await expect(tags.nth(2)).toContainText('FR-E2E-03 · 2/2')
-  await expect(tags.filter({ hasText: '연결 없음' })).toHaveCount(3)
-  await expect(tags.filter({ hasText: '사라진 요구사항' })).toHaveCount(0)
+function drag(page: Page) {
+  return page.evaluate(async () => {
+    const rtPath = '/src/scene/runtime.ts'
+    const rt = await import(/* @vite-ignore */ rtPath)
+    return { key: rt.cargoDrag.key as string | null, target: rt.cargoDrag.target as string | null }
+  })
+}
 
-  // 12 → 9 plates + the waiting plate (3 waiting, one of them without a linked issue)
-  await setRequirements(page, 12)
+/** Press an issue box, carry it over a requirement plate (its target must light up), let go. */
+async function dropOnPlate(page: Page, taskId: string, requirementId: string) {
+  const key = `task:${taskId}`
+  const to = await settled(page, { kind: 'point', ...(await plateWorld(page, requirementId)) })
+  const from = await hoverBox(page, key)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 10, from.y + 10)
+  await expect.poll(async () => (await drag(page)).key, { message: 'drag started' }).toBe(key)
+  await page.mouse.move(to.x, to.y, { steps: 14 })
+  await expect.poll(async () => (await drag(page)).target, { message: 'plate is the drop target' }).toBe(`requirement:${requirementId}`)
+  await page.mouse.up()
+  await expect.poll(async () => (await drag(page)).key, { message: 'drag ended' }).toBeNull()
+}
+
+/** "requirementId:taskId" of the requirement's links in the open office */
+async function linksOf(page: Page, requirementId: string): Promise<string[]> {
+  const all: string[] = await readStore(page, (s) => s.office.snapshot.requirementLinks.map((l: { requirementId: string; taskId: string }) => `${l.requirementId}:${l.taskId}`))
+  return all.filter((l) => l.startsWith(`${requirementId}:`))
+}
+
+test('team office: plates in document order with progress and empty zones; linking as a participant is refused', async ({ page }) => {
+  await openOffice(page, 'ws_1')
+  await expect.poll(() => plates(page)).toEqual(['requirement:rq_1', 'requirement:rq_2', 'requirement:rq_3', 'requirement:rq_4', 'requirement:rq_5'])
+  await expect(tags(page)).toHaveCount(5)
+  await expect(tags(page).nth(2)).toContainText('FR-REQ-05 · 연결 없음')
+  await expect(tags(page).nth(3)).toContainText('동기화 상태 표시')
+  await expect(tags(page).filter({ hasText: '이메일 알림' })).toHaveCount(0)
+  await expect(tags(page).filter({ hasText: '회고 리포트' })).toHaveCount(0)
+
+  const taskId = await openIssueWithBox(page)
+  test.skip(taskId === null, 'mock seed에 장면에 놓인 열린 이슈가 없다')
+  await dropOnPlate(page, taskId!, 'rq_3')
+  await expect(page.getByText('요구사항 연결은 레포 관리자만 바꿀 수 있어요')).toBeVisible()
+  expect(await linksOf(page, 'rq_3')).toEqual([])
+})
+
+test('demo office: 9 plates + the waiting plate; drop an issue on a plate to link it, again only says so', async ({ page }) => {
+  await openOffice(page, 'ws_2')
   await expect.poll(async () => (await plates(page)).length).toBe(9)
-  await expect(tags).toHaveCount(10)
-  const waiting = tags.filter({ hasText: '대기 ×3' })
+  const waiting = tags(page).filter({ hasText: '대기 ×3' })
   await expect(waiting).toHaveCount(1)
-  await expect(waiting).toContainText('빈 구역 1')
+  await expect(waiting).toContainText('빈 구역 2')
+
+  const taskId = await openIssueWithBox(page)
+  test.skip(taskId === null, 'mock seed에 장면에 놓인 열린 이슈가 없다')
+  const plate = tags(page).filter({ hasText: 'FR-DEMO-03' })
+  await expect(plate).toContainText('연결 없음')
+
+  await dropOnPlate(page, taskId!, 'rq_23')
+  await expect(page.getByText('FR-DEMO-03에 연결했어요')).toBeVisible()
+  await expect.poll(() => linksOf(page, 'rq_23')).toEqual([`rq_23:${taskId}`])
+  await expect(plate).toContainText('FR-DEMO-03 · 0/1')
+
+  await dropOnPlate(page, taskId!, 'rq_23')
+  await expect(page.getByText('이미 FR-DEMO-03에 연결된 이슈예요')).toBeVisible()
+  expect(await linksOf(page, 'rq_23')).toHaveLength(1)
 })

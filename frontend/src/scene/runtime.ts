@@ -27,12 +27,25 @@ export const boxLive = new Map<string, BoxLive>()
 
 /** Height of the plane a dragged shape follows the pointer on (just above the decks). */
 export const DRAG_Y = 1.2
+/**
+ * Height where a drag's drop zone is judged: about the tops of the bridge table and the requirement plates. Judging on the
+ * higher DRAG_Y plane would pick the zone behind the one under the pointer when the camera looks at a slant.
+ */
+export const DROP_ZONE_Y = 0.6
 
 /**
- * The cargo being dragged to the bridge (#30 · #26) — at most one. `x · y · z` is where it should be drawn, `overMeeting`
- * whether letting go now would raise it as an agenda item. Only the dragging TaskBox writes it.
+ * The original issue / PR being dragged (#30 · #26 · #15) — at most one. `x · y · z` is where it should be drawn, `target` the
+ * drop zone that would act if let go now (cargoDropTarget: 'meeting' or 'requirement:<id>', else null), `overMeeting` whether
+ * that is the bridge. Only the dragging TaskBox writes it; the bridge and the requirement plates read it every frame for their glow.
  */
-export const cargoDrag: { key: string | null; x: number; y: number; z: number; overMeeting: boolean } = { key: null, x: 0, y: DRAG_Y, z: 0, overMeeting: false }
+export const cargoDrag: { key: string | null; x: number; y: number; z: number; target: string | null; overMeeting: boolean } = {
+  key: null,
+  x: 0,
+  y: DRAG_Y,
+  z: 0,
+  target: null,
+  overMeeting: false,
+}
 
 /** Where the pointer (client px) meets the horizontal plane y = `planeY`, with the live camera. Null off the canvas or above the horizon. */
 export function pointerOnPlane(clientX: number, clientY: number, planeY: number): { x: number; z: number } | null {
