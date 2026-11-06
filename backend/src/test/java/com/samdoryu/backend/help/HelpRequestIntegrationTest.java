@@ -232,6 +232,12 @@ class HelpRequestIntegrationTest {
         create(ws, aliceSession, "{\"content\":\"a\",\"fromStandupId\":\"abc\"}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("invalid"));
+        // #175 공백만인 본문도 invalid, 저장 안 됨(CONTRACTS.md 「5」)
+        long before = helpRequests.count();
+        create(ws, aliceSession, "{\"content\":\" \\n\\t \",\"fromStandupId\":null}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+        assertThat(helpRequests.count()).isEqualTo(before);
     }
 
     @Test

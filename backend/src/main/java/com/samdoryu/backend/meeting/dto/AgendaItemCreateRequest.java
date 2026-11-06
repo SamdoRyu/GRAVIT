@@ -1,6 +1,7 @@
 package com.samdoryu.backend.meeting.dto;
 
 import com.samdoryu.backend.meeting.domain.AgendaKind;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -12,7 +13,7 @@ import jakarta.validation.constraints.Size;
 public record AgendaItemCreateRequest(
         @NotNull AgendaKind kind,
         String sourceId,
-        @NotNull @Size(min = 1, max = 100) String title,
+        @NotBlank @Size(max = 100) String title,
         @Size(max = 2000) String background,
         @Size(max = 2000) String tried,
         @Size(max = 2000) String unresolvedReason) {

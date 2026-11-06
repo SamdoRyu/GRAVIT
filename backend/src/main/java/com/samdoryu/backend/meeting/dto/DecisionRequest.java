@@ -1,7 +1,7 @@
 package com.samdoryu.backend.meeting.dto;
 
 import com.samdoryu.backend.meeting.domain.PrDecision;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
@@ -14,7 +14,7 @@ import java.time.LocalDate;
  * @param meetingId 다룬 회의
  */
 public record DecisionRequest(
-        @NotNull @Size(min = 1, max = 2000) String conclusion,
+        @NotBlank @Size(max = 2000) String conclusion,
         @Size(max = 2000) String learning,
         PrDecision prDecision,
         String followUpAssigneeMemberId,
