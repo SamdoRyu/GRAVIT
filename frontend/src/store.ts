@@ -3,8 +3,9 @@
 // (optimistic update → DemoDataSource call → reconcile / roll back with a toast).
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource, type DemoDataSource } from './data/DataSource'
-import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
+import type { Activity, AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, DemoChange, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, Meeting, MeetingEnd, MeetingStart, Member, MemberInput, MemberPatch, Project, Reassign, SyncStatus, Task, TaskInput, TaskPatch, TaskStatus, TeamSettings, Workspace, WorkspaceSnapshot } from './data/types'
 import { EMPTY_FILTERS, type Filters } from './data/selectors'
+import { afterComment, toHelpSummary } from './data/rules/help'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
 /** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
@@ -118,6 +119,20 @@ interface OfficeState {
   setTaskDueDate: (taskId: Id, dueDate: LocalDate) => Promise<boolean>
   /** DELETE W/tasks/{id}/due-date */
   clearTaskDueDate: (taskId: Id) => Promise<boolean>
+
+  // ---- 도움 요청 (#183 — 「11」). 목록은 Snapshot의 helpRequests. 위와 같이 실패하면 알림 후 null ----
+  /** GET W/help-requests/{id} — 상세(코멘트 포함) */
+  loadHelpRequest: (helpRequestId: Id) => Promise<HelpRequestDetail | null>
+  /** POST W/help-requests — 팀원만 */
+  createHelpRequest: (request: HelpRequestCreateRequest) => Promise<HelpRequestSummary | null>
+  /** POST W/help-requests/{id}/comments */
+  addHelpComment: (helpRequestId: Id, content: string) => Promise<HelpCommentDto | null>
+  /** POST W/help-requests/{id}/close — 요청자만. 도움이 된 코멘트(선택) · 배운 점 */
+  closeHelpRequest: (helpRequestId: Id, request: HelpRequestCloseRequest) => Promise<HelpRequestDetail | null>
+  /** POST W/help-requests/{id}/to-agenda — 요청자만. 직접 전환과 48시간 후보 확정이 같다 */
+  convertHelpRequestToAgenda: (helpRequestId: Id, title: string) => Promise<AgendaItemDto | null>
+  /** POST W/help-requests/{id}/instructor-request — 요청자만 */
+  requestInstructorHelp: (helpRequestId: Id) => Promise<HelpRequestSummary | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * 데모 selection과 ID가 겹칠 수 있어 따로 둔다. 한쪽을 고르면 다른 쪽은 비운다. Snapshot에서 사라지면 null.
@@ -511,6 +526,48 @@ export const useOffice = create<OfficeState>((set, get) => {
         },
         (snap) => ({ ...snap, tasks: snap.tasks.map((t) => (t.id === taskId ? { ...t, dueDate: null } : t)) }),
       )) !== null,
+
+    // ---- 도움 요청 (#183) — 응답을 바로 반영하고, 서버의 changed(help_requests) 알림으로 다시 읽는다 ----
+    loadHelpRequest: async (helpRequestId) => {
+      const src = officeSource
+      const office = get().office
+      if (!src || !office) return null
+      try {
+        return await src.getHelpRequest(office.workspaceId, helpRequestId)
+      } catch (e) {
+        fail(e)
+        return null
+      }
+    },
+    createHelpRequest: (request) =>
+      officeWrite(
+        (src, ws) => src.createHelpRequest(ws, request),
+        (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
+      ),
+    addHelpComment: (helpRequestId, content) =>
+      officeWrite(
+        (src, ws) => src.addHelpComment(ws, helpRequestId, { content }),
+        (snap, comment) => ({ ...snap, helpRequests: snap.helpRequests.map((h) => (h.id === helpRequestId ? afterComment(h, comment) : h)) }),
+      ),
+    closeHelpRequest: (helpRequestId, request) =>
+      officeWrite(
+        (src, ws) => src.closeHelpRequest(ws, helpRequestId, request),
+        (snap, detail) => ({ ...snap, helpRequests: upsert(snap.helpRequests, toHelpSummary(detail)) }),
+      ),
+    convertHelpRequestToAgenda: (helpRequestId, title) =>
+      officeWrite(
+        (src, ws) => src.convertHelpRequestToAgenda(ws, helpRequestId, { title }),
+        (snap, item) => ({
+          ...snap,
+          agendaItems: upsert(snap.agendaItems, item),
+          helpRequests: snap.helpRequests.map((h) => (h.id === helpRequestId ? { ...h, status: 'on_agenda' as const, isAgendaCandidate: false, agendaItemId: item.id } : h)),
+        }),
+      ),
+    requestInstructorHelp: (helpRequestId) =>
+      officeWrite(
+        (src, ws) => src.requestInstructorHelp(ws, helpRequestId),
+        (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
+      ),
 
     selection: null,
     // 데모 쪽을 고르면 v1 상세는 닫는다(상세 서랍은 하나)

@@ -167,7 +167,8 @@ describe('mock v1 — Snapshot', () => {
   it('팀원 · 이슈 · PR이 있고, 아직 다루지 않는 목록은 비어 있다', async () => {
     const snap = await make('github').load(TEAM_WS)
     assert.ok(snap.members.length > 0 && snap.tasks.length > 0 && snap.submissions.length > 0)
-    for (const key of ['requirements', 'requirementLinks', 'agendaItems', 'meetings', 'helpRequests', 'activityNotes'] as const) {
+    assert.ok(snap.helpRequests.length > 0, '도움 요청 seed (#183 — help.test.ts)')
+    for (const key of ['requirements', 'requirementLinks', 'agendaItems', 'meetings', 'activityNotes'] as const) {
       assert.deepEqual(snap[key], [], key)
     }
   })

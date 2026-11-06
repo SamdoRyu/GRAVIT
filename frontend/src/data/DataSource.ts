@@ -14,6 +14,13 @@ import type {
   ErrorCode,
   EvaluateRequest,
   EvaluationRoundDto,
+  HelpCommentCreateRequest,
+  HelpCommentDto,
+  HelpRequestCloseRequest,
+  HelpRequestCreateRequest,
+  HelpRequestDetail,
+  HelpRequestSummary,
+  HelpRequestToAgendaRequest,
   Id,
   LoginOptions,
   MeResponse,
@@ -105,6 +112,23 @@ export interface DataSource {
    * 요청이 틀리면 invalid, confirmed가 아니거나 머지 · 닫힌 PR에 revise_and_reevaluate면 conflict
    */
   recordDecision(workspaceId: Id, agendaItemId: Id, request: DecisionRequest): Promise<AgendaItemDto>
+
+  // ---- 「11」 도움 요청 (#183 — 목록은 Snapshot의 helpRequests) ----
+  /** GET W/help-requests/{helpRequestId} — 코멘트(createdAt 오름차순) · 도움이 된 코멘트 · 배운 점 */
+  getHelpRequest(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestDetail>
+  /** POST W/help-requests — 201(open). 팀원만(강사 forbidden_role), fromStandupId가 본인 것이 아니면 forbidden_role */
+  createHelpRequest(workspaceId: Id, request: HelpRequestCreateRequest): Promise<HelpRequestSummary>
+  /**
+   * POST W/help-requests/{id}/comments — 201. 요청자가 아닌 팀원의 첫 코멘트면 open → discussing. 강사는 "강사에게 요청"이
+   * 켜진 글에만(아니면 forbidden_role), resolved · ended면 conflict
+   */
+  addHelpComment(workspaceId: Id, helpRequestId: Id, request: HelpCommentCreateRequest): Promise<HelpCommentDto>
+  /** POST W/help-requests/{id}/close — 요청자만(forbidden_role), open · discussing만(conflict), 도움이 된 코멘트가 틀리면 invalid */
+  closeHelpRequest(workspaceId: Id, helpRequestId: Id, request: HelpRequestCloseRequest): Promise<HelpRequestDetail>
+  /** POST W/help-requests/{id}/to-agenda — 201 AgendaItemDto(help_request). 요청자만, open · discussing만. 도움 요청은 on_agenda */
+  convertHelpRequestToAgenda(workspaceId: Id, helpRequestId: Id, request: HelpRequestToAgendaRequest): Promise<AgendaItemDto>
+  /** POST W/help-requests/{id}/instructor-request — 요청자만. 이미 켜져 있으면 그대로 */
+  requestInstructorHelp(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestSummary>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

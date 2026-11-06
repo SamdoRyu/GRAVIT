@@ -534,6 +534,10 @@ export interface HelpRequestCloseRequest {
   helpfulCommentId: Id | null
   learning: string
 }
+/** `POST W/help-requests/{helpRequestId}/to-agenda` — 요청자만. title 1~100자 */
+export interface HelpRequestToAgendaRequest {
+  title: string
+}
 /** `GET W/help-requests/{helpRequestId}` */
 export interface HelpRequestDetail extends HelpRequestSummary {
   /** createdAt 오름차순. 안건으로 전환해도 그대로 붙어 보인다 */

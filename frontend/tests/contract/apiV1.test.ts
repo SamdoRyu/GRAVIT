@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, meResponseExample, meetingExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -133,6 +133,13 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/meetings\/[^/]+\/end$/.test(path)) return sendJson(res, 200, { ...meetingExample, status: 'ended' })
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items$/.test(path)) return sendJson(res, 201, agendaItemExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/(withdraw|decision)$/.test(path)) return sendJson(res, 200, agendaItemExample)
+    // 「11」 도움 요청 (#183)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+$/.test(path)) return sendJson(res, 200, helpRequestDetailExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests$/.test(path)) return sendJson(res, 201, helpRequestSummaryExample)
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/comments$/.test(path)) return sendJson(res, 201, helpRequestDetailExample.comments[0])
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/close$/.test(path)) return sendJson(res, 200, { ...helpRequestDetailExample, status: 'resolved' })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/to-agenda$/.test(path)) return sendJson(res, 201, { ...agendaItemExample, kind: 'help_request' })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/instructor-request$/.test(path)) return sendJson(res, 200, { ...helpRequestSummaryExample, instructorRequested: true })
     if (/^\/api\/workspaces\/[^/]+\/tasks\/[^/]+\/due-date$/.test(path)) {
       if (r.method === 'PUT') return sendJson(res, 200, { taskId: '7', dueDate: (JSON.parse(r.body) as { dueDate: string }).dueDate, updatedAt: '2026-11-05T03:10:00Z', updatedBy: meResponseExample.user })
       if (r.method === 'DELETE') {
@@ -319,6 +326,39 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.startMeeting('3', { attendeeMemberIds: [] }), 'conflict', '이미 진행 중인 회의가 있어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요'))
     await rejectsWith(api.clearDueDate('3', '7'), 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요')
+  })
+
+  it('도움 요청 — 읽기는 CSRF 없이 GET, 쓰기 5개는 경로 · CSRF · JSON 본문, 403 · 409를 그대로 (#183)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    const create = { content: '세션이 끊겨요', fromStandupId: null }
+    const close = { helpfulCommentId: '31', learning: 'SameSite는 쿠키 설정' }
+    assert.deepEqual(await api.getHelpRequest('3', '12'), helpRequestDetailExample)
+    assert.deepEqual(await api.createHelpRequest('3', create), helpRequestSummaryExample)
+    assert.deepEqual(await api.addHelpComment('3', '12', { content: '확인해 보세요' }), helpRequestDetailExample.comments[0])
+    assert.equal((await api.closeHelpRequest('3', '12', close)).status, 'resolved')
+    assert.equal((await api.convertHelpRequestToAgenda('3', '12', { title: '세션 안건' })).kind, 'help_request')
+    assert.equal((await api.requestInstructorHelp('3', '12')).instructorRequested, true)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'}`),
+      [
+        'GET /api/workspaces/3/help-requests/12 -',
+        'POST /api/workspaces/3/help-requests tok-1',
+        'POST /api/workspaces/3/help-requests/12/comments tok-1',
+        'POST /api/workspaces/3/help-requests/12/close tok-1',
+        'POST /api/workspaces/3/help-requests/12/to-agenda tok-1',
+        'POST /api/workspaces/3/help-requests/12/instructor-request tok-1',
+      ],
+    )
+    assert.deepEqual(
+      fake.requests.map((r) => (r.body ? JSON.parse(r.body) : null)),
+      [null, create, { content: '확인해 보세요' }, close, { title: '세션 안건' }, null],
+    )
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '요청한 사람만 할 수 있어요'))
+    await rejectsWith(api.closeHelpRequest('3', '12', close), 'forbidden_role', '요청한 사람만 할 수 있어요')
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '해결됐거나 끝난 도움 요청이에요'))
+    await rejectsWith(api.addHelpComment('3', '12', { content: '늦은 코멘트' }), 'conflict', '해결됐거나 끝난 도움 요청이에요')
   })
 
   it('PR 평가 — GET rounds · PUT evaluations/mine, PUT은 CSRF와 JSON 본문, 400 · 403 · 409를 그대로 (#19 · #20)', async () => {

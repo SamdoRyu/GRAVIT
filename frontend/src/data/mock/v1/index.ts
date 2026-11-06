@@ -5,12 +5,16 @@
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
+import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, openWorkspaceError, settingsError } from '../../rules/period'
 import type {
   AgendaItemDto,
   Change,
   EvaluationRoundDto,
+  HelpCommentDto,
+  HelpRequestDetail,
+  HelpRequestSummary,
   Id,
   Instant,
   MeResponse,
@@ -27,7 +31,7 @@ import type {
   WorkspaceSnapshot,
 } from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
-import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockSession, type MockState, type MockWorkspace } from './seed'
+import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockHelpThread, type MockSession, type MockState, type MockWorkspace } from './seed'
 
 export type { MockSession } from './seed'
 
@@ -176,6 +180,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       activityConsented: ws.consentedUserIds.includes(user.user.userId),
     }
     for (const sub of s.submissions) sub.currentRound = roundFor(ws, sub, me)
+    const at = now()
+    const helpRequests = s.helpRequests.map((h) => helpSummary(h, at))
     // 키 순서는 계약 표 그대로
     return {
       workspace: s.workspace,
@@ -189,10 +195,10 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       requirementLinks: s.requirementLinks,
       agendaItems: s.agendaItems,
       meetings: s.meetings,
-      helpRequests: s.helpRequests,
+      helpRequests,
       activityNotes: s.activityNotes,
       flow: s.flow,
-      generatedAt: toInstant(now()),
+      generatedAt: toInstant(at),
     }
   }
 
@@ -505,6 +511,13 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
         decidedAt: at,
       }
       const resources: SnapshotResource[] = ['agenda_items']
+      // 도움 요청 안건의 결정 기록은 그 도움 요청을 끝낸다 — on_agenda → ended (CONTRACTS_API.md 「11」 · FR-LRN-20)
+      const helpRequest = item.source?.type === 'help_request' ? ws.snapshot.helpRequests.find((h) => h.id === item.source!.id) : undefined
+      if (helpRequest?.status === 'on_agenda') {
+        helpRequest.status = 'ended'
+        helpRequest.closedAt = at
+        resources.push('help_requests')
+      }
       if (meeting && !meeting.discussedAgendaItemIds.includes(item.id)) {
         meeting.discussedAgendaItemIds.push(item.id)
         resources.push('meetings')
@@ -533,6 +546,134 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       return structuredClone(item)
     },
 
+    // ---- 「11」 도움 요청 — 검사 순서는 서버(HelpRequestService)와 같다: 요청(400) → 대상(404) → 요청자(403) → 상태(409) ----
+
+    async getHelpRequest(workspaceId, helpRequestId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      return helpDetail(ws, findHelpRequest(ws, helpRequestId), now())
+    },
+
+    async createHelpRequest(workspaceId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = helpCreateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      // mock에는 스탠드업이 없어 어느 스탠드업도 본인 것이 아니다
+      if (request.fromStandupId !== null) throw new DataError(HELP_MSG.notOwnStandup, 'forbidden_role')
+      const summary: HelpRequestSummary = {
+        id: nextId('hr'),
+        requesterMemberId: currentMember(ws, user)!.id,
+        content: request.content,
+        status: 'open',
+        isAgendaCandidate: false,
+        instructorRequested: false,
+        instructorRequestedAt: null,
+        agendaItemId: null,
+        fromStandupId: null,
+        commentCount: 0,
+        createdAt: toInstant(now()),
+        closedAt: null,
+      }
+      ws.snapshot.helpRequests.push(summary)
+      ws.helpThreads = [...(ws.helpThreads ?? []), { helpRequestId: summary.id, comments: [], helpfulCommentId: null, learning: null }]
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['help_requests'] })
+      return structuredClone(summary)
+    },
+
+    async addHelpComment(workspaceId, helpRequestId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = helpCommentError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const help = findHelpRequest(ws, helpRequestId)
+      if (!acceptsComments(help.status)) throw new DataError(HELP_MSG.closedForComments, 'conflict')
+      const me = currentMember(ws, user)!
+      const comment: HelpCommentDto = { id: nextId('hc'), author: structuredClone(user.user), authorMemberId: me.id, isInstructorAnswer: false, content: request.content, createdAt: toInstant(now()) }
+      threadOf(ws, help.id).comments.push(comment)
+      help.commentCount += 1
+      // 요청자가 아닌 팀원의 첫 코멘트 — open → discussing (mock에는 강사 계정이 없다)
+      if (help.status === 'open' && me.id !== help.requesterMemberId) help.status = 'discussing'
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['help_requests'] })
+      return structuredClone(comment)
+    },
+
+    async closeHelpRequest(workspaceId, helpRequestId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = helpCloseError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const help = findOwnHelpRequest(ws, helpRequestId, currentMember(ws, user)!)
+      if (!isOpenForDiscussion(help.status)) throw new DataError(HELP_MSG.notOpen, 'conflict')
+      const thread = threadOf(ws, help.id)
+      if (request.helpfulCommentId !== null) {
+        const helpful = thread.comments.find((c) => c.id === request.helpfulCommentId)
+        if (!helpful) throw new DataError(HELP_MSG.helpfulNotHere, 'invalid')
+        if (helpful.isInstructorAnswer || helpful.authorMemberId === help.requesterMemberId) throw new DataError(HELP_MSG.helpfulNotAllowed, 'invalid')
+      }
+      help.status = 'resolved'
+      help.closedAt = toInstant(now())
+      thread.helpfulCommentId = request.helpfulCommentId
+      thread.learning = request.learning
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['help_requests'] })
+      return helpDetail(ws, help, now())
+    },
+
+    async convertHelpRequestToAgenda(workspaceId, helpRequestId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = helpToAgendaError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const me = currentMember(ws, user)!
+      const help = findOwnHelpRequest(ws, helpRequestId, me)
+      if (!isOpenForDiscussion(help.status)) throw new DataError(HELP_MSG.notOpen, 'conflict')
+      const item: AgendaItemDto = {
+        id: nextId('ag'),
+        kind: 'help_request',
+        status: 'confirmed',
+        title: request.title,
+        background: null,
+        tried: null,
+        unresolvedReason: null,
+        source: { type: 'help_request', id: help.id },
+        evaluationRoundId: null,
+        raisedByMemberId: me.id,
+        raisedAt: toInstant(now()),
+        decision: null,
+        feedbackRequested: false,
+        feedbackRequestedAt: null,
+        instructorFeedbacks: [],
+      }
+      ws.snapshot.agendaItems.push(item)
+      help.status = 'on_agenda'
+      help.agendaItemId = item.id
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['agenda_items', 'help_requests'] })
+      return structuredClone(item)
+    },
+
+    async requestInstructorHelp(workspaceId, helpRequestId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const help = findOwnHelpRequest(ws, helpRequestId, currentMember(ws, user)!)
+      // 이미 켜져 있으면 그대로(처음 시각 유지). 상태 조건은 없다
+      if (!help.instructorRequested) {
+        help.instructorRequested = true
+        help.instructorRequestedAt = toInstant(now())
+        save()
+        emit(workspaceId, { type: 'changed', resources: ['help_requests'] })
+      }
+      return helpSummary(help, now())
+    },
+
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----
 
     async setDueDate(workspaceId, taskId, request) {
@@ -559,6 +700,40 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       emit(workspaceId, { type: 'changed', resources: ['tasks'] })
     },
   }
+}
+
+function findHelpRequest(ws: MockWorkspace, helpRequestId: Id): HelpRequestSummary {
+  const help = ws.snapshot.helpRequests.find((h) => h.id === helpRequestId)
+  if (!help) throw new DataError(HELP_MSG.notFound, 'not_found')
+  return help
+}
+
+/** 요청자만 하는 동작(닫기 · 안건으로 · 강사에게 요청) — 없으면 not_found, 요청자가 아니면 forbidden_role */
+function findOwnHelpRequest(ws: MockWorkspace, helpRequestId: Id, me: MemberDto): HelpRequestSummary {
+  const help = findHelpRequest(ws, helpRequestId)
+  if (help.requesterMemberId !== me.id) throw new DataError(HELP_MSG.notRequester, 'forbidden_role')
+  return help
+}
+
+/** 그 도움 요청의 코멘트 · 닫은 값 — 이 칸이 생기기 전 저장값이면 빈 것을 만든다 */
+function threadOf(ws: MockWorkspace, helpRequestId: Id): MockHelpThread {
+  ws.helpThreads ??= []
+  let thread = ws.helpThreads.find((t) => t.helpRequestId === helpRequestId)
+  if (!thread) {
+    thread = { helpRequestId, comments: [], helpfulCommentId: null, learning: null }
+    ws.helpThreads.push(thread)
+  }
+  return thread
+}
+
+/** 응답용 요약 — 안건 후보 여부는 지금 시각으로 계산한다(서버도 읽을 때 계산) */
+function helpSummary(help: HelpRequestSummary, at: Date): HelpRequestSummary {
+  return { ...structuredClone(help), isAgendaCandidate: isAgendaCandidate(help.status, help.createdAt, at) }
+}
+
+function helpDetail(ws: MockWorkspace, help: HelpRequestSummary, at: Date): HelpRequestDetail {
+  const thread = threadOf(ws, help.id)
+  return { ...helpSummary(help, at), comments: structuredClone(thread.comments), helpfulCommentId: thread.helpfulCommentId, learning: thread.learning }
 }
 
 function isCurrentMember(ws: MockWorkspace, memberId: unknown): boolean {
