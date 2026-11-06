@@ -5,6 +5,8 @@
 import type {
   EvaluationRoundDto,
   FlowSummary,
+  HelpCommentDto,
+  HelpRequestSummary,
   Id,
   Instant,
   LocalDate,
@@ -36,6 +38,16 @@ export interface MockWorkspace {
   evaluations?: MockEvaluation[]
   /** 회의 결정 revise_and_reevaluate로 닫힌 지난 평가 회차 (#102 — 회의 · 안건). 없으면 빈 목록 */
   pastRounds?: { submissionId: Id; round: EvaluationRoundDto }[]
+  /** 도움 요청의 코멘트 · 닫을 때 남긴 값 (#183) — Snapshot 요약(helpRequests)과 ID로 짝. 없으면 빈 목록 */
+  helpThreads?: MockHelpThread[]
+}
+
+export interface MockHelpThread {
+  helpRequestId: Id
+  /** createdAt 오름차순 */
+  comments: HelpCommentDto[]
+  helpfulCommentId: Id | null
+  learning: string | null
 }
 
 export interface MockEvaluation {
@@ -60,7 +72,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 2 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24)
+export const MOCK_STATE_VERSION = 3 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183)
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -347,6 +359,7 @@ function teamWorkspace(now: Date): MockWorkspace {
       c,
     ),
   ]
+  const help = teamHelpRequests(members, ago)
   return {
     snapshot: {
       workspace: { id: 'ws_1', kind: 'github', displayName: 'team-samdo/gitvillage', githubOwner: 'team-samdo', githubRepo: 'gitvillage', githubRepoId: '880001234', htmlUrl: repoUrl, openedAt: ago(52) },
@@ -356,10 +369,51 @@ function teamWorkspace(now: Date): MockWorkspace {
       tasks,
       submissions,
       ...emptyCollections(),
+      helpRequests: help.summaries,
       // 평균 리뷰 대기는 서버가 계산한다(FR-FLOW-05). mock은 상단 바를 그려 보려고 예시 값만 둔다
       flow: { ...computeFlow({ members, tasks, submissions }), averageReviewWaitHours: 6.5 },
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
+    helpThreads: help.threads,
+  }
+}
+
+/**
+ * 도움 요청 3건 (#183) — 로그인 사용자(m_1)의 48시간 지난 안건 후보 · 박데브의 열린 요청 · 최하나의 해결된 요청.
+ * 안건 후보 여부(isAgendaCandidate)는 load 때 지금 시각으로 다시 계산한다.
+ */
+function teamHelpRequests(members: MemberDto[], ago: (hours: number) => Instant): { summaries: HelpRequestSummary[]; threads: MockHelpThread[] } {
+  const ref = (memberId: Id) => {
+    const m = members.find((x) => x.id === memberId)!
+    return { userId: m.userId!, githubLogin: m.githubLogin, displayName: m.displayName, avatarUrl: m.avatarUrl }
+  }
+  const comment = (id: Id, memberId: Id, content: string, hoursAgo: number): HelpCommentDto => ({ id, author: ref(memberId), authorMemberId: memberId, isInstructorAnswer: false, content, createdAt: ago(hoursAgo) })
+  // 키 순서는 계약 표 그대로
+  const summary = (s: Pick<HelpRequestSummary, 'id' | 'requesterMemberId' | 'content' | 'status' | 'commentCount' | 'createdAt' | 'closedAt'>): HelpRequestSummary => ({
+    id: s.id,
+    requesterMemberId: s.requesterMemberId,
+    content: s.content,
+    status: s.status,
+    isAgendaCandidate: false,
+    instructorRequested: false,
+    instructorRequestedAt: null,
+    agendaItemId: null,
+    fromStandupId: null,
+    commentCount: s.commentCount,
+    createdAt: s.createdAt,
+    closedAt: s.closedAt,
+  })
+  return {
+    summaries: [
+      summary({ id: 'hr_1', requesterMemberId: 'm_1', content: '로컬에서 GitHub 로그인 뒤 세션이 자꾸 끊겨요. SameSite 설정을 어디서 바꾸나요?', status: 'discussing', commentCount: 1, createdAt: ago(50), closedAt: null }),
+      summary({ id: 'hr_3', requesterMemberId: 'm_4', content: '회고 리포트를 마크다운으로 내보낼 때 팀원 이름은 어떻게 바꾸나요?', status: 'resolved', commentCount: 1, createdAt: ago(30), closedAt: ago(20) }),
+      summary({ id: 'hr_2', requesterMemberId: 'm_3', content: '3D 상자를 끌면 가끔 책상 밖으로 튀어요. 원인을 같이 봐 줄 사람 있나요?', status: 'open', commentCount: 0, createdAt: ago(6), closedAt: null }),
+    ],
+    threads: [
+      { helpRequestId: 'hr_1', comments: [comment('hc_1', 'm_2', 'application.yaml의 server.servlet.session.cookie.same-site를 확인해 보세요', 49)], helpfulCommentId: null, learning: null },
+      { helpRequestId: 'hr_3', comments: [comment('hc_2', 'm_1', '처음 나온 순서대로 "팀원 A" · "팀원 B"로 바꿔요', 28)], helpfulCommentId: 'hc_2', learning: '익명화는 내보낼 때 한 번에 한다' },
+      { helpRequestId: 'hr_2', comments: [], helpfulCommentId: null, learning: null },
+    ],
   }
 }
 

@@ -17,6 +17,13 @@ import type {
   TaskDueDateRequest,
   EvaluateRequest,
   EvaluationRoundDto,
+  HelpCommentCreateRequest,
+  HelpCommentDto,
+  HelpRequestCloseRequest,
+  HelpRequestCreateRequest,
+  HelpRequestDetail,
+  HelpRequestSummary,
+  HelpRequestToAgendaRequest,
   Id,
   LoginOptions,
   MeResponse,
@@ -106,6 +113,7 @@ const workspacePath = (workspaceId: Id) => `/api/workspaces/${encodeURIComponent
 const submissionPath = (workspaceId: Id, submissionId: Id) => `${workspacePath(workspaceId)}/submissions/${encodeURIComponent(submissionId)}`
 const agendaPath = (workspaceId: Id, agendaItemId: Id) => `${workspacePath(workspaceId)}/agenda-items/${encodeURIComponent(agendaItemId)}`
 const taskPath = (workspaceId: Id, taskId: Id) => `${workspacePath(workspaceId)}/tasks/${encodeURIComponent(taskId)}`
+const helpPath = (workspaceId: Id, helpRequestId: Id) => `${workspacePath(workspaceId)}/help-requests/${encodeURIComponent(helpRequestId)}`
 
 /** 한 사무실의 SSE 연결 — 구독자가 있는 동안만 돈다 */
 interface Stream {
@@ -342,6 +350,14 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     createAgendaItem: async (workspaceId, request: AgendaItemCreateRequest) => json<AgendaItemDto>(await write('POST', `${workspacePath(workspaceId)}/agenda-items`, request)),
     withdrawAgendaItem: async (workspaceId, agendaItemId) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/withdraw`)),
     recordDecision: async (workspaceId, agendaItemId, request: DecisionRequest) => json<AgendaItemDto>(await write('POST', `${agendaPath(workspaceId, agendaItemId)}/decision`, request)),
+
+    getHelpRequest: async (workspaceId, helpRequestId) => json<HelpRequestDetail>(await read(helpPath(workspaceId, helpRequestId))),
+    createHelpRequest: async (workspaceId, request: HelpRequestCreateRequest) => json<HelpRequestSummary>(await write('POST', `${workspacePath(workspaceId)}/help-requests`, request)),
+    addHelpComment: async (workspaceId, helpRequestId, request: HelpCommentCreateRequest) => json<HelpCommentDto>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/comments`, request)),
+    closeHelpRequest: async (workspaceId, helpRequestId, request: HelpRequestCloseRequest) => json<HelpRequestDetail>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/close`, request)),
+    convertHelpRequestToAgenda: async (workspaceId, helpRequestId, request: HelpRequestToAgendaRequest) =>
+      json<AgendaItemDto>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/to-agenda`, request)),
+    requestInstructorHelp: async (workspaceId, helpRequestId) => json<HelpRequestSummary>(await write('POST', `${helpPath(workspaceId, helpRequestId)}/instructor-request`)),
 
     setDueDate: async (workspaceId, taskId, request: TaskDueDateRequest) => json<TaskDueDateDto>(await write('PUT', `${taskPath(workspaceId, taskId)}/due-date`, request)),
     async clearDueDate(workspaceId, taskId) {
