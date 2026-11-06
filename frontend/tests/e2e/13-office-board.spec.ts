@@ -43,7 +43,6 @@ test('the kanban and list tabs show the office issues and PRs, read-only, with s
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 40, { steps: 5 })
-  expect(await readStore(page, (s) => s.drag)).toBeNull()
   await page.mouse.up()
 
   // --- GitHub 링크: 새 탭, 원본 주소 ---

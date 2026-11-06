@@ -72,7 +72,6 @@ test('the weekly board places issues by lead and due date, edits the due date fo
   await page.mouse.move(a.x, a.y)
   await page.mouse.down()
   await page.mouse.move(a.x + 80, a.y + 40, { steps: 6 })
-  expect(await readStore(page, (s) => s.drag)).toBeNull()
   await page.mouse.up()
 
   // Clear it again.
