@@ -66,6 +66,9 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await form.getByRole('button', { name: '심사용 계정으로 로그인' }).click()
   await expect(picker(page)).toBeVisible()
   await expect(picker(page).getByText('심사 계정')).toBeVisible()
+  // 심사용 계정은 레포를 고르지 않는다 — 레포 목록 · 앱 설치 안내가 없다
+  await expect(picker(page).getByText('레포 목록을 읽는 중…')).toHaveCount(0)
+  await expect(picker(page).getByRole('region', { name: '레포에서 사무실 열기' })).toHaveCount(0)
   await expect(offices).toHaveCount(1)
   await expect(offices.first()).toContainText('시연')
   await offices.first().click()
@@ -86,6 +89,7 @@ test('open a new office from a repository: admin form with period and spec path,
   await expect(picker(page)).toBeVisible()
   const repos = picker(page).getByRole('region', { name: '레포에서 사무실 열기' })
   await expect(repos).toBeVisible()
+  await expect(repos.getByText(/팀 레포가 안 보이면 .*GRAVIT GitHub 앱/)).toBeVisible()
 
   // 이미 열린 레포는 들어가기, 앱이 없는 조직은 승인 요청 링크
   const samdo = repos.getByRole('region', { name: 'team-samdo 레포' })
@@ -117,4 +121,19 @@ test('open a new office from a repository: admin form with period and spec path,
   expect([settings.projectStartDate, settings.projectEndDate, settings.specDocumentPath]).toEqual([start, end, 'docs/requirements.md'])
   expect(await readStore(page, (s) => s.office!.snapshot!.viewer.role)).toBe('repo_admin')
   await expect(page.getByRole('banner').getByText('팀 오피스')).toBeVisible()
+})
+
+test('a GitHub user with no visible organization still sees the app-install hint (#238)', async ({ page }) => {
+  await page.goto('/?workspace=ws_1')
+  await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
+  // 앱이 설치된 곳이 없는 계정 — 서버는 organizations: []를 준다(미설치 조직은 GitHub가 보여 주지 않는다)
+  await page.evaluate(async () => {
+    const path = '/src/session.ts'
+    const { useSession } = await import(/* @vite-ignore */ path)
+    useSession.setState({ listRepositories: async () => ({ organizations: [] }) })
+  })
+  await (await openMenu(page)).getByRole('menuitem', { name: '사무실 바꾸기' }).click()
+  const repos = picker(page).getByRole('region', { name: '레포에서 사무실 열기' })
+  await expect(repos.getByText(/팀 레포가 안 보이면 .*GRAVIT GitHub 앱/)).toBeVisible()
+  await expect(repos.getByRole('region')).toHaveCount(0)
 })
