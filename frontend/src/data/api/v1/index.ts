@@ -36,6 +36,7 @@ import type {
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
   Id,
+  InboxItem,
   InstructorFeedbackCreateRequest,
   InstructorFeedbackDto,
   LoginOptions,
@@ -431,6 +432,9 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     requestFollowUp: async (workspaceId, memberId, cardId) => json<DecisionCardDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-request`)),
     addFollowUpQuestion: async (workspaceId, memberId, cardId, request: FollowUpQuestionCreateRequest) =>
       json<FollowUpQuestionDto>(await write('POST', `${cardPath(workspaceId, memberId, cardId)}/follow-up-questions`, request)),
+
+    getInstructorInbox: async (answered) =>
+      json<InboxItem[]>(await read(answered === undefined ? '/api/instructor/inbox' : `/api/instructor/inbox?answered=${answered}`)),
 
     listConventionLibrary: async () => json<ConventionLibraryItemDto[]>(await read('/api/convention-library')),
     createConventionLibraryItem: async (request: ConventionLibraryItemRequest) => json<ConventionLibraryItemDto>(await write('POST', '/api/convention-library', request)),

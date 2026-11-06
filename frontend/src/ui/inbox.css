@@ -1,0 +1,9 @@
+/* 강사 요청함 (#224). OWNER: B (리뷰 D). 항목 카드는 도움 요청 탭(help.css)의 것을 같이 쓴다 — 사무실 고르기의 흰 카드 안에서도 같다. */
+.inbox { display: grid; gap: 10px; }
+.inbox-body { display: grid; gap: 12px; }
+.inbox-lead { line-height: 1.5; word-break: keep-all; }
+.inbox-switch { display: flex; flex-wrap: wrap; gap: 4px; }
+.inbox-state { display: grid; gap: 8px; justify-items: start; }
+.inbox .help-item:disabled { cursor: progress; opacity: 0.7; }
+.inbox-ws { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-entry { display: grid; gap: 8px; }

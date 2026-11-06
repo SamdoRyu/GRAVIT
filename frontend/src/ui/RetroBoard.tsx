@@ -24,10 +24,9 @@ import { TextField } from './HelpBoard'
 import { useNow } from './hooks'
 import { Icon } from './icons'
 import { PR_DECISION_LABEL } from './meetingView'
+import { useUi } from './uiState'
 import './help.css'
 import './retro.css'
-
-type View = 'timeline' | 'reports' | 'cards'
 
 /** 읽은 결과를 무엇을 읽었는지(key)와 함께 둔다 — 대상이 바뀌면 이전 결과는 그 자리에서 버려진다. value null = 읽기 실패 */
 interface Loaded<T> {
@@ -41,16 +40,20 @@ const createdDay = (at: string) => formatDate(kstToday(new Date(at)))
 export function RetroPanel() {
   const members = useOffice((s) => s.office?.snapshot?.members ?? null)
   const viewer = useOffice((s) => s.office?.snapshot?.viewer ?? null)
-  const [view, setView] = useState<View>('timeline')
-  const [picked, setPicked] = useState<Id | null>(null)
+  // 보기와 강사가 고른 팀원은 uiState에 둔다 — 강사 요청함(#224)이 카드 주인 · 기술 결정 카드 보기로 연다.
+  // 다른 사무실에서 고른 팀원이면 고르기 전으로 본다
+  const view = useUi((s) => s.retroView)
+  const setView = useUi((s) => s.setRetroView)
+  const retroMemberId = useUi((s) => s.retroMemberId)
 
   if (!members || !viewer) return <Empty icon="refresh" title="사무실을 불러오는 중…" />
   const instructor = viewer.role === 'instructor'
+  const picked = retroMemberId !== null && members.some((m) => m.id === retroMemberId) ? retroMemberId : null
   const memberId = instructor ? picked : viewer.memberId
 
   return (
     <div className="help retro">
-      {instructor && <MemberPicker members={members} value={picked} onChange={setPicked} />}
+      {instructor && <MemberPicker members={members} value={picked} onChange={(id) => useUi.getState().openRetroMember(id)} />}
       <div className="retro-switch" role="group" aria-label="회고 보기">
         <button type="button" className={`btn btn-sm${view === 'timeline' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'timeline'} onClick={() => setView('timeline')}>
           학습 타임라인

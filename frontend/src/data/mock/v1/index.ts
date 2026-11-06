@@ -11,6 +11,7 @@ import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreate
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
+import { INBOX_MSG, canUseInbox } from '../../rules/inbox'
 import { INSTRUCTOR_MSG, assignError } from '../../rules/instructors'
 import { CONVENTION_MSG, conventionRequestError } from '../../rules/conventionLibrary'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
@@ -1060,6 +1061,15 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       if (!ws.snapshot.members.some((m) => m.id === memberId)) throw new DataError(REPORT_MSG.memberNotFound, 'not_found')
       // R4만 쓴다 — mock에는 강사 계정이 없어 여기서 끝난다(요청 안 된 카드 forbidden_role은 서버가 본다)
       throw new DataError(CARD_MSG.instructorOnly, 'forbidden_role')
+    },
+
+    // ---- 「16」 강사 요청함 — 강사만 (#224). mock에는 강사 계정 · 지정이 없어 언제나 forbidden_role이다 ----
+
+    async getInstructorInbox() {
+      await wait()
+      const user = requireUser()
+      if (!canUseInbox(user)) throw new DataError(INBOX_MSG.notInstructor, 'forbidden_role')
+      return []
     },
 
     // ---- 「17」 컨벤션 라이브러리 — 읽기는 로그인한 누구나, 쓰기는 GitHub 계정 강사만 (#225) ----

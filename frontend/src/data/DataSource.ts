@@ -32,6 +32,7 @@ import type {
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
   Id,
+  InboxItem,
   InstructorFeedbackCreateRequest,
   InstructorFeedbackDto,
   LocalDate,
@@ -207,6 +208,13 @@ export interface DataSource {
   requestFollowUp(workspaceId: Id, memberId: Id, cardId: Id): Promise<DecisionCardDto>
   /** POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions — 201. R4만, 1~1000자, 요청 안 된 카드 forbidden_role */
   addFollowUpQuestion(workspaceId: Id, memberId: Id, cardId: Id, request: FollowUpQuestionCreateRequest): Promise<FollowUpQuestionDto>
+
+  // ---- 「16」 강사 요청함 (#224 — FR-LRN-23). 사무실 경로 밖 — 지금 지정된 사무실들의 요청을 한 목록으로 ----
+  /**
+   * GET /api/instructor/inbox?answered= — requestedAt 내림차순. answered를 빼면 전부, true면 답한 것만, false면 아직인 것만.
+   * 강사(MeResponse.isInstructor)가 아니면 forbidden_role. 해제된 사무실 것은 나오지 않는다
+   */
+  getInstructorInbox(answered?: boolean): Promise<InboxItem[]>
 
   // ---- 「17」 컨벤션 라이브러리 (#225 — FR-LIB). 서버 전체에 하나, 사무실 경로 밖 ----
   /** GET /api/convention-library — target · name 순. 로그인한 사람 누구나(심사용 포함) */

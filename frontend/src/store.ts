@@ -28,6 +28,8 @@ export type Dialog =
   | { kind: 'requirementWaiting'; linkTaskId: Id | null }
   /** 강사 지정 · 해제 (#53) — 상단 바 더보기에서 */
   | { kind: 'instructors' }
+  /** 강사 요청함 (#224) — 상단 바 더보기에서, 강사에게만 */
+  | { kind: 'instructorInbox' }
   /** 컨벤션 라이브러리 (#225) — 상단 바 더보기에서 */
   | { kind: 'conventionLibrary' }
 

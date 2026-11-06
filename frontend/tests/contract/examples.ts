@@ -16,6 +16,7 @@ import type {
   HelpRequestCreateRequest,
   HelpRequestDetail,
   HelpRequestSummary,
+  InboxItem,
   InstructorAssignmentDto,
   InstructorCandidateDto,
   InstructorFeedbackCreateRequest,
@@ -413,6 +414,18 @@ export const instructorCandidateExample = {
   isAssigned: false,
 } satisfies InstructorCandidateDto
 
+// contract/examples/instructor/inbox-item.json — CONTRACTS_API.md 「16」
+export const inboxItemExample = {
+  kind: 'help_request',
+  workspaceId: '3',
+  workspaceDisplayName: 'team-samdo/gitvillage',
+  targetId: '12',
+  ownerMemberId: '2',
+  title: 'OAuth 로그인 뒤 세션이 바로 끊겨요. SameSite 설정을 어디서 바꾸는지 모르겠어요',
+  requestedAt: '2026-11-05T01:30:00Z',
+  answeredAt: '2026-11-05T02:40:00Z',
+} satisfies InboxItem
+
 // contract/examples/instructor/convention-library-item.json — CONTRACTS_API.md 「17」
 export const conventionLibraryItemExample = {
   id: '3',
@@ -444,6 +457,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'help/help-request-summary.json': helpRequestSummaryExample,
   'instructor/convention-library-item-request.json': conventionLibraryItemRequestExample,
   'instructor/convention-library-item.json': conventionLibraryItemExample,
+  'instructor/inbox-item.json': inboxItemExample,
   'instructor/instructor-assignment.json': instructorAssignmentExample,
   'instructor/instructor-candidate.json': instructorCandidateExample,
   'meeting/agenda-item-create-request.json': agendaItemCreateRequestExample,

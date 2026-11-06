@@ -10,9 +10,10 @@ import org.junit.jupiter.params.provider.EnumSource;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
- * 계약 테스트 ① — CONTRACTS_API 「16」 InboxItem ↔ Java DTO. 계약 문서에 JSON 예시가 없어 TS 인터페이스를 옮겼다.
+ * 계약 테스트 ① — contract/examples/instructor/inbox-item.json ↔ Java DTO(CONTRACTS_API 「16」 · CONTRACTS.md 「9」).
  * 실제 {@code GET /api/instructor/inbox} 응답(②)은 {@code InstructorInboxIntegrationTest}.
  */
 class InboxItemContractTest {
@@ -23,28 +24,30 @@ class InboxItemContractTest {
             .enable(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES)
             .build();
 
-    static final String CONTRACT_ITEM = "{\"kind\":\"help_request\",\"workspaceId\":\"3\","
-            + "\"workspaceDisplayName\":\"team-samdo/gitvillage\",\"targetId\":\"14\",\"ownerMemberId\":\"12\","
-            + "\"title\":\"세션이 자꾸 끊겨요\",\"requestedAt\":\"2026-11-06T01:00:00Z\",\"answeredAt\":null}";
-
-    @Test
-    void itemRoundTripsThroughDto() {
-        JsonNode contract = ContractShape.readTree(CONTRACT_ITEM);
-
-        InboxItem item = MAPPER.treeToValue(contract, InboxItem.class);
-
-        assertThat(item.kind()).isEqualTo(InboxItem.Kind.HELP_REQUEST);
-        assertThat(MAPPER.<JsonNode>valueToTree(item)).isEqualTo(contract);
-        ContractShape.assertCommonRules(contract);
+    private static ObjectNode example() {
+        return (ObjectNode) ContractShape.readExample("instructor", "inbox-item.json").deepCopy();
     }
 
     @Test
-    void answeredItemKeepsTheFirstAnswerTime() {
-        JsonNode contract = ContractShape.readTree(CONTRACT_ITEM.replace("\"answeredAt\":null",
-                "\"answeredAt\":\"2026-11-06T02:00:00Z\""));
+    void exampleRoundTripsThroughDto() {
+        JsonNode example = ContractShape.readExample("instructor", "inbox-item.json");
+
+        InboxItem item = MAPPER.treeToValue(example, InboxItem.class);
+
+        assertThat(item.kind()).isEqualTo(InboxItem.Kind.HELP_REQUEST);
+        assertThat(item.answeredAt()).isNotNull();
+        assertThat(MAPPER.<JsonNode>valueToTree(item)).isEqualTo(example);
+        ContractShape.assertCommonRules(example);
+    }
+
+    @Test
+    void unansweredItemKeepsAnsweredAtAsNull() {
+        ObjectNode contract = example();
+        contract.putNull("answeredAt");
 
         InboxItem item = MAPPER.treeToValue(contract, InboxItem.class);
 
+        assertThat(item.answeredAt()).isNull();
         assertThat(MAPPER.<JsonNode>valueToTree(item)).isEqualTo(contract);
         ContractShape.assertCommonRules(contract);
     }
@@ -53,18 +56,21 @@ class InboxItemContractTest {
     @ParameterizedTest
     @EnumSource(InboxItem.Kind.class)
     void everyKindIsTheContractValue(InboxItem.Kind kind) {
-        String json = CONTRACT_ITEM.replace("help_request", kind.value());
+        ObjectNode contract = example();
+        contract.put("kind", kind.value());
 
-        InboxItem item = MAPPER.readValue(json, InboxItem.class);
+        InboxItem item = MAPPER.treeToValue(contract, InboxItem.class);
 
         assertThat(item.kind()).isEqualTo(kind);
-        assertThat(MAPPER.<JsonNode>valueToTree(item)).isEqualTo(ContractShape.readTree(json));
+        assertThat(MAPPER.<JsonNode>valueToTree(item)).isEqualTo(contract);
         assertThat(kind.value()).isIn("help_request", "decision_feedback", "follow_up_question");
     }
 
     @Test
     void unknownKindIsRejected() {
-        assertThatThrownBy(() -> MAPPER.readValue(CONTRACT_ITEM.replace("help_request", "HELP_REQUEST"),
-                InboxItem.class)).isInstanceOf(Exception.class);
+        ObjectNode contract = example();
+        contract.put("kind", "HELP_REQUEST");
+
+        assertThatThrownBy(() -> MAPPER.treeToValue(contract, InboxItem.class)).isInstanceOf(Exception.class);
     }
 }

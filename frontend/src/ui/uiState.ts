@@ -6,6 +6,9 @@ import { OVERLAY_QUERY } from './hooks'
 /** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190, 회고 — #209, 결정 기록 — #212 */
 export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup' | 'requirements' | 'retro' | 'decisions'
 
+/** 회고 탭의 보기 — 학습 타임라인 · 회고 리포트 · 기술 결정 카드 (#209 · #218) */
+export type RetroView = 'timeline' | 'reports' | 'cards'
+
 /** 도움 요청 쓰기 초안 — 스탠드업 "막힌 것"에서 넘길 때 (#190) */
 export interface HelpDraft {
   content: string
@@ -57,6 +60,18 @@ interface UiState {
   decisionItemId: string | null
   /** 결정 기록 탭으로 가서 그 기록을 연다(null = 목록으로). 3D 게시판(#205)도 이것으로 연다 (CONTRACTS.md 「8」 게시판) */
   openDecisionRecord: (agendaItemId: string | null) => void
+
+  // ---- 회고 탭 (#209) ----
+  /** 강사가 회고 탭에서 고른 팀원. null = 고르기 전. 지금 사무실 팀원이 아니면 화면이 고르기 전으로 본다 */
+  retroMemberId: string | null
+  /**
+   * 회고 탭으로 가서 그 팀원을 고른다(null = 고르기 전으로). view를 주면 그 보기로 바꾼다.
+   * 강사 요청함의 꼬리질문 항목이 카드 주인 · 기술 결정 카드 보기로 연다 (#224)
+   */
+  openRetroMember: (memberId: string | null, view?: RetroView) => void
+  /** 회고 탭의 지금 보기 */
+  retroView: RetroView
+  setRetroView: (view: RetroView) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
@@ -103,4 +118,11 @@ export const useUi = create<UiState>((set, get) => ({
     if (get().tab !== 'decisions') get().setTab('decisions')
     set({ decisionItemId })
   },
+  retroMemberId: null,
+  openRetroMember: (retroMemberId, view) => {
+    if (get().tab !== 'retro') get().setTab('retro')
+    set(view ? { retroMemberId, retroView: view } : { retroMemberId })
+  },
+  retroView: 'timeline',
+  setRetroView: (retroView) => set({ retroView }),
 }))

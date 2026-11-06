@@ -2,9 +2,11 @@
 // 모양은 로그인 디자인(#171)의 우주 배경 · 흰 카드 · 글꼴을 같이 쓴다(SpaceShell · login.css, #166).
 // 사무실이 열리면 App이 3D · HUD로 바꾼다. 레포를 골라 새 사무실을 여는 부분은 OpenWorkspace.tsx(#13 · #68).
 import { useEffect, useState } from 'react'
+import { canUseInbox } from '../../data/rules/inbox'
 import type { WorkspaceListItem } from '../../data/types'
 import { useSession } from '../../session'
 import { Icon } from '../icons'
+import { InboxList } from '../InstructorInbox'
 import { Toasts } from '../Toasts'
 import { formatDate } from '../format'
 import { LoginScreen } from './LoginScreen'
@@ -98,6 +100,15 @@ function WorkspacePicker() {
             </li>
           ))}
         </ul>
+      )}
+      {/* 강사 요청함(#224) — 강사에게만. 항목을 누르면 그 사무실에 들어가 해당 화면으로 간다 */}
+      {canUseInbox(me) && (
+        <section className="inbox-entry" aria-labelledby="inbox-title">
+          <h2 id="inbox-title" className="entry-subtitle">
+            강사 요청함
+          </h2>
+          <InboxList />
+        </section>
       )}
       {/* 레포를 골라 새 사무실 열기 — 목록을 읽은 뒤에(이미 들어갈 수 있는 사무실은 "들어가기") */}
       {list !== null && (

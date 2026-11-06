@@ -7,6 +7,7 @@ import { EndMeetingDialog, MeetingHistoryDialog, RaiseAgendaDialog, StartMeeting
 import { ProjectPeriodDialog } from './PeriodDialog'
 import { RequirementWaitingDialog } from './RequirementWaiting'
 import { InstructorDialog } from './InstructorDialog'
+import { InstructorInboxDialog } from './InstructorInbox'
 import { ConventionLibraryDialog } from './ConventionLibraryDialog'
 import { useUi } from './uiState'
 
@@ -91,6 +92,8 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <RaiseAgendaDialog source={dialog.source} />
     case 'instructors':
       return <InstructorDialog />
+    case 'instructorInbox':
+      return <InstructorInboxDialog />
     case 'conventionLibrary':
       return <ConventionLibraryDialog />
     case 'requirementWaiting':
