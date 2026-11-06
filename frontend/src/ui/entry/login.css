@@ -121,6 +121,17 @@
 .login-review-submit:disabled { cursor: progress; opacity: 0.7; }
 .login-mock { margin: 0; font-size: 12px; line-height: 1.5; color: #5d6790; }
 
+/* 노트북 · 데스크톱(두 칸) — 일러스트 크기를 창 높이에 맞춰 첫 화면이 스크롤 없이 들어오게(#166).
+   일러스트 비율 640:440. 일러스트 말고 세로로 차지하는 몫(머리 · 여백 · 제목 · 설명)은 약 380px.
+   창이 아주 낮으면 일러스트는 240px 밑으로 줄지 않고 .login이 스크롤로 받는다 — 카드가 잘리지 않게 */
+@media (min-width: 960px) {
+  .login-main { flex-wrap: nowrap; padding-top: clamp(8px, 2.5vh, 24px); padding-bottom: clamp(16px, 4vh, 40px); }
+  .login-hero { flex-basis: 400px; }
+  .login-art { max-width: min(600px, max(240px, calc((100vh - 380px) * 1.4545))); }
+  @supports (height: 100dvh) {
+    .login-art { max-width: min(600px, max(240px, calc((100dvh - 380px) * 1.4545))); }
+  }
+}
 @media (max-width: 720px) {
   /* 좁은 화면 — 일러스트를 줄여 로그인 카드가 첫 화면에 가깝게 */
   .login-art { max-width: 320px; margin: 0 auto; }
