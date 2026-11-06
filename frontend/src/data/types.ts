@@ -346,6 +346,8 @@ export type SnapshotResource =
   | 'activities'
   | 'standups'
   | 'instructors'
+  | 'standups'
+  | 'instructors'
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline'
 

@@ -1,0 +1,11 @@
+/* 강사 지정 대화상자 (#53). OWNER: D. 카드 톤은 요구사항 · 도움 요청 탭과 같다. */
+.ins { display: grid; gap: 12px; }
+.ins-lead { line-height: 1.5; word-break: keep-all; }
+.ins-state { display: grid; gap: 8px; justify-items: start; }
+.ins-section { display: grid; gap: 6px; }
+.ins-title { margin: 0; font-size: var(--fs-s); font-weight: 600; color: var(--text-dim); }
+.ins-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ins-item { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.ins-who { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.ins-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ins-confirm { display: inline-flex; gap: 2px; flex: none; }

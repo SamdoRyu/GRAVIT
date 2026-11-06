@@ -11,6 +11,7 @@ import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreate
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
+import { INSTRUCTOR_MSG, assignError } from '../../rules/instructors'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
@@ -38,7 +39,7 @@ import type {
   WorkspaceSnapshot,
 } from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
-import { MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockHelpThread, type MockSession, type MockState, type MockWorkspace } from './seed'
+import { MOCK_INSTRUCTOR_ALLOWLIST, MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockHelpThread, type MockSession, type MockState, type MockWorkspace } from './seed'
 
 export type { MockSession } from './seed'
 
@@ -803,6 +804,53 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       save()
       emit(workspaceId, { type: 'changed', resources: ['standups'] })
       return structuredClone(standup)
+    },
+
+    // ---- 「7」 강사 지정 — 목록은 접근, 후보 · 지정 · 해제는 R2만 (#53) ----
+
+    async listInstructors(workspaceId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      return structuredClone([...(ws.instructors ?? [])].sort((a, b) => a.assignedAt.localeCompare(b.assignedAt)))
+    },
+
+    async listInstructorCandidates(workspaceId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(INSTRUCTOR_MSG.notAdmin, 'forbidden_role')
+      const assigned = new Set((ws.instructors ?? []).map((i) => i.githubUserId))
+      return MOCK_INSTRUCTOR_ALLOWLIST.map((c) => ({ githubUserId: c.githubUserId, githubLogin: c.githubLogin, avatarUrl: null, isAssigned: assigned.has(c.githubUserId) }))
+    },
+
+    async assignInstructor(workspaceId, githubUserId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(INSTRUCTOR_MSG.notAdmin, 'forbidden_role')
+      const error = assignError(githubUserId, user.githubUserId, MOCK_INSTRUCTOR_ALLOWLIST.map((c) => c.githubUserId))
+      if (error) throw new DataError(error.message, error.code)
+      ws.instructors ??= []
+      const existing = ws.instructors.find((i) => i.githubUserId === githubUserId)
+      if (existing) return structuredClone(existing)
+      const who = MOCK_INSTRUCTOR_ALLOWLIST.find((c) => c.githubUserId === githubUserId)!
+      const assignment = { githubUserId, githubLogin: who.githubLogin, displayName: who.displayName, avatarUrl: null, assignedAt: toInstant(now()), assignedBy: structuredClone(user.user) }
+      ws.instructors.push(assignment)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['instructors'] })
+      return structuredClone(assignment)
+    },
+
+    async revokeInstructor(workspaceId, githubUserId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      if (!currentMember(ws, user)?.isRepoAdmin) throw new DataError(INSTRUCTOR_MSG.notAdmin, 'forbidden_role')
+      const at = (ws.instructors ?? []).findIndex((i) => i.githubUserId === githubUserId)
+      if (at < 0) throw new DataError(INSTRUCTOR_MSG.notFound, 'not_found')
+      ws.instructors!.splice(at, 1)
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['instructors'] })
     },
 
     // ---- 「8」 요구사항 연결 — R2만 (#197) ----
