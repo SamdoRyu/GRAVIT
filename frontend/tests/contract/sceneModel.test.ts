@@ -61,6 +61,9 @@ describe('SceneModel — 팀원 아바타 (#10)', () => {
   })
 })
 
+/** 원본 이슈 · PR 엔티티 — 회의실의 안건(agenda:) 모양은 빼고 */
+const isOriginal = (e: { key: string }) => e.key.startsWith('task:') || e.key.startsWith('submission:')
+
 describe('SceneModel — 이슈 · PR 상태별 자리 (#11)', () => {
   const roleOf = (snap: WorkspaceSnapshot, key: string) => buildSceneModel(snap).find((e) => e.key === key)?.placeRole
 
@@ -121,7 +124,7 @@ describe('SceneModel — 이슈 · PR 상태별 자리 (#11)', () => {
 
   it('안건 · 요구사항 연결이 있어도 원본 이슈 · PR의 자리는 그대로다', async () => {
     const snap = await load('ws_1')
-    const before = buildSceneModel(snap).filter((e) => e.kind === 'issue' || e.kind === 'pr')
+    const before = buildSceneModel(snap).filter(isOriginal)
     const t = snap.tasks.find((x) => x.state === 'open')
     const p = snap.submissions[0]
     assert.ok(t && p)
@@ -146,7 +149,7 @@ describe('SceneModel — 이슈 · PR 상태별 자리 (#11)', () => {
       ...snap,
       agendaItems: [agenda('a_1', { type: 'task', id: t.id }), agenda('a_2', { type: 'submission', id: p.id })],
       requirementLinks: [{ id: 'l_1', requirementId: 'r_1', taskId: t.id, linkedAt: '2026-11-05T03:00:00Z' }],
-    }).filter((e) => e.kind === 'issue' || e.kind === 'pr')
+    }).filter(isOriginal)
     assert.deepEqual(after, before)
   })
 })
@@ -259,5 +262,53 @@ describe('SceneModel — 평가 결과 (#21)', () => {
     const roles = (x: WorkspaceSnapshot) => buildSceneModel(x).map((e) => [e.key, e.placeRole])
     const noRounds = { ...snap, submissions: snap.submissions.map((x) => ({ ...x, currentRound: null })) }
     assert.deepEqual(roles(noRounds), roles(snap))
+  })
+})
+
+describe('SceneModel — 회의실의 안건 (#30 · #26)', () => {
+  const agenda = (id: string, kind: 'issue' | 'pr' | 'help_request' | 'learning' | 'other', status: 'confirmed' | 'discussed' | 'withdrawn', source: { type: 'task' | 'submission'; id: string } | null) => ({
+    id,
+    kind,
+    status,
+    title: '안건',
+    background: null,
+    tried: null,
+    unresolvedReason: null,
+    source,
+    evaluationRoundId: null,
+    raisedByMemberId: 'm_1',
+    raisedAt: '2026-11-05T03:00:00Z',
+    decision: null,
+    feedbackRequested: false,
+    feedbackRequestedAt: null,
+    instructorFeedbacks: [],
+  })
+
+  it('결정 전 안건마다 agenda:<id> 모양 하나 — 종류는 안건 종류, 자리는 meeting. 결정 · 거둔 안건은 없다', async () => {
+    const snap = await load('ws_1')
+    const t = snap.tasks[0]
+    const p = snap.submissions[0]
+    const items = [
+      agenda('a_issue', 'issue', 'confirmed', { type: 'task', id: t.id }),
+      agenda('a_pr', 'pr', 'confirmed', { type: 'submission', id: p.id }),
+      agenda('a_learn', 'learning', 'confirmed', null),
+      agenda('a_help', 'help_request', 'confirmed', null),
+      agenda('a_done', 'issue', 'discussed', { type: 'task', id: t.id }),
+      agenda('a_gone', 'other', 'withdrawn', null),
+    ]
+    const model = buildSceneModel({ ...snap, agendaItems: items })
+    assert.deepEqual(
+      model.filter((e) => e.key.startsWith('agenda:')),
+      [
+        { key: 'agenda:a_issue', kind: 'issue', refId: 'a_issue', placeRole: 'meeting', badges: [] },
+        { key: 'agenda:a_pr', kind: 'pr', refId: 'a_pr', placeRole: 'meeting', badges: [] },
+        { key: 'agenda:a_learn', kind: 'learning', refId: 'a_learn', placeRole: 'meeting', badges: [] },
+        { key: 'agenda:a_help', kind: 'help', refId: 'a_help', placeRole: 'meeting', badges: [] },
+      ],
+    )
+    // 원본은 그대로 한 번씩, 제자리
+    assert.equal(model.filter((e) => e.key === `task:${t.id}`).length, 1)
+    assert.notEqual(model.find((e) => e.key === `task:${t.id}`)?.placeRole, 'meeting')
+    assert.notEqual(model.find((e) => e.key === `submission:${p.id}`)?.placeRole, 'meeting')
   })
 })

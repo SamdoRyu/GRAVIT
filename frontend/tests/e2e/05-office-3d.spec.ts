@@ -1,5 +1,6 @@
 // 5. The 3D station shows the v1 office (#102 T5-c-2 · #10 · #11): one avatar per seated member, one box per placed
-// issue / PR. It is read-only: a click opens the v1 detail drawer, pressing and moving a box does not drag it.
+// issue / PR. A click opens the v1 detail drawer. Moving a box anywhere but the bridge changes nothing (raising an agenda
+// item by dropping on the bridge is 08-agenda-drag); the board itself stays read-only (no assignee drag).
 // Expected values come from the Snapshot in the page (no seed numbers baked in).
 import type { Page } from '@playwright/test'
 import { expect, hoverBox, openApp, readStore, settled, test } from './fixtures'
@@ -39,7 +40,7 @@ async function hoverMember(page: Page, id: string): Promise<void> {
   throw new Error(`could not hover member ${id}`)
 }
 
-test('the 3D station shows the v1 crew and boxes, opens the detail on click and does not drag', async ({ page, source }) => {
+test('the 3D station shows the v1 crew and boxes, opens the detail on click, and a box let go off the bridge changes nothing', async ({ page, source }) => {
   await openApp(page, source)
   const facts = await sceneFacts(page)
   expect(facts.crew.length).toBeGreaterThan(0)
@@ -47,12 +48,14 @@ test('the 3D station shows the v1 crew and boxes, opens the detail on click and 
   test.skip(facts.issue === null, 'mock seed에 포드 위 이슈가 없다')
   const issue = facts.issue!
 
-  // Pressing a box and moving does not pick it up (no 3D drag in the v1 office).
+  // Pressing a box, moving it a little and letting go off the bridge: no store drag, no dialog, nothing raised.
   const at = await hoverBox(page, issue.key)
   await page.mouse.down()
   await page.mouse.move(at.x + 40, at.y + 30, { steps: 6 })
   expect(await readStore(page, (s) => s.drag)).toBeNull()
   await page.mouse.up()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await readStore(page, (s) => s.office.snapshot.agendaItems.length)).toBe(0)
 
   // A click on the box opens the issue detail.
   const at2 = await hoverBox(page, issue.key)

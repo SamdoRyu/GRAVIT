@@ -1,18 +1,22 @@
 // One issue / PR as a piece of cargo (the v1 SceneModel's `issue` · `pr` entity), drawn like the confirmed design's cargo:
 // an issue is a cube, a PR a triangular prism, both cream with an orange band (#11). A blocked one glows warm (#23), and its
 // badges (blocked · Draft · 미병합 종료 · 계획 안 함 · a PR's current-round votes — #21) float above it. Keeps its own world
-// position and flies along an arc when its slot changes. Read-only: a click opens the v1 detail drawer; nothing is dragged (the GitHub
+// position and flies along an arc when its slot changes.
+// An original issue / PR can be dragged onto the bridge to raise it as an agenda item (#30 · #26 — CONTRACTS.md 「8」 드롭 결과):
+// letting go there opens the agenda dialog and the shape flies back to its own place (the agenda never moves the original).
+// Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. Read-only: a click opens the v1 detail drawer; nothing is dragged (the GitHub
 // originals are never changed from the app — CON-02; putting a shape on the agenda comes with #26 · #30).
 import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { BackSide, Color, CylinderGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, type BufferGeometry, type Group } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { useOffice } from '../store'
+import type { Id } from '../data/types'
+import { useOffice, type OfficeSelection } from '../store'
 import { PALETTE } from '../theme'
 import { CargoBadges } from './CargoBadges'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
-import type { SceneEntity } from './model/types'
-import { boxLive, clickSlop, noRaycast, setCursor, type BoxLive } from './runtime'
+import type { SceneEntity, ThemeLayout } from './model/types'
+import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
 import { clamp, UNIT_BOX, useDynamicLayer } from './shared'
 import { BOX_D, BOX_H, BOX_W, type Slot } from './slots'
 
@@ -79,22 +83,35 @@ function newAnim(): Anim {
   return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1 }
 }
 
+/** What an original issue / PR raises as an agenda item when dropped on the bridge */
+export interface AgendaSource {
+  type: 'task' | 'submission'
+  id: Id
+}
+
+/** Touch: the finger may drift this far (px) during the long press before it counts as an orbit gesture. */
+const LONG_PRESS_SLOP_PX = 9
+
 interface Props {
   entity: SceneEntity
   slot: Slot
+  /** What a click opens in the v1 detail drawer (an agenda shape opens its source) */
+  select: OfficeSelection | null
+  /** Draggable onto the bridge to raise this as an agenda item; null = not draggable (agenda shapes) */
+  raise: AgendaSource | null
+  dropZoneAt: ThemeLayout['dropZoneAt']
   /** An open issue past its due date: a soft glow. */
   overdue: boolean
   /** Appeared after the first load: pop in instead of being there from the start. */
   pop: boolean
 }
 
-export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Props) {
-  const { key, refId } = entity
+export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, dropZoneAt, overdue, pop }: Props) {
+  const { key } = entity
   const blocked = entity.highlight === 'blocked'
   const badges = useMemo(() => cargoBadgeView(entity.badges), [entity.badges])
   const kind = entity.kind === 'pr' ? 'pr' : 'issue'
-  const selectKind = kind === 'pr' ? 'submission' : 'task'
-  const selected = useOffice((s) => s.officeSelection?.kind === selectKind && s.officeSelection.id === refId)
+  const selected = useOffice((s) => select !== null && s.officeSelection?.kind === select.kind && s.officeSelection.id === select.id)
   const hovered = useOffice((s) => s.hover?.kind === 'task' && s.hover.id === key)
 
   const body = useMemo(() => new MeshStandardMaterial({ roughness: 0.55, metalness: 0, emissive: new Color(PALETTE.overdueGlow), emissiveIntensity: 0 }), [])
@@ -166,8 +183,16 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
       a.scale = slot.scale
     }
 
-    // ---- position: fly to the slot ----
-    if (slot.x !== a.tx || slot.y !== a.ty || slot.z !== a.tz) {
+    // ---- position: follow the pointer while dragged to the bridge, otherwise fly to the slot ----
+    const dragged = cargoDrag.key === key
+    if (dragged) {
+      const k = 1 - Math.exp(-28 * dt)
+      a.px += (cargoDrag.x - a.px) * k
+      a.py += (cargoDrag.y - a.py) * k
+      a.pz += (cargoDrag.z - a.pz) * k
+      a.flying = false
+      a.tx = NaN // fly back home when let go
+    } else if (slot.x !== a.tx || slot.y !== a.ty || slot.z !== a.tz) {
       a.tx = slot.x
       a.ty = slot.y
       a.tz = slot.z
@@ -180,7 +205,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
       a.arc = dist < 0.8 ? dist * 0.3 : clamp(dist * 0.45 + 0.7, 0.9, 4.5)
       a.flying = dist > 0.004
     }
-    if (a.flying) {
+    if (a.flying && !dragged) {
       a.t += delta / a.dur
       const u = Math.min(a.t, 1)
       const e = easeInOut(u)
@@ -191,9 +216,9 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
     }
 
     // ---- hover lift, pop-in ----
-    a.lift += ((hovered ? 0.1 : 0) - a.lift) * (1 - Math.exp(-14 * dt))
+    a.lift += ((hovered && !dragged ? 0.1 : 0) - a.lift) * (1 - Math.exp(-14 * dt))
     if (a.pop < 1) a.pop = Math.min(1, a.pop + dt / 0.45)
-    a.scale += (slot.scale - a.scale) * (1 - Math.exp(-14 * dt))
+    a.scale += (slot.scale * (dragged ? 1.1 : 1) - a.scale) * (1 - Math.exp(-14 * dt))
     const popScale = a.pop < 1 ? easeOutBack(a.pop) : 1
     g.scale.setScalar(Math.max(0.0001, a.scale * popScale))
 
@@ -214,7 +239,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
 
     const om = outlineMesh.current
     if (om) {
-      const on = selected || hovered
+      const on = selected || hovered || dragged
       if (om.visible !== on) om.visible = on
       outline.opacity = selected ? 0.75 + 0.25 * Math.sin(t * 5) : 0.85
     }
@@ -225,19 +250,25 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
     <group
       ref={group}
       onPointerOver={(e) => {
+        if (cargoDrag.key !== null) return
         e.stopPropagation()
         useOffice.getState().setHover({ kind: 'task', id: key })
-        setCursor('pointer')
+        setCursor(raise ? 'grab' : 'pointer')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
         if (s.hover?.kind === 'task' && s.hover.id === key) s.setHover(null)
-        setCursor('')
+        if (cargoDrag.key === null) setCursor('')
+      }}
+      onPointerDown={(e) => {
+        if (e.button !== 0 || !raise || cargoDrag.key !== null) return
+        e.stopPropagation()
+        startCargoDrag(key, raise, dropZoneAt, e.nativeEvent)
       }}
       onClick={(e) => {
         e.stopPropagation()
-        if (e.delta > clickSlop(e) || refId === null) return
-        useOffice.getState().selectInOffice({ kind: selectKind, id: refId })
+        if (e.delta > clickSlop(e) || select === null) return
+        useOffice.getState().selectInOffice(select)
       }}
     >
       {kind === 'pr' ? (
@@ -266,3 +297,84 @@ export const TaskBox = memo(function TaskBox({ entity, slot, overdue, pop }: Pro
     </group>
   )
 })
+
+/**
+ * Press on an original issue / PR: a mouse or pen picks it up once it moves a few pixels; a finger has to rest on it for a
+ * moment first (otherwise it orbits the camera). While held the shape follows the pointer on the y = DRAG_Y plane and the
+ * bridge lights up when letting go would raise it. Releasing over the bridge opens the agenda dialog; Escape cancels.
+ */
+function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayout['dropZoneAt'], down: PointerEvent) {
+  const pointerId = down.pointerId
+  const touch = down.pointerType === 'touch'
+  const sx = down.clientX
+  const sy = down.clientY
+  let px = sx
+  let py = sy
+  let dragging = false
+  let timer = 0
+  if (!touch && cameraLock.controls) cameraLock.controls.enabled = false
+  if (touch) cameraGesture.begin()
+
+  const follow = (cx: number, cy: number) => {
+    const p = pointerOnPlane(cx, cy, DRAG_Y)
+    if (!p) {
+      cargoDrag.overMeeting = false
+      return
+    }
+    cargoDrag.x = p.x
+    cargoDrag.y = DRAG_Y
+    cargoDrag.z = p.z
+    cargoDrag.overMeeting = dropZoneAt([p.x, 0, p.z]) === 'meeting'
+  }
+  const begin = () => {
+    dragging = true
+    if (touch) {
+      if (cameraLock.controls) cameraLock.controls.enabled = false
+      cameraGesture.discard() // undo the tiny orbit made while the finger rested
+      navigator.vibrate?.(12)
+    }
+    const s = useOffice.getState()
+    if (s.hover?.kind === 'task' && s.hover.id === key) s.setHover(null)
+    cargoDrag.key = key
+    follow(px, py)
+    setCursor('grabbing')
+  }
+  const stop = (): boolean => {
+    window.clearTimeout(timer)
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    window.removeEventListener('pointercancel', cancel)
+    window.removeEventListener('keydown', escape)
+    if (cameraLock.controls) cameraLock.controls.enabled = true
+    const over = dragging && cargoDrag.overMeeting
+    if (cargoDrag.key === key) cargoDrag.key = null
+    cargoDrag.overMeeting = false
+    setCursor('')
+    return over
+  }
+  const move = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return
+    px = ev.clientX
+    py = ev.clientY
+    const moved = Math.hypot(px - sx, py - sy)
+    if (dragging) follow(px, py)
+    else if (touch && moved > LONG_PRESS_SLOP_PX) stop() // an orbit gesture, not a pick-up
+    else if (!touch && moved > CLICK_SLOP_PX) begin()
+  }
+  const up = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return
+    if (dragging) follow(ev.clientX, ev.clientY)
+    if (stop()) useOffice.getState().openDialog({ kind: 'raiseAgenda', source })
+  }
+  const cancel = (ev: PointerEvent) => {
+    if (ev.pointerId === pointerId) stop()
+  }
+  const escape = (ev: KeyboardEvent) => {
+    if (ev.key === 'Escape') stop()
+  }
+  if (touch) timer = window.setTimeout(begin, LONG_PRESS_MS)
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+  window.addEventListener('pointercancel', cancel)
+  window.addEventListener('keydown', escape)
+}

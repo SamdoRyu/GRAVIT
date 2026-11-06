@@ -10,7 +10,7 @@ import { Field } from './common'
 import { cssVars } from './format'
 import { useMemberList } from './hooks'
 import { Icon } from './icons'
-import { EndMeetingDialog, MeetingHistoryDialog, StartMeetingDialog } from './MeetingDialogs'
+import { EndMeetingDialog, MeetingHistoryDialog, RaiseAgendaDialog, StartMeetingDialog } from './MeetingDialogs'
 import { ProjectPeriodDialog } from './PeriodDialog'
 import { useUi } from './uiState'
 
@@ -407,5 +407,7 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <EndMeetingDialog meetingId={dialog.meetingId} />
     case 'projectPeriod':
       return <ProjectPeriodDialog />
+    case 'raiseAgenda':
+      return <RaiseAgendaDialog source={dialog.source} />
   }
 }

@@ -30,6 +30,8 @@ export type Dialog =
   | { kind: 'endMeeting'; meetingId: Id }
   /** v1 사무실의 프로젝트 기간 (#38 — FR-PLAN-01, R2만) */
   | { kind: 'projectPeriod' }
+  /** 3D에서 이슈 · PR을 회의실에 놓았을 때 안건 올리기 (#30 · #26 — C의 MeetingDialogs) */
+  | { kind: 'raiseAgenda'; source: { type: 'task' | 'submission'; id: Id } }
 
 /** Where a dragged task would land if released now. Set by whoever is under the pointer. */
 export type DropTarget =

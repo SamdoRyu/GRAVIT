@@ -1,7 +1,8 @@
-// Every issue / PR of the open v1 office as one persistent box (keyed by SceneEntity key), placed by its SceneModel role.
+// Every issue / PR of the open v1 office as one persistent box (keyed by SceneEntity key), placed by its SceneModel role,
+// plus an issue / PR agenda shape on the bridge table for each item on the agenda (#30 · #26).
 import { useMemo, useRef, type ReactElement } from 'react'
-import { useOffice } from '../store'
-import { TaskBox } from './TaskBox'
+import { useOffice, type OfficeSelection } from '../store'
+import { TaskBox, type AgendaSource } from './TaskBox'
 import { useToday } from './signals'
 import { computeSlots, type Slot } from './slots'
 import { useStationScene } from './useStationScene'
@@ -30,6 +31,22 @@ export function TaskBoxes() {
     return keys
   }, [snapshot, today])
 
+  /**
+   * key → what a click opens and what a drop on the bridge raises. An original issue / PR opens and raises itself; an agenda
+   * shape opens its source and is not dragged.
+   */
+  const targets = useMemo(() => {
+    const m = new Map<string, { select: OfficeSelection | null; raise: AgendaSource | null }>()
+    for (const t of snapshot?.tasks ?? []) m.set(`task:${t.id}`, { select: { kind: 'task', id: t.id }, raise: { type: 'task', id: t.id } })
+    for (const p of snapshot?.submissions ?? []) m.set(`submission:${p.id}`, { select: { kind: 'submission', id: p.id }, raise: { type: 'submission', id: p.id } })
+    for (const a of snapshot?.agendaItems ?? []) {
+      const src = a.source
+      const select: OfficeSelection | null = src?.type === 'task' ? { kind: 'task', id: src.id } : src?.type === 'submission' ? { kind: 'submission', id: src.id } : null
+      m.set(`agenda:${a.id}`, { select, raise: null })
+    }
+    return m
+  }, [snapshot])
+
   if (!scene) return null
   // Boxes present in the first loaded snapshot are simply there; later ones pop in.
   for (const key of slots.keys()) {
@@ -41,7 +58,19 @@ export function TaskBoxes() {
   for (const e of scene.entities) {
     const slot = slots.get(e.key)
     if (!slot) continue
-    items.push(<TaskBox key={e.key} entity={e} slot={slot} overdue={overdue.has(e.key)} pop={popped.current.get(e.key) ?? false} />)
+    const target = targets.get(e.key)
+    items.push(
+      <TaskBox
+        key={e.key}
+        entity={e}
+        slot={slot}
+        select={target?.select ?? null}
+        raise={target?.raise ?? null}
+        dropZoneAt={scene.layout.dropZoneAt}
+        overdue={overdue.has(e.key)}
+        pop={popped.current.get(e.key) ?? false}
+      />,
+    )
   }
   return <>{items}</>
 }
