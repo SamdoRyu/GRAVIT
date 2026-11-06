@@ -154,6 +154,15 @@ public class Member {
         }
     }
 
+    /** 수집 동의 철회 — 이후 새 활동 기록을 쓸 수 없다. 이미 쓴 기록은 그대로 둔다(계약 「14」에 삭제 규칙이 없다). */
+    public void withdrawActivityConsent() {
+        this.activityConsentedAt = null;
+    }
+
+    public boolean hasActivityConsent() {
+        return activityConsentedAt != null;
+    }
+
     /** 콜라보레이터에서 빠짐 — 행은 남기고 책상 자리를 비운다(과거 평가 · 안건 · 코멘트가 가리킨다). */
     public void remove(Instant removedAt) {
         this.removedAt = Objects.requireNonNull(removedAt);

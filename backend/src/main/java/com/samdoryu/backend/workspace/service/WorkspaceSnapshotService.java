@@ -1,5 +1,6 @@
 package com.samdoryu.backend.workspace.service;
 
+import com.samdoryu.backend.activity.service.ActivityService;
 import com.samdoryu.backend.auth.service.WorkspaceAccess;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.evaluation.dto.EvaluationRoundDto;
@@ -32,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code GET W/snapshot} 조립(CONTRACTS_API 「5」). 다른 패키지 조각은 그 패키지 Service로만 읽는다.
- * 아직 기능이 없는 조각 — {@code activityNotes}(FR-ACT) — 은 빈 목록, {@code flow}는 막힌 팀원 · 열린 PR 수만 채운다(나머지는
+ * {@code activityNotes}는 확인된 활동 기록만(#173 — 시간 · 내용 없음), {@code flow}는 막힌 팀원 · 열린 PR 수만 채운다(나머지는
  * #24 등). PR의 {@code currentRound}는 평가 회차 조각(#19), {@code requirements}는 요구사항 조각(#14), {@code requirementLinks}는
  * 연결 조각(#18)이다. 이슈 · PR의 {@code isBlocked}는 팀 설정 기준으로 응답 시각에 계산한다({@link BlockedRule} — #22).
  */
@@ -55,12 +56,14 @@ public class WorkspaceSnapshotService {
     private final EvaluationRoundService evaluationRoundService;
     private final RequirementService requirementService;
     private final RequirementLinkService requirementLinkService;
+    private final ActivityService activityService;
 
     public WorkspaceSnapshotService(WorkspaceService workspaceService, MemberRepository memberRepository,
             TeamSettingsRepository teamSettingsRepository, SyncService syncService,
             SyncedItemService syncedItemService, AgendaItemService agendaItemService, MeetingService meetingService,
             HelpRequestService helpRequestService, EvaluationRoundService evaluationRoundService,
-            RequirementService requirementService, RequirementLinkService requirementLinkService) {
+            RequirementService requirementService, RequirementLinkService requirementLinkService,
+            ActivityService activityService) {
         this.workspaceService = workspaceService;
         this.memberRepository = memberRepository;
         this.teamSettingsRepository = teamSettingsRepository;
@@ -72,6 +75,7 @@ public class WorkspaceSnapshotService {
         this.evaluationRoundService = evaluationRoundService;
         this.requirementService = requirementService;
         this.requirementLinkService = requirementLinkService;
+        this.activityService = activityService;
     }
 
     /**
@@ -106,7 +110,7 @@ public class WorkspaceSnapshotService {
                 agendaItemService.listAll(workspaceId),
                 meetingService.listRecent(workspaceId),
                 helpRequestService.listSummaries(workspaceId, now),
-                List.of(),
+                activityService.listNotes(workspaceId),
                 FlowSummary.blockedAndOpenCount(blocked.blockedMemberIds(), countOpen(submissions)),
                 now);
     }
