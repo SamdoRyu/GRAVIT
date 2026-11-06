@@ -1,6 +1,6 @@
 // 정거장 공용 부품 — 시안 station.js의 부품을 R3F로 다시 만든 것(시안 단위). 소유: C.
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
   BackSide,
@@ -90,6 +90,7 @@ function glowTex(): CanvasTexture {
 }
 export function Glow({ color, size, p, opacity = 0.8, fog = true }: { color: number; size: number; p: V3; opacity?: number; fog?: boolean }) {
   const mat = useMemo(() => new SpriteMaterial({ map: glowTex(), color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, fog }), [color, opacity, fog])
+  useEffect(() => () => mat.dispose(), [mat]) // glows on agenda shapes come and go (the shared texture stays)
   return <sprite material={mat} position={p} scale={[size, size, 1]} raycast={noRaycast} />
 }
 
