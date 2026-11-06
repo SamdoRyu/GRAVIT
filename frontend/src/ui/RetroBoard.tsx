@@ -1,7 +1,8 @@
-// 관리 패널 "회고" 탭 (#209 — FR-LRN-08 · FR-REP-01 · 02 · 03 · 05 · 06, CONTRACTS_API.md 「15」). 소유: B (A 요청 — 리뷰 D).
+// 관리 패널 "회고" 탭 (#209 — FR-LRN-08 · FR-REP-01 · 02 · 03 · 05 · 06, CONTRACTS_API.md 「15」). 소유: B (A 요청 — 리뷰 D). 기술 결정 카드 보기는 DecisionCards.tsx (#218, A).
 // 개인 API라 Snapshot · SSE에 없다 — 탭을 열 때 읽고, 쓴 뒤에는 응답으로 바꾼다. 학생은 본인 것만 본다(다른 팀원을 고르는 UI 없음).
 // 강사는 팀원을 골라 읽기만 한다(만들기 · 배운 점 쓰기 없음). 권한은 서버가 다시 검사한다(403). 평가자 · 사람별 합계 · 순위는 없다.
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { CARD_CELLS } from '../data/rules/decisionCard'
 import { kstToday } from '../data/rules/period'
 import {
   ACTIVITY_KIND_LABEL,
@@ -17,6 +18,7 @@ import {
 import type { DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, RetroReportSummary, TimelineEntry } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
+import { DecisionCardsView } from './DecisionCards'
 import { formatDate, relativeTime } from './format'
 import { TextField } from './HelpBoard'
 import { useNow } from './hooks'
@@ -26,7 +28,7 @@ import { useUi } from './uiState'
 import './help.css'
 import './retro.css'
 
-type View = 'timeline' | 'reports'
+type View = 'timeline' | 'reports' | 'cards'
 
 /** 읽은 결과를 무엇을 읽었는지(key)와 함께 둔다 — 대상이 바뀌면 이전 결과는 그 자리에서 버려진다. value null = 읽기 실패 */
 interface Loaded<T> {
@@ -59,17 +61,22 @@ export function RetroPanel() {
         <button type="button" className={`btn btn-sm${view === 'reports' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'reports'} onClick={() => setView('reports')}>
           회고 리포트
         </button>
+        <button type="button" className={`btn btn-sm${view === 'cards' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'cards'} onClick={() => setView('cards')}>
+          기술 결정 카드
+        </button>
       </div>
       {memberId === null ? (
         instructor ? (
-          <Empty icon="users" title="팀원을 골라 주세요" hint="이 사무실 팀원의 학습 타임라인과 회고 리포트를 읽을 수 있어요." />
+          <Empty icon="users" title="팀원을 골라 주세요" hint="이 사무실 팀원의 학습 타임라인 · 회고 리포트 · 기술 결정 카드를 읽을 수 있어요." />
         ) : (
           <Empty icon="user" title="이 사무실의 팀원만 볼 수 있어요" />
         )
       ) : view === 'timeline' ? (
         <TimelineView key={memberId} memberId={memberId} />
-      ) : (
+      ) : view === 'reports' ? (
         <ReportsView key={memberId} memberId={memberId} canWrite={!instructor} />
+      ) : (
+        <DecisionCardsView key={memberId} memberId={memberId} canWrite={!instructor} instructor={instructor} />
       )}
     </div>
   )
@@ -461,28 +468,16 @@ function LearningForm({ memberId, report, onSaved }: { memberId: Id; report: Ret
   )
 }
 
-const CARD_CELLS: [keyof DecisionCardDto['cells'], string][] = [
-  ['goal', '무엇을 하려 했나'],
-  ['initialApproach', '처음 택한 방법'],
-  ['feedbackReceived', '받은 평가'],
-  ['meetingDecision', '회의에서 정한 것'],
-  ['finalChange', '최종적으로 바꾼 것'],
-  ['rationale', '왜 그렇게 결정했나'],
-  ['blockedMoment', '막혔던 순간'],
-  ['learning', '내가 배운 점'],
-  ['source', '원본'],
-]
-
-/** 읽기 전용 — 카드 만들기 · 고치기 · 꼬리질문 화면은 이 이슈 밖(후속) */
+/** 읽기 전용 — 카드 만들기 · 고치기 · 꼬리질문은 "기술 결정 카드" 보기(DecisionCards.tsx, #218) */
 function DecisionCardItem({ card }: { card: DecisionCardDto }) {
-  const cells = CARD_CELLS.filter(([k]) => card.cells[k]?.trim())
+  const cells = CARD_CELLS.filter(({ key }) => card.cells[key]?.trim())
   return (
     <li className="help-comment">
       <dl className="retro-cells">
-        {cells.map(([k, label]) => (
-          <div key={k}>
+        {cells.map(({ key, label }) => (
+          <div key={key}>
             <dt>{label}</dt>
-            <dd>{card.cells[k]}</dd>
+            <dd>{card.cells[key]}</dd>
           </div>
         ))}
       </dl>

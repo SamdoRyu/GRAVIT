@@ -21,7 +21,9 @@ import type { AgendaItemCreateRequest, Change, DecisionRequest } from '../../src
 import { retroReportExample, timelinePageExample } from './examples'
 
 const TEAM_WS = 'ws_1'
-/** seed: 나(김옥토 m_1)의 PR s_1(#15, 20시간 전 회차 r_1 — 추천 1 · 비추천 1), 내 이슈 t_2(area:auth) · t_3(area:workspace) */
+/**
+ * seed: 나(김옥토 m_1)의 PR s_1(#15, 20시간 전 회차 r_1 — 추천 1 · 비추천 1) · 머지된 s_4(#7, 이유 없는 회차 — #218), 내 이슈 t_2(area:auth) · t_3(area:workspace)
+ */
 const NOW = new Date('2026-11-05T03:00:00Z')
 const ME = 'm_1'
 const minutesLater = (m: number) => new Date(NOW.getTime() + m * 60_000)
@@ -164,7 +166,7 @@ describe('mock v1 — 회고 리포트', () => {
     assert.deepEqual(Object.keys(final), Object.keys(retroReportExample))
     assert.deepEqual(
       [final.kind, final.createdAt, final.memberId, final.summary, final.areaLabels, final.learning, final.activityDistribution, final.decisionCards],
-      ['final', '2026-11-05T03:05:00Z', ME, '맡은 이슈 2개(닫힘 0) · 작성한 PR 1개(머지 0) · 올린 안건 1건(결론 1)', ['area:auth', 'area:workspace'], null, [], []],
+      ['final', '2026-11-05T03:05:00Z', ME, '맡은 이슈 2개(닫힘 0) · 작성한 PR 2개(머지 1) · 올린 안건 1건(결론 1)', ['area:auth', 'area:workspace'], null, [], []],
     )
     assert.deepEqual(final.agendaResults, [{ agendaItemId: item.id, title: '에러 응답 모양', conclusion: '전역 예외 처리 한 곳', learning: '처음부터 한 곳에서', prDecision: null, decidedAt: '2026-11-05T03:00:00Z' }])
     assert.deepEqual(final.instructorFeedbacks, [])
@@ -176,7 +178,7 @@ describe('mock v1 — 회고 리포트', () => {
     ])
     // 계산 칸은 읽을 때 다시 계산한다 — 만든 뒤 올린 안건도 요약에 들어간다
     await source.createAgendaItem(TEAM_WS, agenda({ title: '다음 안건' }))
-    assert.equal((await source.getReport(TEAM_WS, ME, final.id)).summary, '맡은 이슈 2개(닫힘 0) · 작성한 PR 1개(머지 0) · 올린 안건 2건(결론 1)')
+    assert.equal((await source.getReport(TEAM_WS, ME, final.id)).summary, '맡은 이슈 2개(닫힘 0) · 작성한 PR 2개(머지 1) · 올린 안건 2건(결론 1)')
   })
 
   it('내가 배운 점 — 통째로 바꾸고 빈 값으로 지울 수 있다. 5000자 넘으면 invalid, 없는 리포트 not_found', async () => {
