@@ -1,5 +1,5 @@
 // 사무실 밖 화면 — 로그인 · 사무실 고르기 (#64 · #68 화면 몫, CONTRACTS_API.md 「2」 · 「3」). 소유: D.
-// 사무실이 열리면 App이 3D · HUD로 바꾼다. 레포를 골라 새 사무실을 여는 화면(#13 명세 문서 경로)은 다음 PR.
+// 사무실이 열리면 App이 3D · HUD로 바꾼다. 레포를 골라 새 사무실을 여는 부분은 OpenWorkspace.tsx(#13 · #68).
 import { useEffect, useState, type FormEvent } from 'react'
 import { MOCK_REVIEW_LOGIN } from '../../data/mock/v1'
 import type { WorkspaceListItem } from '../../data/types'
@@ -7,6 +7,7 @@ import { useSession } from '../../session'
 import { Icon } from '../icons'
 import { Toasts } from '../Toasts'
 import { formatDate } from '../format'
+import { RepositoryChoices } from './OpenWorkspace'
 import './entry.css'
 
 function Brand() {
@@ -180,6 +181,13 @@ function WorkspacePicker() {
             </li>
           ))}
         </ul>
+      )}
+      {/* 레포를 골라 새 사무실 열기 — 목록을 읽은 뒤에(이미 들어갈 수 있는 사무실은 "들어가기") */}
+      {list !== null && (
+        <RepositoryChoices
+          myWorkspaceIds={new Set(list.map((w) => w.id))}
+          onEnter={(id) => void useSession.getState().enterWorkspace(id)}
+        />
       )}
     </section>
   )

@@ -1,7 +1,7 @@
 // 프로젝트 기간 D-day 규칙 (#38 — FR-PLAN-01). 날짜는 한국 시간 달력 날짜 기준.
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { SETTINGS_MSG, ddayText, kstToday, periodError, projectDay, settingsError } from '../../src/data/rules/period'
+import { SETTINGS_MSG, addLocalDays, ddayText, isLocalDate, kstToday, openWorkspaceError, periodError, projectDay, settingsError, specPathValue } from '../../src/data/rules/period'
 
 const period = { projectStartDate: '2026-11-04', projectEndDate: '2026-11-17' }
 const dday = (today: string) => {
@@ -86,5 +86,28 @@ describe('팀 설정 검사 — PUT W/settings 400 규칙 (화면 · mock 공통
     assert.equal(settingsError({ ...ok, noCommitHours: 721 }), SETTINGS_MSG.invalidHours)
     assert.equal(settingsError({ ...ok, noCommitHours: 2.5 }), SETTINGS_MSG.invalidHours)
     assert.equal(settingsError({ ...ok, reviewWaitHours: '48' as unknown as number }), SETTINGS_MSG.invalidHours)
+  })
+})
+
+describe('사무실 열기 검사 — POST /api/workspaces 400 규칙 (#13 · 화면 · mock 공통)', () => {
+  const ok = { projectStartDate: '2026-11-05', projectEndDate: '2026-11-18', specDocumentPath: null }
+  it('기간 · 명세 문서 경로(건너뛰면 null, 아니면 1~300자)', () => {
+    assert.equal(openWorkspaceError(ok), null)
+    assert.equal(openWorkspaceError({ ...ok, projectEndDate: '2026-11-04' }), SETTINGS_MSG.endBeforeStart)
+    assert.equal(openWorkspaceError({ ...ok, projectStartDate: '' }), SETTINGS_MSG.invalidDate)
+    assert.equal(openWorkspaceError({ ...ok, specDocumentPath: 'docs/req.md' }), null)
+    assert.equal(openWorkspaceError({ ...ok, specDocumentPath: 'a'.repeat(300) }), null)
+    assert.equal(openWorkspaceError({ ...ok, specDocumentPath: 'a'.repeat(301) }), SETTINGS_MSG.invalidSpecPath)
+    assert.equal(openWorkspaceError({ ...ok, specDocumentPath: '' }), SETTINGS_MSG.invalidSpecPath)
+  })
+  it('입력한 경로 → 요청 값: 앞뒤 공백 제거, 비면 null', () => {
+    assert.equal(specPathValue('  docs/req.md '), 'docs/req.md')
+    assert.equal(specPathValue('   '), null)
+  })
+  it('날짜 더하기 · LocalDate 형식', () => {
+    assert.equal(addLocalDays('2026-11-05', 13), '2026-11-18')
+    assert.equal(addLocalDays('2026-12-25', 10), '2027-01-04')
+    assert.equal(isLocalDate('2026-02-29'), false)
+    assert.equal(isLocalDate('2028-02-29'), true)
   })
 })

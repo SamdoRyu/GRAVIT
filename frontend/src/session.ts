@@ -3,7 +3,7 @@
 // 사무실 데이터는 store(useOffice)가 갖고, 여기는 "누가 로그인했고 어느 사무실에 들어가는가"만 갖는다.
 import { create } from 'zustand'
 import { DataError, type DataSource } from './data/DataSource'
-import type { Id, LoginOptions, MeResponse, WorkspaceListItem } from './data/types'
+import type { Id, LoginOptions, MeResponse, OpenWorkspaceRequest, RepositoryChoiceResponse, WorkspaceListItem } from './data/types'
 import { useOffice } from './store'
 
 /** checking = 세션 확인 중, signed_out = 로그인 화면, signed_in = 사무실 고르기 또는 사무실, error = 서버에 닿지 못함 */
@@ -39,6 +39,13 @@ interface SessionState {
   enterWorkspace: (workspaceId: Id) => Promise<void>
   /** 사무실을 닫고 사무실 고르기로 — 다음에 앱을 열어도 고르기부터 */
   leaveWorkspace: () => void
+  /** 새 사무실을 열 수 있는 조직 · 레포(GET /api/repositories). 실패하면 알림 후 null */
+  listRepositories: () => Promise<RepositoryChoiceResponse | null>
+  /**
+   * 레포의 사무실을 열고(POST /api/workspaces — R2만) 바로 들어간다 (#13 · #68).
+   * 실패하면 화면에 보일 문구(입력 칸 아래), 성공하면 null
+   */
+  openNewWorkspace: (request: OpenWorkspaceRequest) => Promise<string | null>
 }
 
 let source: DataSource | null = null
@@ -180,6 +187,35 @@ export const useSession = create<SessionState>((set, get) => {
       const me = get().me
       if (me) remember(me.user.userId, null)
       useOffice.getState().closeOffice()
+    },
+
+    listRepositories: async () => {
+      const src = source
+      if (!src) return null
+      try {
+        return await src.listRepositories()
+      } catch (e) {
+        if (isUnauthorized(e)) await refresh(null)
+        else useOffice.getState().toast('bad', messageOf(e))
+        return null
+      }
+    },
+
+    openNewWorkspace: async (request) => {
+      const src = source
+      if (!src) return '요청을 처리하지 못했어요'
+      let opened: Id
+      try {
+        opened = (await src.openWorkspace(request)).id
+      } catch (e) {
+        if (isUnauthorized(e)) {
+          await refresh(null)
+          return null
+        }
+        return messageOf(e)
+      }
+      await get().enterWorkspace(opened)
+      return null
     },
   }
 })

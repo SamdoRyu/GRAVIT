@@ -6,7 +6,7 @@
 import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
-import { SETTINGS_MSG, SPEC_PATH_MAX_LENGTH, settingsError } from '../../rules/period'
+import { SETTINGS_MSG, openWorkspaceError, settingsError } from '../../rules/period'
 import type {
   AgendaItemDto,
   Change,
@@ -587,21 +587,13 @@ function findSubmission(ws: MockWorkspace, submissionId: Id): SubmissionDto {
 
 // ---- 검사 · 저장 ---------------------------------------------------------------
 
-function isLocalDate(v: unknown): v is string {
-  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
-  const d = new Date(`${v}T00:00:00Z`)
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
-}
-
 function validateOpenRequest(r: OpenWorkspaceRequest): void {
   if (typeof r !== 'object' || r === null || typeof r.githubRepoId !== 'string' || typeof r.activityConsent !== 'boolean') {
     throw new DataError(MSG.invalidRequest, 'invalid')
   }
-  if (!isLocalDate(r.projectStartDate) || !isLocalDate(r.projectEndDate)) throw new DataError(MSG.invalidDate, 'invalid')
-  if (r.projectEndDate < r.projectStartDate) throw new DataError(MSG.endBeforeStart, 'invalid')
-  if (r.specDocumentPath !== null && (typeof r.specDocumentPath !== 'string' || r.specDocumentPath.length < 1 || r.specDocumentPath.length > SPEC_PATH_MAX_LENGTH)) {
-    throw new DataError(MSG.invalidSpecPath, 'invalid')
-  }
+  // 기간 · 명세 문서 경로는 화면과 같은 규칙(rules/period)
+  const error = openWorkspaceError(r)
+  if (error) throw new DataError(error, 'invalid')
 }
 
 /** 전체 교체 — 계약의 칸만, 계약 순서대로 저장한다(요청에 다른 칸이 섞여 와도 남기지 않는다) */
