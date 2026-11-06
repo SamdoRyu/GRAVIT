@@ -1,0 +1,35 @@
+{
+  "organizations": [
+    {
+      "githubOwnerId": "880000001",
+      "login": "samdo-lab",
+      "appInstalled": false,
+      "installUrl": "https://github.com/apps/gravit-office/installations/new",
+      "repositories": []
+    },
+    {
+      "githubOwnerId": "880000002",
+      "login": "team-samdo",
+      "appInstalled": true,
+      "installUrl": null,
+      "repositories": [
+        {
+          "githubRepoId": "880001234",
+          "owner": "team-samdo",
+          "name": "gitvillage",
+          "myRole": "repo_admin",
+          "workspaceId": "3",
+          "adminLogins": []
+        },
+        {
+          "githubRepoId": "880001235",
+          "owner": "team-samdo",
+          "name": "gitvillage-docs",
+          "myRole": "participant",
+          "workspaceId": null,
+          "adminLogins": ["samdo-lee"]
+        }
+      ]
+    }
+  ]
+}

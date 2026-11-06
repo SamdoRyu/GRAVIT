@@ -30,7 +30,6 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.node.ObjectNode;
 
 /**
  * #54 — 강사는 지금 지정된 조의 사무실을 전부 보고, 그 밖의 사무실은 존재도 모른다(FR-AUTH-07 · CONTRACTS.md 「6」).
@@ -153,9 +152,7 @@ class InstructorWorkspacesIntegrationTest {
         assertThat(displayNames(list)).containsExactly("team/alpha", "team/zeta");
         assertThat(list.get(0).get("id").asString()).isEqualTo(Ids.toApi(alpha.getId()));
         assertThat(list.get(1).get("id").asString()).isEqualTo(Ids.toApi(zeta.getId()));
-        ObjectNode example = (ObjectNode) ContractShape.readExample("workspace", "workspace-snapshot.json")
-                .get("workspace").deepCopy();
-        example.put("myRole", "instructor");
+        JsonNode example = ContractShape.readExample("workspace", "workspace-list-item.json");
         for (JsonNode item : list) {
             assertThat(item.get("myRole").asString()).isEqualTo("instructor");
             ContractShape.assertSameShape(example, item);

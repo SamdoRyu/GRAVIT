@@ -13,8 +13,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 계약 테스트 ① — 평가 예시 ↔ Java DTO(CONTRACTS.md 「9」). {@code EvaluationRoundDto} 예시는 Snapshot 예시의
- * {@code submissions[0].currentRound}다. 실제 HTTP 응답 ↔ 예시(②)는 {@code EvaluationIntegrationTest}.
+ * 계약 테스트 ① — 평가 예시 ↔ Java DTO(CONTRACTS.md 「9」). {@code EvaluationRoundDto} 예시는 닫힌 회차 · 내 평가가 있는
+ * {@code evaluation-round.json}(열린 회차는 Snapshot 예시의 {@code submissions[0].currentRound} — Snapshot 계약 테스트).
+ * 실제 HTTP 응답 ↔ 예시(②)는 {@code EvaluationIntegrationTest}.
  */
 class EvaluationContractTest {
 
@@ -40,13 +41,13 @@ class EvaluationContractTest {
 
     @Test
     void evaluationRoundExampleRoundTrips() {
-        JsonNode example = ContractShape.readExample("workspace", "workspace-snapshot.json")
-                .get("submissions").get(0).get("currentRound");
+        JsonNode example = ContractShape.readExample("evaluation", "evaluation-round.json");
 
         EvaluationRoundDto round = MAPPER.treeToValue(example, EvaluationRoundDto.class);
 
         assertThat(MAPPER.<JsonNode>valueToTree(round)).isEqualTo(example);
         ContractShape.assertCommonRules(MAPPER.valueToTree(round));
+        assertThat(round.myEvaluation()).isNotNull();
     }
 
     @Test
