@@ -28,6 +28,8 @@ import type {
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
   Id,
+  InstructorFeedbackCreateRequest,
+  InstructorFeedbackDto,
   LocalDate,
   StandupDto,
   StandupPrefill,
@@ -117,6 +119,16 @@ export interface DataSource {
    * 요청이 틀리면 invalid, confirmed가 아니거나 머지 · 닫힌 PR에 revise_and_reevaluate면 conflict
    */
   recordDecision(workspaceId: Id, agendaItemId: Id, request: DecisionRequest): Promise<AgendaItemDto>
+  /**
+   * POST W/agenda-items/{agendaItemId}/feedback-request — 200 AgendaItemDto(feedbackRequested: true). 이미 켜져 있으면 그대로 (#212).
+   * 팀원만(강사 forbidden_role), 결정 기록 전(discussed가 아님)이면 conflict
+   */
+  requestDecisionFeedback(workspaceId: Id, agendaItemId: Id): Promise<AgendaItemDto>
+  /**
+   * POST W/agenda-items/{agendaItemId}/instructor-feedback — 201 InstructorFeedbackDto. 안건 · 결정 상태는 바뀌지 않는다 (#212).
+   * 지정된 강사만, 피드백 요청이 켜진 결정 기록에만(아니면 forbidden_role). body 1~2000자(공백만 invalid)
+   */
+  addInstructorFeedback(workspaceId: Id, agendaItemId: Id, request: InstructorFeedbackCreateRequest): Promise<InstructorFeedbackDto>
 
   // ---- 「11」 도움 요청 (#183 — 목록은 Snapshot의 helpRequests) ----
   /** GET W/help-requests/{helpRequestId} — 코멘트(createdAt 오름차순) · 도움이 된 코멘트 · 배운 점 */

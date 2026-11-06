@@ -1,6 +1,7 @@
 // Right rail: detail drawer on top, management panel (tabs + search + body) below. OWNER: D.
 // 칸반 · 목록은 v1 이슈 · PR만 보인다(데모 작업 칸반 · 필터는 뺐다 — #102 T5-c-2).
 import { useOffice } from '../store'
+import { DecisionPanel } from './DecisionBoard'
 import { HelpPanel } from './HelpBoard'
 import { RequirementPanel } from './RequirementBoard'
 import { RetroPanel } from './RetroBoard'
@@ -17,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'week', label: '주간' },
   { id: 'help', label: '도움 요청' },
   { id: 'standup', label: '스탠드업' },
+  { id: 'decisions', label: '결정 기록' },
   { id: 'requirements', label: '요구사항' },
   { id: 'retro', label: '회고' },
 ]
@@ -30,7 +32,7 @@ function Panel() {
   // 요구사항 탭은 문서에 있는 요구사항(active)만 센다 (#197)
   const requirementCount = useOffice((s) => s.office?.snapshot?.requirements.filter((r) => r.status === 'active').length ?? 0)
   const ui = useUi.getState()
-  const count = (t: Tab) => (t === 'week' || t === 'standup' || t === 'retro' ? null : t === 'help' ? helpCount : t === 'requirements' ? requirementCount : taskCount)
+  const count = (t: Tab) => (t === 'week' || t === 'standup' || t === 'decisions' || t === 'retro' ? null : t === 'help' ? helpCount : t === 'requirements' ? requirementCount : taskCount)
 
   return (
     <section className="panel glass" aria-label="관리 패널">
@@ -74,6 +76,7 @@ function Panel() {
         {tab === 'week' && <WeekView />}
         {tab === 'help' && <HelpPanel />}
         {tab === 'standup' && <StandupPanel />}
+        {tab === 'decisions' && <DecisionPanel />}
         {tab === 'requirements' && <RequirementPanel />}
         {tab === 'retro' && <RetroPanel />}
       </div>

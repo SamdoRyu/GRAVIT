@@ -3,8 +3,8 @@ import { create } from 'zustand'
 import type { BoardColumn, BoardSortKey } from '../data/rules/board'
 import { OVERLAY_QUERY } from './hooks'
 
-/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190, 회고 — #209 */
-export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup' | 'requirements' | 'retro'
+/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190, 회고 — #209, 결정 기록 — #212 */
+export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup' | 'requirements' | 'retro' | 'decisions'
 
 /** 도움 요청 쓰기 초안 — 스탠드업 "막힌 것"에서 넘길 때 (#190) */
 export interface HelpDraft {
@@ -51,6 +51,12 @@ interface UiState {
   helpDraft: HelpDraft | null
   /** 도움 요청 탭 목록으로 가서 이 초안으로 쓰기 폼을 연다(null = 비우기) */
   startHelpDraft: (draft: HelpDraft | null) => void
+
+  // ---- 결정 기록 탭 (#212) ----
+  /** 탭에서 연 결정 기록(안건 ID). null = 목록 */
+  decisionItemId: string | null
+  /** 결정 기록 탭으로 가서 그 기록을 연다(null = 목록으로). 3D 게시판(#205)도 이것으로 연다 (CONTRACTS.md 「8」 게시판) */
+  openDecisionRecord: (agendaItemId: string | null) => void
 }
 
 export const useUi = create<UiState>((set, get) => ({
@@ -91,5 +97,10 @@ export const useUi = create<UiState>((set, get) => ({
   startHelpDraft: (helpDraft) => {
     if (helpDraft) get().openHelpRequest(null)
     set({ helpDraft })
+  },
+  decisionItemId: null,
+  openDecisionRecord: (decisionItemId) => {
+    if (get().tab !== 'decisions') get().setTab('decisions')
+    set({ decisionItemId })
   },
 }))
