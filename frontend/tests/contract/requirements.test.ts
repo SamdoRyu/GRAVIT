@@ -6,7 +6,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError, type DataErrorCode } from '../../src/data/DataSource'
 import { createMemoryStorage, type StorageLike } from '../../src/data/mock'
 import { createV1MockDataSource, V1_STORAGE_KEY } from '../../src/data/mock/v1'
-import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../src/data/rules/requirements'
+import { REQUIREMENT_MSG, deckOrderKey, existingLink, keepDeckOrder, linkRequestError, parseDeckOrder, sameDeckOrder, swapDeckOrder, withProgress } from '../../src/data/rules/requirements'
 import type { Change, RequirementDto, RequirementLinkDto } from '../../src/data/types'
 import { useOffice } from '../../src/store'
 
@@ -187,5 +187,110 @@ describe('store — linkRequirement · unlinkRequirement', () => {
     assert.deepEqual(office()!.snapshot!.requirementLinks, before.requirementLinks)
     const shown = useOffice.getState().toasts.slice(toasts)
     assert.ok(shown.length >= 1 && shown.every((t) => t.level === 'bad' && t.text === REQUIREMENT_MSG.notAdmin))
+  })
+})
+
+describe('판 배치 교환 결과 — 규칙 (「8」 · 「10」)', () => {
+  const actives = (n: number): Pick<RequirementDto, 'id' | 'status'>[] => Array.from({ length: n }, (_, i) => ({ id: `r${i}`, status: 'active' }))
+
+  it('저장값 읽기 — 문자열 ID 배열만, 깨진 값 · 빈 배열은 null', () => {
+    assert.deepEqual(parseDeckOrder('["a","b"]'), ['a', 'b'])
+    for (const raw of [null, '', '{nope', '[]', '[1,2]', '["a",""]', '{"a":1}']) assert.equal(parseDeckOrder(raw), null, String(raw))
+  })
+
+  it('버리는 때 — 비어 있음 · active 10개 이하 · 교환한 요구사항이 active가 아님(missing · needs_review · 사라짐)', () => {
+    assert.equal(keepDeckOrder(null, actives(12)), null)
+    assert.equal(keepDeckOrder([], actives(12)), null)
+    assert.equal(keepDeckOrder(['r0'], actives(10)), null, '10개 이하면 대기 칸이 없다')
+    assert.equal(keepDeckOrder(['r0', 'gone'], actives(12)), null)
+    assert.equal(keepDeckOrder(['r0'], actives(12).map((r) => (r.id === 'r0' ? { ...r, status: 'missing' as const } : r))), null)
+    assert.equal(keepDeckOrder(['r1'], actives(12).map((r) => (r.id === 'r1' ? { ...r, status: 'needs_review' as const } : r))), null)
+  })
+
+  it('쓸 수 있으면 중복을 빼고 판 자리 수(9)까지', () => {
+    assert.deepEqual(keepDeckOrder(['r11', 'r0', 'r11'], actives(12)), ['r11', 'r0'])
+    assert.equal(keepDeckOrder(actives(12).map((r) => r.id), actives(12))?.length, 9)
+  })
+
+  it('자리 바꾸기 — 고른 판 자리에 대기 요구사항, 나머지 판 순서는 그대로', () => {
+    assert.deepEqual(swapDeckOrder(['a', 'b', 'c'], 'b', 'z'), ['a', 'z', 'c'])
+    assert.ok(sameDeckOrder(['a'], ['a']) && sameDeckOrder(null, null) && !sameDeckOrder(['a'], null) && !sameDeckOrder(['a', 'b'], ['b', 'a']))
+  })
+})
+
+describe('store — 판 배치 교환 결과 · 대기 목록', () => {
+  // 브라우저 저장소 — Node에는 없어 메모리로 흉내 낸다
+  const mem = new Map<string, string>()
+  let broken = false
+  ;(globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => {
+      if (broken) throw new Error('blocked')
+      return mem.get(k) ?? null
+    },
+    setItem: (k: string, v: string) => void mem.set(k, v),
+    removeItem: (k: string) => void mem.delete(k),
+  }
+  afterEach(() => {
+    useOffice.getState().closeOffice()
+    useOffice.getState().openDialog(null)
+    mem.clear()
+    broken = false
+  })
+  const st = () => useOffice.getState()
+  const KEY = deckOrderKey(DEMO_WS)
+
+  it('바꾸면 사무실별로 저장하고, 다시 열면 읽는다 · "기본 순서로"는 지운다 · 사무실을 닫으면 비운다', async () => {
+    const source = make()
+    await st().openOffice(source, DEMO_WS)
+    st().setRequirementDeckOrder(['rq_31', 'rq_21'])
+    assert.deepEqual(st().requirementDeckOrder, ['rq_31', 'rq_21'])
+    assert.equal(mem.get(KEY), '["rq_31","rq_21"]')
+
+    st().closeOffice()
+    assert.equal(st().requirementDeckOrder, null)
+    await st().openOffice(source, DEMO_WS)
+    assert.deepEqual(st().requirementDeckOrder, ['rq_31', 'rq_21'])
+
+    st().setRequirementDeckOrder(null)
+    assert.equal(st().requirementDeckOrder, null)
+    assert.equal(mem.has(KEY), false)
+  })
+
+  it('쓸 수 없는 교환 결과는 null로 저장 — active 10개 이하인 사무실 · active가 아닌 요구사항', async () => {
+    await st().openOffice(make(), TEAM_WS)
+    st().setRequirementDeckOrder(['rq_1'])
+    assert.equal(st().requirementDeckOrder, null, '팀 사무실은 active 5개')
+    assert.equal(mem.has(deckOrderKey(TEAM_WS)), false)
+  })
+
+  it('저장소를 읽지 못하거나 저장값이 깨졌으면 기본 순서(null)', async () => {
+    mem.set(KEY, '{broken')
+    await st().openOffice(make(), DEMO_WS)
+    assert.equal(st().requirementDeckOrder, null)
+    st().closeOffice()
+    mem.set(KEY, '["rq_31"]')
+    broken = true
+    await st().openOffice(make(), DEMO_WS)
+    assert.equal(st().requirementDeckOrder, null)
+  })
+
+  it('재동기화로 교환한 요구사항이 active가 아니게 되면 버리고 저장값도 지운다', async () => {
+    mem.set(KEY, '["rq_31"]')
+    await st().openOffice(make(), DEMO_WS)
+    assert.deepEqual(st().requirementDeckOrder, ['rq_31'])
+    // 서버가 다시 보낸 Snapshot에서 rq_31이 missing이 됐다
+    const office = st().office!
+    const snapshot = { ...office.snapshot!, requirements: office.snapshot!.requirements.map((r) => (r.id === 'rq_31' ? { ...r, status: 'missing' as const } : r)) }
+    useOffice.setState({ office: { ...office, snapshot } })
+    assert.equal(st().requirementDeckOrder, null)
+    assert.equal(mem.has(KEY), false)
+  })
+
+  it('대기 목록 열기 — 대기 칸을 누르면 인자 없이, 이슈 상자를 놓으면 그 이슈 ID로', async () => {
+    await st().openOffice(make(), DEMO_WS)
+    st().openRequirementWaiting()
+    assert.deepEqual(st().dialog, { kind: 'requirementWaiting', linkTaskId: null })
+    st().openRequirementWaiting('t_12')
+    assert.deepEqual(st().dialog, { kind: 'requirementWaiting', linkTaskId: 't_12' })
   })
 })

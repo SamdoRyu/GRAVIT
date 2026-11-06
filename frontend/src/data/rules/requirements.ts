@@ -1,6 +1,7 @@
 // 요구사항 연결 · 표시 규칙 (FR-REQ-04 · 05 · 06 · 07, CONTRACTS_API.md 「8」 · CONTRACTS.md 「3」). 순수 함수 — mock · store · 요구사항 패널(RequirementBoard.tsx)이 같은 규칙을 쓴다.
 // 서버는 같은 규칙으로 다시 검사 · 계산한다. 소유: D (#197).
-import type { RequirementDto, RequirementLinkCreateRequest, RequirementLinkDto, TaskDto, Viewer, WorkspaceSnapshot } from '../types'
+import { DECK_MAX_PLATES } from '../../scene/model/requirementDeck'
+import type { Id, RequirementDto, RequirementLinkCreateRequest, RequirementLinkDto, TaskDto, Viewer, WorkspaceSnapshot } from '../types'
 
 export const REQUIREMENT_MSG = {
   notAdmin: '요구사항 연결은 레포 관리자만 바꿀 수 있어요',
@@ -112,3 +113,40 @@ export function requirementName(r: Pick<RequirementDto, 'sourceKey' | 'title'>):
 
 /** 연결을 바꿀 수 있는가 — 레포 관리자(R2)만 (CONTRACTS_API.md 「8」). 화면 표시용, 서버가 다시 검사한다 */
 export const canEditRequirementLinks = (viewer: Pick<Viewer, 'role'>) => viewer.role === 'repo_admin'
+
+// ---- 요구사항 판 배치 교환 결과 (#197 — CONTRACTS.md 「8」 판 배치 · 「10」 버리는 때) ----
+// 판 수 · 대기 칸 규칙은 SceneModel(planRequirementDeck) 한 곳. 여기는 보는 사람의 브라우저에 둘 교환 결과를 정리 · 버리는 규칙만 본다.
+
+/** 브라우저 저장 키 — 사무실별, 보는 사람의 브라우저에만(서버 저장 없음) */
+export const deckOrderKey = (workspaceId: Id) => `gravit.requirementDeck.${workspaceId}`
+
+/** 저장값 읽기 — 문자열 ID 배열이 아니면 null(깨진 값은 버린다) */
+export function parseDeckOrder(raw: string | null): Id[] | null {
+  if (raw === null) return null
+  try {
+    const value: unknown = JSON.parse(raw)
+    return Array.isArray(value) && value.length > 0 && value.every((x) => typeof x === 'string' && x !== '') ? (value as Id[]) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 교환 결과를 쓸 수 있으면 정리한 목록(중복 없이, 판 자리 수까지), 버릴 때면 null.
+ * 버리는 때: 비어 있음 · active 요구사항이 판 수 이하(대기 칸 없음) · 교환한 요구사항 중 active가 아닌 것(missing · needs_review · 사라짐)
+ */
+export function keepDeckOrder(order: readonly Id[] | null, requirements: readonly Pick<RequirementDto, 'id' | 'status'>[]): Id[] | null {
+  if (!order || order.length === 0) return null
+  const active = new Set(requirements.filter((r) => r.status === 'active').map((r) => r.id))
+  if (active.size <= DECK_MAX_PLATES) return null
+  if (!order.every((id) => active.has(id))) return null
+  return [...new Set(order)].slice(0, DECK_MAX_PLATES - 1)
+}
+
+/** 판에 오른 요구사항(판 순서) 중 boardId 자리에 대기 칸의 waitingId를 올린 교환 결과 — 나머지 판 순서는 그대로 */
+export function swapDeckOrder(shown: readonly Id[], boardId: Id, waitingId: Id): Id[] {
+  return shown.map((id) => (id === boardId ? waitingId : id))
+}
+
+/** 두 교환 결과가 같은가 */
+export const sameDeckOrder = (a: readonly Id[] | null, b: readonly Id[] | null) => a === b || (a !== null && b !== null && a.length === b.length && a.every((id, i) => id === b[i]))
