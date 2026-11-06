@@ -4,8 +4,13 @@ import type {
   AgendaItemCreateRequest,
   AgendaItemDto,
   Change,
+  DecisionCardCreateRequest,
+  DecisionCardDto,
+  DecisionCardUpdateRequest,
   DecisionRequest,
   EndMeetingRequest,
+  FollowUpQuestionCreateRequest,
+  FollowUpQuestionDto,
   MeetingDto,
   StartMeetingRequest,
   TaskDueDateDto,
@@ -161,6 +166,21 @@ export interface DataSource {
   updateReportLearning(workspaceId: Id, memberId: Id, reportId: Id, request: ReportLearningRequest): Promise<RetroReportDto>
   /** GET W/members/{memberId}/reports/{reportId}/markdown — text/markdown 본문. 팀원 이름은 "팀원 A"처럼 바뀐다 (FR-REP-03) */
   exportReportMarkdown(workspaceId: Id, memberId: Id, reportId: Id): Promise<string>
+
+  // ---- 「15」 개인 API — 기술 결정 카드 · 강사 꼬리질문 (#218). 접근 규칙은 위와 같다 ----
+  /** GET W/members/{memberId}/decision-cards — createdAt 내림차순 */
+  listDecisionCards(workspaceId: Id, memberId: Id): Promise<DecisionCardDto[]>
+  /**
+   * POST W/members/{memberId}/decision-cards — 201. 9칸을 재료에서 규칙대로 채운다(AI 없음, 재료 없는 칸은 null).
+   * 본인만. 내가 작성한 PR이 아님 forbidden_role, PR이 아직 열림 · 같은 PR 카드가 있음 conflict
+   */
+  createDecisionCard(workspaceId: Id, memberId: Id, request: DecisionCardCreateRequest): Promise<DecisionCardDto>
+  /** PUT W/members/{memberId}/decision-cards/{cardId} — 본인만. 9칸 각 0~2000자, confirmed: true인데 learning이 비었으면 invalid */
+  updateDecisionCard(workspaceId: Id, memberId: Id, cardId: Id, request: DecisionCardUpdateRequest): Promise<DecisionCardDto>
+  /** POST W/members/{memberId}/decision-cards/{cardId}/follow-up-request — 본인만. 이미 켜져 있으면 처음 시각 그대로 */
+  requestFollowUp(workspaceId: Id, memberId: Id, cardId: Id): Promise<DecisionCardDto>
+  /** POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions — 201. R4만, 1~1000자, 요청 안 된 카드 forbidden_role */
+  addFollowUpQuestion(workspaceId: Id, memberId: Id, cardId: Id, request: FollowUpQuestionCreateRequest): Promise<FollowUpQuestionDto>
 
   // ---- 「13」 작업 마감 (C의 일정판이 쓴다) ----
   /** PUT W/tasks/{taskId}/due-date — R2 또는 그 이슈 담당자. 아니면 forbidden_role, 날짜 형식 invalid */

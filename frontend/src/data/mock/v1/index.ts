@@ -4,6 +4,7 @@
 // 로그인 여부(unauthorized)와 "내가 들어갈 수 있는 사무실"(not_found)은 지킨다.
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
+import { CARD_MSG, cardConfirmError, cardCreateError, cardUpdateError, draftCardCells, followUpQuestionError, type CardMaterials } from '../../rules/decisionCard'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
@@ -15,6 +16,7 @@ import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
   Change,
+  DecisionCardDto,
   EvaluationRoundDto,
   HelpCommentDto,
   HelpRequestDetail,
@@ -160,6 +162,34 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
     if (!target) throw new DataError(REPORT_MSG.memberNotFound, 'not_found')
     if (target.id !== currentMember(ws, requireUser())?.id) throw new DataError(mode === 'read' ? REPORT_MSG.notSelf : REPORT_MSG.notSelfWrite, 'forbidden_role')
     return target
+  }
+
+  /** 카드 재료 — 서버 DecisionCardService.materials와 같은 재료 · 순서(rules/decisionCard.ts draftCardCells가 9칸으로 옮긴다) */
+  function cardMaterials(ws: MockWorkspace, member: MemberDto, sub: SubmissionDto): CardMaterials {
+    const s = ws.snapshot
+    const linked = s.tasks.filter((t) => sub.linkedTaskIds.includes(t.id))
+    const linkedIds = new Set(linked.map((t) => t.id))
+    const requirementIds = new Set(s.requirementLinks.filter((l) => linkedIds.has(l.taskId)).map((l) => l.requirementId))
+    const rounds = [
+      ...(sub.currentRound ? [viewRound(ws, sub, sub.currentRound, member, true)] : []),
+      ...(ws.pastRounds ?? []).filter((p) => p.submissionId === sub.id).map((p) => viewRound(ws, sub, p.round, member, false)),
+    ].sort((a, b) => a.roundNumber - b.roundNumber)
+    const decisions = s.agendaItems
+      .flatMap((a) => (a.source?.type === 'submission' && a.source.id === sub.id && a.decision ? [a.decision] : []))
+      .sort((a, b) => Date.parse(a.decidedAt) - Date.parse(b.decidedAt))
+      .map((d) => ({ conclusion: d.conclusion, learning: d.learning, meetingNotes: d.meetingId === null ? null : (s.meetings.find((m) => m.id === d.meetingId)?.notes ?? null) }))
+    return {
+      requirementTitles: s.requirements.filter((r) => requirementIds.has(r.id)).map((r) => r.title),
+      feedbacks: rounds.flatMap((r) => r.reasons),
+      decisions,
+      linkedIssueNumbers: linked.map((t) => t.githubIssueNumber),
+      standups: (ws.standups ?? [])
+        .filter((st) => st.memberId === member.id)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((st) => ({ date: st.date, blockers: st.blockers })),
+      prUrl: sub.htmlUrl,
+      linkedIssueUrls: linked.map((t) => t.htmlUrl),
+    }
   }
 
   /**
@@ -785,7 +815,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
     },
 
     // ---- 「15」 개인 API — 학습 타임라인 · 회고 리포트 (#209). 서버와 같은 계산(rules/report.ts) ----
-    // mock에는 강사 계정이 없어 읽기 · 쓰기 모두 본인만이다. 활동 기록 · 기술 결정 카드가 mock에 없어 그 칸은 빈 목록이다.
+    // mock에는 강사 계정이 없어 읽기 · 쓰기 모두 본인만이다. 활동 기록이 mock에 없어 그 칸은 빈 목록이다(카드는 #218).
     // 개인 데이터라 Snapshot · SSE에 싣지 않는다(알림 없음).
 
     async getTimeline(workspaceId, memberId, page = 0, size = TIMELINE_PAGE_SIZE) {
@@ -855,6 +885,93 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const ws = accessible(workspaceId, requireUser())
       const target = personalTarget(ws, memberId, 'read')
       return anonymizeMembers(reportMarkdown(reportView(ws, findReport(ws, target, reportId))), ws.snapshot.members)
+    },
+
+    // ---- 「15」 개인 API — 기술 결정 카드 · 강사 꼬리질문 (#218). 9칸은 서버와 같은 규칙(rules/decisionCard.ts) ----
+    // 검사 순서는 서버와 같다: 본문(400) → 경로 팀원(404) → 본인 · 강사(403) → PR · 카드(404) → 상태(409 · 400).
+    // mock에는 강사 계정이 없어 꼬리질문 쓰기는 늘 forbidden_role이다. Snapshot · SSE에 싣지 않는다(알림 없음).
+
+    async listDecisionCards(workspaceId, memberId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const target = personalTarget(ws, memberId, 'read')
+      return structuredClone(cardsOf(ws, target.id))
+    },
+
+    async createDecisionCard(workspaceId, memberId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const error = cardCreateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const target = personalTarget(ws, memberId, 'write')
+      const sub = ws.snapshot.submissions.find((s) => s.id === request.submissionId)
+      if (!sub) throw new DataError(CARD_MSG.submissionNotFound, 'not_found')
+      if (sub.authorMemberId !== target.id) throw new DataError(CARD_MSG.notMyPr, 'forbidden_role')
+      if (sub.state === 'open' || sub.state === 'draft') throw new DataError(CARD_MSG.prOpen, 'conflict')
+      ws.decisionCards ??= []
+      if (ws.decisionCards.some((c) => c.memberId === target.id && c.submissionId === sub.id)) throw new DataError(CARD_MSG.duplicate, 'conflict')
+      const at = toInstant(now())
+      const card: DecisionCardDto = {
+        id: nextId('dc'),
+        memberId: target.id,
+        submissionId: sub.id,
+        cells: draftCardCells(cardMaterials(ws, target, sub)),
+        confirmed: false,
+        confirmedAt: null,
+        followUpRequested: false,
+        followUpRequestedAt: null,
+        followUpQuestions: [],
+        createdAt: at,
+        updatedAt: at,
+      }
+      ws.decisionCards.push(card)
+      save()
+      return structuredClone(card)
+    },
+
+    async updateDecisionCard(workspaceId, memberId, cardId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const error = cardUpdateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      const target = personalTarget(ws, memberId, 'write')
+      const card = findCard(ws, target, cardId)
+      const confirmError = cardConfirmError(request)
+      if (confirmError) throw new DataError(confirmError, 'invalid')
+      const at = toInstant(now())
+      // 계약의 9칸만, 계약 순서대로 통째로 바꾼다
+      const c = request.cells
+      card.cells = { goal: c.goal, initialApproach: c.initialApproach, feedbackReceived: c.feedbackReceived, meetingDecision: c.meetingDecision, finalChange: c.finalChange, rationale: c.rationale, blockedMoment: c.blockedMoment, learning: c.learning, source: c.source }
+      card.confirmed = request.confirmed
+      // 확인을 끄면 확인 시각을 지우고, 이미 확인된 카드를 다시 확인하면 처음 시각을 둔다(서버 DecisionCard.edit)
+      card.confirmedAt = request.confirmed ? (card.confirmedAt ?? at) : null
+      card.updatedAt = at
+      save()
+      return structuredClone(card)
+    },
+
+    async requestFollowUp(workspaceId, memberId, cardId) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const target = personalTarget(ws, memberId, 'write')
+      const card = findCard(ws, target, cardId)
+      // 이미 켜져 있으면 처음 시각 그대로 — 끄는 API는 없다. 수정 시각은 바꾸지 않는다
+      if (!card.followUpRequested) {
+        card.followUpRequested = true
+        card.followUpRequestedAt = toInstant(now())
+        save()
+      }
+      return structuredClone(card)
+    },
+
+    async addFollowUpQuestion(workspaceId, memberId, _cardId, request) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      const error = followUpQuestionError(request)
+      if (error) throw new DataError(error, 'invalid')
+      if (!ws.snapshot.members.some((m) => m.id === memberId)) throw new DataError(REPORT_MSG.memberNotFound, 'not_found')
+      // R4만 쓴다 — mock에는 강사 계정이 없어 여기서 끝난다(요청 안 된 카드 forbidden_role은 서버가 본다)
+      throw new DataError(CARD_MSG.instructorOnly, 'forbidden_role')
     },
 
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----
@@ -944,10 +1061,26 @@ function findReport(ws: MockWorkspace, member: MemberDto, reportId: Id): StoredR
   return report
 }
 
-/** 저장된 리포트 + 지금 사무실 데이터 → 응답. mock에는 활동 기록 · 기술 결정 카드가 없다 */
+/** 저장된 리포트 + 지금 사무실 데이터 → 응답. 카드는 본인이 확인한 것만(P11). mock에는 활동 기록이 없다 */
 function reportView(ws: MockWorkspace, report: StoredReport) {
   const { tasks, submissions, agendaItems } = ws.snapshot
-  return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution: [], decisionCards: [] }))
+  const decisionCards = cardsOf(ws, report.memberId).filter((c) => c.confirmed)
+  return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution: [], decisionCards }))
+}
+
+/** 그 팀원의 카드 — createdAt 내림차순, 같으면 나중에 만든 것 먼저(서버 findByMemberIdOrderByCreatedAtDescIdDesc) */
+function cardsOf(ws: MockWorkspace, memberId: Id): DecisionCardDto[] {
+  return (ws.decisionCards ?? [])
+    .filter((c) => c.memberId === memberId)
+    .reverse()
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+}
+
+/** 그 팀원의 카드 — 없거나 다른 팀원 것이면 not_found */
+function findCard(ws: MockWorkspace, member: MemberDto, cardId: Id): DecisionCardDto {
+  const card = (ws.decisionCards ?? []).find((c) => c.id === cardId && c.memberId === member.id)
+  if (!card) throw new DataError(CARD_MSG.cardNotFound, 'not_found')
+  return card
 }
 
 function findSubmission(ws: MockWorkspace, submissionId: Id): SubmissionDto {

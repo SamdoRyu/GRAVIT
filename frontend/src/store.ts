@@ -3,7 +3,7 @@
 // 데모 모델과 옛 view state(데모 선택 · 카메라 이동 · 끌기)는 #102 ④에서 걷어냈다. 3D 강조는 hover(SceneModel 키), 선택은 officeSelection.
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
-import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
+import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
@@ -169,6 +169,18 @@ interface OfficeState {
   updateReportLearning: (memberId: Id, reportId: Id, request: ReportLearningRequest) => Promise<RetroReportDto | null>
   /** GET …/reports/{reportId}/markdown — 팀원 이름이 익명화된 마크다운 */
   exportReportMarkdown: (memberId: Id, reportId: Id) => Promise<string | null>
+
+  // ---- 기술 결정 카드 · 강사 꼬리질문 (#218 — 「15」). 개인 API라 Snapshot · SSE 밖. 실패하면 알림 후 null ----
+  /** GET W/members/{memberId}/decision-cards — 본인 · 지정된 강사 */
+  loadDecisionCards: (memberId: Id) => Promise<DecisionCardDto[] | null>
+  /** POST W/members/{memberId}/decision-cards — 본인만, 머지되거나 닫힌 내 PR */
+  createDecisionCard: (memberId: Id, request: DecisionCardCreateRequest) => Promise<DecisionCardDto | null>
+  /** PUT …/decision-cards/{cardId} — 본인만, 확인하려면 배운 점 필수 */
+  updateDecisionCard: (memberId: Id, cardId: Id, request: DecisionCardUpdateRequest) => Promise<DecisionCardDto | null>
+  /** POST …/decision-cards/{cardId}/follow-up-request — 본인만 */
+  requestFollowUp: (memberId: Id, cardId: Id) => Promise<DecisionCardDto | null>
+  /** POST …/decision-cards/{cardId}/follow-up-questions — 지정된 강사, 요청된 카드만 */
+  addFollowUpQuestion: (memberId: Id, cardId: Id, request: FollowUpQuestionCreateRequest) => Promise<FollowUpQuestionDto | null>
   /**
    * v1 사무실에서 고른 이슈 · PR · 팀원 — 상세 서랍이 연다 (#102 T5-c-2).
    * Snapshot에서 사라지면 null.
@@ -503,6 +515,29 @@ export const useOffice = create<OfficeState>((set, get) => {
         (snap) => snap,
       ),
     exportReportMarkdown: (memberId, reportId) => officeRead((src, ws) => src.exportReportMarkdown(ws, memberId, reportId)),
+
+    // ---- 기술 결정 카드 (#218) — Snapshot에 없다. 화면이 열 때 읽고, 쓴 뒤 응답으로 바꾼다 ----
+    loadDecisionCards: (memberId) => officeRead((src, ws) => src.listDecisionCards(ws, memberId)),
+    createDecisionCard: (memberId, request) =>
+      officeWrite(
+        (src, ws) => src.createDecisionCard(ws, memberId, request),
+        (snap) => snap,
+      ),
+    updateDecisionCard: (memberId, cardId, request) =>
+      officeWrite(
+        (src, ws) => src.updateDecisionCard(ws, memberId, cardId, request),
+        (snap) => snap,
+      ),
+    requestFollowUp: (memberId, cardId) =>
+      officeWrite(
+        (src, ws) => src.requestFollowUp(ws, memberId, cardId),
+        (snap) => snap,
+      ),
+    addFollowUpQuestion: (memberId, cardId, request) =>
+      officeWrite(
+        (src, ws) => src.addFollowUpQuestion(ws, memberId, cardId, request),
+        (snap) => snap,
+      ),
 
     hover: null,
     setHover: (hover) => {
