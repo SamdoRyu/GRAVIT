@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, inboxItemExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, inboxItemExample, conventionLibraryItemExample, conventionLibraryItemRequestExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -171,6 +171,10 @@ async function startFake(): Promise<Fake> {
     }
     // 「16」 강사 요청함 (#224) — answered 쿼리는 빼거나 true · false
     if (r.method === 'GET' && /^\/api\/instructor\/inbox(\?answered=(true|false))?$/.test(path)) return sendJson(res, 200, [inboxItemExample])
+    // 「17」 컨벤션 라이브러리 (#225)
+    if (r.method === 'GET' && path === '/api/convention-library') return sendJson(res, 200, [conventionLibraryItemExample])
+    if (r.method === 'POST' && path === '/api/convention-library') return sendJson(res, 201, { ...conventionLibraryItemExample, ...(JSON.parse(r.body) as object) })
+    if (r.method === 'PUT' && /^\/api\/convention-library\/[^/]+$/.test(path)) return sendJson(res, 200, { ...conventionLibraryItemExample, ...(JSON.parse(r.body) as object) })
     // 「8」 요구사항 연결 (#197)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
     if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
@@ -400,6 +404,24 @@ describe('v1 api — 쓰기 · CSRF', () => {
     )
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '이 작업을 할 권한이 없어요'))
     await rejectsWith(api.getInstructorInbox(), 'forbidden_role', '이 작업을 할 권한이 없어요')
+  })
+
+  it('컨벤션 라이브러리 — 사무실 경로 밖, 읽기 GET · 등록 POST 201 · 편집 PUT 본문 그대로, 403 · 400을 그대로 (#225)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.deepEqual(await api.listConventionLibrary(), [conventionLibraryItemExample])
+    assert.equal((await api.createConventionLibraryItem(conventionLibraryItemRequestExample)).target, 'branch_name')
+    assert.equal((await api.updateConventionLibraryItem('3', conventionLibraryItemRequestExample)).name, '브랜치 이름')
+    const body = JSON.stringify(conventionLibraryItemRequestExample)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      ['GET /api/convention-library - -', `POST /api/convention-library tok-1 ${body}`, `PUT /api/convention-library/3 tok-1 ${body}`],
+    )
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '이 작업을 할 권한이 없어요'))
+    await rejectsWith(api.createConventionLibraryItem(conventionLibraryItemRequestExample), 'forbidden_role', '이 작업을 할 권한이 없어요')
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '요청 값이 올바르지 않아요'))
+    await rejectsWith(api.updateConventionLibraryItem('3', { ...conventionLibraryItemRequestExample, name: '' }), 'invalid')
   })
 
   it('요구사항 연결 — POST 본문 · DELETE 204, 경로 · CSRF, 403 · 409를 그대로 (#197)', async () => {

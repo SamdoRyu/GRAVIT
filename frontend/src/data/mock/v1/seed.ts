@@ -3,6 +3,7 @@
 // 다루면 바로 드러나게 한다(CONTRACTS.md 「2」 변환 경계). GitHub 식별자는 10진 문자열이다.
 // 안건 · 회의 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []). 요구사항 · 연결은 #197, 도움 요청은 #183.
 import type {
+  ConventionLibraryItemDto,
   DecisionCardDto,
   InstructorAssignmentDto,
   EvaluationRoundDto,
@@ -97,6 +98,49 @@ export const MOCK_INSTRUCTOR_ALLOWLIST: { githubUserId: string; githubLogin: str
   { githubUserId: '9001', githubLogin: 'mentor-park', displayName: '박멘토' },
   { githubUserId: '9002', githubLogin: null, displayName: null },
   { githubUserId: '9003', githubLogin: 'mentor-han', displayName: '한멘토' },
+]
+
+/**
+ * 공용 컨벤션 라이브러리 (#225 — CONTRACTS_API.md 「17」). 서버 전체에 하나라 사무실 밖에 둔다. mock에는 GitHub 강사 계정이 없어
+ * 쓰기가 늘 거부되므로 저장하지 않는 고정 값이다. 서버 순서(target 계약 순 → name) 그대로 둔다.
+ */
+export const MOCK_CONVENTION_LIBRARY: readonly ConventionLibraryItemDto[] = [
+  {
+    id: 'cl_1',
+    target: 'branch_name',
+    name: '작업 브랜치 이름',
+    content: '<type>/<이슈번호>-<짧은-설명>\n\n예: feat/12-github-login, fix/18-login-error',
+    description: 'type은 feat · fix · refactor · test · docs · chore. 이슈번호에 #을 붙이지 않아요.',
+    author: { userId: 'u_90', githubLogin: 'mentor-park', displayName: '박멘토', avatarUrl: null },
+    updatedAt: '2026-11-02T01:00:00Z',
+  },
+  {
+    id: 'cl_2',
+    target: 'commit_message',
+    name: '커밋 메시지 한 줄 요약',
+    content: '무엇을 왜 바꿨는지 한 줄로 쓰고, 필요하면 빈 줄 다음에 자세히 써요.\n\n예: 로그인 실패 문구를 서버 응답에 맞춤',
+    description: null,
+    author: { userId: 'u_91', githubLogin: 'mentor-han', displayName: '한멘토', avatarUrl: null },
+    updatedAt: '2026-11-03T02:30:00Z',
+  },
+  {
+    id: 'cl_3',
+    target: 'pr_title',
+    name: 'PR 제목 규칙',
+    content: '<type>(<scope>)?: <설명>\n\n예: feat(auth): GitHub 로그인',
+    description: '설명은 50자 이내, 끝에 마침표 없이 써요.',
+    author: { userId: 'u_90', githubLogin: 'mentor-park', displayName: '박멘토', avatarUrl: null },
+    updatedAt: '2026-11-04T05:00:00Z',
+  },
+  {
+    id: 'cl_4',
+    target: 'pr_template',
+    name: 'PR 본문 템플릿',
+    content: '## 무엇을 바꿨나요\n\n## 왜 바꿨나요\n\n## 어떻게 확인했나요\n\nCloses #',
+    description: '확인한 것만 적어요.',
+    author: { userId: 'u_91', githubLogin: 'mentor-han', displayName: '한멘토', avatarUrl: null },
+    updatedAt: '2026-11-05T03:00:00Z',
+  },
 ]
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {

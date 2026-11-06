@@ -733,3 +733,27 @@ export interface InboxItem {
   /** 강사 답변 · 피드백 · 꼬리질문이 하나라도 있으면 그 첫 시각 */
   answeredAt: Instant | null
 }
+
+// ---- 「17」 컨벤션 라이브러리 (서버 전체에 하나 — 사무실 경로 밖) ----------------
+
+export type ConventionTarget = 'branch_name' | 'commit_message' | 'pr_title' | 'pr_body' | 'issue_body' | 'issue_template' | 'pr_template'
+/** `POST /api/convention-library` · `PUT /api/convention-library/{itemId}` — GitHub 계정 강사만 */
+export interface ConventionLibraryItemRequest {
+  target: ConventionTarget
+  /** 1~100자 */
+  name: string
+  /** 패턴 · 예시 · 템플릿 본문, 1~20000자 */
+  content: string
+  /** 0~2000자 */
+  description: string | null
+}
+export interface ConventionLibraryItemDto {
+  id: Id
+  target: ConventionTarget
+  name: string
+  content: string
+  description: string | null
+  /** 만든 강사 — 다른 강사가 고쳐도 그대로 */
+  author: UserRef
+  updatedAt: Instant
+}

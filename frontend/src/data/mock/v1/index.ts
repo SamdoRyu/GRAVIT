@@ -13,11 +13,13 @@ import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, 
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
 import { INBOX_MSG, canUseInbox } from '../../rules/inbox'
 import { INSTRUCTOR_MSG, assignError } from '../../rules/instructors'
+import { CONVENTION_MSG, conventionRequestError } from '../../rules/conventionLibrary'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
   Change,
+  ConventionLibraryItemRequest,
   DecisionCardDto,
   EvaluationRoundDto,
   HelpCommentDto,
@@ -40,7 +42,7 @@ import type {
   WorkspaceSnapshot,
 } from '../../types'
 import { defaultStorage, type StorageLike } from '../storage'
-import { MOCK_INSTRUCTOR_ALLOWLIST, MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockHelpThread, type MockSession, type MockState, type MockWorkspace } from './seed'
+import { MOCK_CONVENTION_LIBRARY, MOCK_INSTRUCTOR_ALLOWLIST, MOCK_OWNERS, MOCK_STATE_VERSION, MOCK_USERS, createSeed, openedWorkspace, toInstant, type MockHelpThread, type MockSession, type MockState, type MockWorkspace } from './seed'
 
 export type { MockSession } from './seed'
 
@@ -142,6 +144,17 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
   function requireUser(): MeResponse {
     if (state.session === null) throw new DataError(MSG.unauthorized, 'unauthorized')
     return MOCK_USERS[state.session]
+  }
+
+  /**
+   * 컨벤션 라이브러리 쓰기 — 서버와 같은 순서: 로그인 → 본문 검사(invalid) → GitHub 계정 강사(forbidden_role) → 항목(not_found).
+   * mock에는 GitHub 강사 계정이 없어 역할 검사에서 끝난다(등록 · 편집 성공은 백엔드 ConventionLibraryIntegrationTest가 본다).
+   */
+  function refuseConventionWrite(request: ConventionLibraryItemRequest): never {
+    requireUser()
+    const error = conventionRequestError(request)
+    if (error) throw new DataError(error, 'invalid')
+    throw new DataError(CONVENTION_MSG.notEditor, 'forbidden_role')
   }
 
   function currentMember(ws: MockWorkspace, user: MeResponse) {
@@ -1057,6 +1070,24 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const user = requireUser()
       if (!canUseInbox(user)) throw new DataError(INBOX_MSG.notInstructor, 'forbidden_role')
       return []
+    },
+
+    // ---- 「17」 컨벤션 라이브러리 — 읽기는 로그인한 누구나, 쓰기는 GitHub 계정 강사만 (#225) ----
+
+    async listConventionLibrary() {
+      await wait()
+      requireUser()
+      return structuredClone([...MOCK_CONVENTION_LIBRARY])
+    },
+
+    async createConventionLibraryItem(request) {
+      await wait()
+      return refuseConventionWrite(request)
+    },
+
+    async updateConventionLibraryItem(_itemId, request) {
+      await wait()
+      return refuseConventionWrite(request)
     },
 
     // ---- 「13」 작업 마감 — R2 또는 그 이슈의 담당자(P14) ----
