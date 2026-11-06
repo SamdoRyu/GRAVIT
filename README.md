@@ -144,7 +144,7 @@ macOS · Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 씁니다.
 - 개발 중에 읽는 곳: [`docs/CONTRACTS.md`](docs/CONTRACTS.md)(도메인 · ID · 에러 · 보안 · 계약 테스트) · [`docs/CONTRACTS_API.md`](docs/CONTRACTS_API.md)(엔드포인트 · DTO)
   - 기획 저장소 커밋 `796fc25`의 두 파일을 **2026-11-03에 그대로 옮겼습니다**(본문 변경 없음, 맨 위에 출처 안내만 추가).
   - 본문에 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md · 코드 컨벤션 (BE) 등)의 고정 링크는 [`docs/README.md`](docs/README.md)에 있습니다.
-- `contract/examples/`의 JSON은 CONTRACTS_API.md의 예시를 **글자 그대로** 옮긴 것입니다.
+- `contract/examples/`의 JSON은 CONTRACTS_API.md의 예시를 옮겨 시작했고, 문서에 예시가 없는 DTO는 계약 타입대로 새로 만들었습니다. 기준은 계약 문서의 타입이고, 예시 JSON · Java DTO · TS 사본은 계약 테스트(CONTRACTS.md 「9」)가 서로 맞춥니다.
 - PR 본문에 기준 계약 커밋을 적습니다.
 
 ### 기준 위치 — GRAVIT (2026-11-03 전환)
@@ -285,7 +285,7 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
   - 로그인: GitHub 로그인(GitHub App OAuth), 보안 심사용 ID/PW 로그인(기본 꺼짐)
   - 사무실: 레포 고르기 · 사무실 열기, Snapshot, SSE 알림, 팀 설정
   - GitHub 동기화: 읽기 전용, 5분 폴링 + 수동 동기화. 자동 폴링은 명세 문서를 읽지 않는다
-  - 기능: PR 익명 평가, 회의 · 안건 · 스탠드업, 도움 요청, 작업 마감, 요구사항 연결, 회고 리포트 · 학습 타임라인 · 기술 결정 카드, 활동 기록(API만)
+  - 기능: PR 익명 평가, 회의 · 안건 · 스탠드업, 도움 요청, 작업 마감, 요구사항 연결, 회고 리포트 · 학습 타임라인 · 기술 결정 카드, 활동 기록 · 수집 동의
   - 강사: 지정, 요청함, 컨벤션 라이브러리
 - 프론트(`frontend/`):
   - 진입 화면: 로그인 · 사무실 고르기 · 사무실 열기
@@ -297,6 +297,6 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 
 ### 아직 없는 것
 
-- 활동 기록 화면(#173): API는 있고, DataSource · 화면이 아직 없다. 동료 피드백(FR-ACT-04)은 v1 보류
+- 사무실 3D 활동 메모지(#173 — C): 확인된 활동이 Snapshot `activityNotes`로 오지만 3D에는 아직 안 보인다. 동료 피드백(FR-ACT-04)은 v1 보류
 - 기본 데이터 소스 전환: 지금은 주소에 `?source=api`가 있어야 서버를 쓴다
 - 배포 설정, CI의 E2E
