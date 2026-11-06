@@ -1,0 +1,47 @@
+/* 관리 패널 "도움 요청" 탭 (#183). 소유: A. 색 · 글자 크기는 hud.css 변수를 쓴다. */
+.help { display: grid; gap: 10px; align-content: start; }
+.help-new { justify-self: start; }
+
+.help-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.help-item {
+  display: grid; gap: 6px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer;
+  border: 0; border-radius: 10px; background: #fff; color: inherit; font: inherit;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.help-item:hover { box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.12), 0 6px 16px rgba(30, 45, 90, 0.1); }
+.help-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 48시간 안건 후보는 반투명 + 점선 (FR-LRN-18) */
+.help-item.is-candidate { opacity: 0.72; box-shadow: 0 0 0 1px var(--warn); background: var(--warn-soft); }
+.help-item.is-done { background: var(--soft); }
+.help-item-text { line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
+.help-item-foot { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-s); }
+.help-item-who { font-weight: 500; }
+.help-count { color: var(--text-dim); }
+
+.help-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.help-status, .help-tag { padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 17px; background: var(--soft); color: var(--text-dim); }
+.help-status-open { background: var(--accent-soft); color: var(--accent); }
+.help-status-discussing { background: var(--warn-soft); color: var(--ink-warn); }
+.help-status-resolved { background: var(--good-soft); color: var(--ink-good); }
+.help-tag-candidate { background: var(--warn-soft); color: var(--ink-warn); }
+.help-tag-good { background: var(--good-soft); color: var(--ink-good); }
+
+.help-back { justify-self: start; }
+.help-head { display: grid; gap: 6px; }
+.help-content, .help-comment-text { margin: 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.help-note { padding: 8px 10px; border-radius: 8px; background: var(--soft); font-size: var(--fs-s); line-height: 1.45; }
+.help-note p { margin: 4px 0 0; }
+.help-note-good { background: var(--good-soft); }
+.help-note-warn { background: var(--warn-soft); }
+.help-owner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.help-sub { margin: 4px 0 0; font-size: var(--fs-m); }
+
+.help-comments { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.help-comment { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.help-comment.is-instructor { box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--line); }
+
+.help-form { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.help-form textarea { resize: vertical; }
+.help-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.help-choices { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; font-size: var(--fs-s); }
+.help-choices label { display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
