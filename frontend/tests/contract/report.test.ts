@@ -8,7 +8,9 @@ import { createV1MockDataSource } from '../../src/data/mock/v1'
 import {
   REPORT_LEARNING_MAX,
   REPORT_MSG,
+  TIMELINE_KIND_LABEL,
   anonymizeMembers,
+  reportFileName,
   reportCreateError,
   reportLearningError,
   reportMarkdown,
@@ -55,6 +57,13 @@ describe('회고 리포트 규칙', () => {
     assert.equal(timelinePageError(0, 20), null)
     assert.equal(timelinePageError(3, 100), null)
     for (const [page, size] of [[-1, 20], [0, 0], [0, 101], [1.5, 20]]) assert.equal(timelinePageError(page, size), REPORT_MSG.page)
+  })
+
+  it('화면 표시 — 타임라인 종류 이름 6개 전부, 내보낸 파일 이름은 만든 날(한국 시간)', () => {
+    assert.deepEqual(Object.keys(TIMELINE_KIND_LABEL).sort(), ['agenda_decided', 'agenda_raised', 'commit_after_meeting', 'evaluation_given', 'evaluation_received', 'instructor_feedback'])
+    assert.equal(reportFileName({ kind: 'final', createdAt: '2026-11-05T14:59:00Z' }), '최종-회고-리포트-2026-11-05.md')
+    // UTC로는 11-05지만 한국 시간으로는 11-06
+    assert.equal(reportFileName({ kind: 'midterm', createdAt: '2026-11-05T15:00:00Z' }), '중간-회고-리포트-2026-11-06.md')
   })
 
   it('페이지 자르기 — 마지막 페이지 뒤는 빈 items, 전체 수 · 페이지 수는 그대로', () => {
