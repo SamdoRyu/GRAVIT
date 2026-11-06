@@ -3,8 +3,8 @@ import { create } from 'zustand'
 import type { BoardColumn, BoardSortKey } from '../data/rules/board'
 import { OVERLAY_QUERY } from './hooks'
 
-/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190 */
-export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup' | 'requirements'
+/** 관리 패널 탭. 팀원 탭(사람별 업무량 카드)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2). 도움 요청 — #183, 스탠드업 — #190, 회고 — #209 */
+export type Tab = 'kanban' | 'list' | 'week' | 'help' | 'standup' | 'requirements' | 'retro'
 
 /** 도움 요청 쓰기 초안 — 스탠드업 "막힌 것"에서 넘길 때 (#190) */
 export interface HelpDraft {

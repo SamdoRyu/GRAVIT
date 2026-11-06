@@ -14,6 +14,7 @@ import type {
   TimelineEntry,
   Verdict,
 } from '../types'
+import { kstToday } from './period'
 
 export type ReportKind = RetroReportSummary['kind']
 
@@ -24,6 +25,21 @@ export const REPORT_LEARNING_MAX = 5000
 /** 타임라인 페이지 — 서버 PageResponse.DEFAULT_SIZE · MAX_SIZE (CONTRACTS.md 「4」) */
 export const TIMELINE_PAGE_SIZE = 20
 export const TIMELINE_PAGE_SIZE_MAX = 100
+
+/** 타임라인 항목 종류 — 화면 표시 이름 */
+export const TIMELINE_KIND_LABEL: Record<TimelineEntry['kind'], string> = {
+  evaluation_received: '받은 평가',
+  evaluation_given: '남긴 평가',
+  agenda_raised: '올린 안건',
+  agenda_decided: '안건 결론',
+  instructor_feedback: '강사 피드백',
+  commit_after_meeting: '회의 뒤 커밋',
+}
+
+/** 내보낸 마크다운 파일 이름 — "최종-회고-리포트-2026-11-05.md"(만든 날은 한국 시간) */
+export function reportFileName(report: Pick<RetroReportSummary, 'kind' | 'createdAt'>): string {
+  return `${REPORT_KIND_LABEL[report.kind]}-회고-리포트-${kstToday(new Date(report.createdAt))}.md`
+}
 
 export const REPORT_MSG = {
   kind: '리포트 종류는 최종 · 중간 중에서 골라 주세요',

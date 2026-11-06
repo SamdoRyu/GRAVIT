@@ -3,6 +3,7 @@
 import { useOffice } from '../store'
 import { HelpPanel } from './HelpBoard'
 import { RequirementPanel } from './RequirementBoard'
+import { RetroPanel } from './RetroBoard'
 import { StandupPanel } from './StandupBoard'
 import { Icon } from './icons'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
@@ -17,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'help', label: '도움 요청' },
   { id: 'standup', label: '스탠드업' },
   { id: 'requirements', label: '요구사항' },
+  { id: 'retro', label: '회고' },
 ]
 
 function Panel() {
@@ -28,7 +30,7 @@ function Panel() {
   // 요구사항 탭은 문서에 있는 요구사항(active)만 센다 (#197)
   const requirementCount = useOffice((s) => s.office?.snapshot?.requirements.filter((r) => r.status === 'active').length ?? 0)
   const ui = useUi.getState()
-  const count = (t: Tab) => (t === 'week' || t === 'standup' ? null : t === 'help' ? helpCount : t === 'requirements' ? requirementCount : taskCount)
+  const count = (t: Tab) => (t === 'week' || t === 'standup' || t === 'retro' ? null : t === 'help' ? helpCount : t === 'requirements' ? requirementCount : taskCount)
 
   return (
     <section className="panel glass" aria-label="관리 패널">
@@ -73,6 +75,7 @@ function Panel() {
         {tab === 'help' && <HelpPanel />}
         {tab === 'standup' && <StandupPanel />}
         {tab === 'requirements' && <RequirementPanel />}
+        {tab === 'retro' && <RetroPanel />}
       </div>
     </section>
   )
