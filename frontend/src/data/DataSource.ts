@@ -17,6 +17,8 @@ import type {
   TaskDueDateRequest,
   RequirementLinkCreateRequest,
   RequirementLinkDto,
+  InstructorAssignmentDto,
+  InstructorCandidateDto,
   ErrorCode,
   EvaluateRequest,
   EvaluationRoundDto,
@@ -154,6 +156,16 @@ export interface DataSource {
   getStandupPrefill(workspaceId: Id, date: LocalDate): Promise<StandupPrefill>
   /** PUT W/standups/{date}/mine — 있으면 고치고 없으면 만든다. 오늘 뒤 날짜 · 2000자 초과 invalid, 강사 forbidden_role */
   saveMyStandup(workspaceId: Id, date: LocalDate, request: StandupSaveRequest): Promise<StandupDto>
+
+  // ---- 「7」 강사 지정 (#53 — FR-AUTH-06) ----
+  /** GET W/instructors — 현재 지정만, assignedAt 오름차순. 사무실에 접근할 수 있으면 누구나 */
+  listInstructors(workspaceId: Id): Promise<InstructorAssignmentDto[]>
+  /** GET W/instructor-candidates — 허용 목록 전원(isAssigned 포함). R2만(forbidden_role) */
+  listInstructorCandidates(workspaceId: Id): Promise<InstructorCandidateDto[]>
+  /** PUT W/instructors/{githubUserId} — 이미 지정돼 있으면 그 지정. R2만, 허용 목록 밖 invalid, 요청한 사람 자신 conflict */
+  assignInstructor(workspaceId: Id, githubUserId: string): Promise<InstructorAssignmentDto>
+  /** DELETE W/instructors/{githubUserId} — 204. R2만, 현재 지정 없음 not_found */
+  revokeInstructor(workspaceId: Id, githubUserId: string): Promise<void>
 
   // ---- 「8」 요구사항 연결 (#197 — 요구사항 목록 · 연결은 Snapshot의 requirements · requirementLinks) ----
   /**

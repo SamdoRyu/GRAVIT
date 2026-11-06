@@ -6,7 +6,7 @@ import { DataError, type DataErrorCode, type DataSource } from './data/DataSourc
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot, InstructorFeedbackDto } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
-import type { RequirementLinkDto } from './data/types'
+import type { InstructorAssignmentDto, InstructorCandidateDto, RequirementLinkDto } from './data/types'
 
 /** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
 export type OfficeSelection = { kind: 'task' | 'submission' | 'member'; id: Id }
@@ -26,6 +26,8 @@ export type Dialog =
   | { kind: 'raiseAgenda'; source: { type: 'task' | 'submission'; id: Id } }
   /** 요구사항 대기 목록 (#197). linkTaskId가 있으면 그 이슈를 연결할 요구사항 고르기 */
   | { kind: 'requirementWaiting'; linkTaskId: Id | null }
+  /** 강사 지정 · 해제 (#53) — 상단 바 더보기에서 */
+  | { kind: 'instructors' }
 
 export interface Toast {
   id: number
@@ -126,6 +128,16 @@ interface OfficeState {
   linkRequirement: (requirementId: Id, taskId: Id) => Promise<RequirementLinkDto | null>
   /** DELETE W/requirement-links/{linkId} */
   unlinkRequirement: (linkId: Id) => Promise<boolean>
+
+  // ---- 강사 지정 (#53 — 「7」). Snapshot 밖 — 강사 대화상자가 열 때 읽고, 바꾼 뒤 다시 읽는다. 실패하면 알림 후 null(false) ----
+  /** GET W/instructors — 현재 지정된 강사 */
+  loadInstructors: () => Promise<InstructorAssignmentDto[] | null>
+  /** GET W/instructor-candidates — 승인된 강사 계정 전원(지정 여부 포함). R2만 */
+  loadInstructorCandidates: () => Promise<InstructorCandidateDto[] | null>
+  /** PUT W/instructors/{githubUserId} — R2만. 이미 지정돼 있으면 그 지정 */
+  assignInstructor: (githubUserId: string) => Promise<InstructorAssignmentDto | null>
+  /** DELETE W/instructors/{githubUserId} — R2만 */
+  revokeInstructor: (githubUserId: string) => Promise<boolean>
 
   // ---- 요구사항 판 배치 교환 결과 (#197 — CONTRACTS.md 「8」 · 「10」). 3D(SceneModel planRequirementDeck)와 대기 목록이 읽는다 ----
   /**
@@ -578,6 +590,15 @@ export const useOffice = create<OfficeState>((set, get) => {
       setTimeout(() => get().dismissToast(id), 3500)
     },
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+
+    loadInstructors: () => officeRead((src, ws) => src.listInstructors(ws)),
+    loadInstructorCandidates: () => officeRead((src, ws) => src.listInstructorCandidates(ws)),
+    assignInstructor: (githubUserId) => officeRead((src, ws) => src.assignInstructor(ws, githubUserId)),
+    revokeInstructor: async (githubUserId) =>
+      (await officeRead(async (src, ws) => {
+        await src.revokeInstructor(ws, githubUserId)
+        return true as const
+      })) !== null,
 
     requirementDeckOrder: null,
     setRequirementDeckOrder: (ids) => {

@@ -22,6 +22,8 @@ import type {
   TaskDueDateRequest,
   RequirementLinkCreateRequest,
   RequirementLinkDto,
+  InstructorAssignmentDto,
+  InstructorCandidateDto,
   EvaluateRequest,
   EvaluationRoundDto,
   HelpCommentCreateRequest,
@@ -388,6 +390,14 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     listStandups: async (workspaceId, date) => json<StandupDto[]>(await read(`${workspacePath(workspaceId)}/standups?date=${encodeURIComponent(date)}`)),
     getStandupPrefill: async (workspaceId, date) => json<StandupPrefill>(await read(`${standupPath(workspaceId, date)}/mine/prefill`)),
     saveMyStandup: async (workspaceId, date, request: StandupSaveRequest) => json<StandupDto>(await write('PUT', `${standupPath(workspaceId, date)}/mine`, request)),
+
+    listInstructors: async (workspaceId) => json<InstructorAssignmentDto[]>(await read(`${workspacePath(workspaceId)}/instructors`)),
+    listInstructorCandidates: async (workspaceId) => json<InstructorCandidateDto[]>(await read(`${workspacePath(workspaceId)}/instructor-candidates`)),
+    assignInstructor: async (workspaceId, githubUserId) =>
+      json<InstructorAssignmentDto>(await write('PUT', `${workspacePath(workspaceId)}/instructors/${encodeURIComponent(githubUserId)}`)),
+    async revokeInstructor(workspaceId, githubUserId) {
+      await write('DELETE', `${workspacePath(workspaceId)}/instructors/${encodeURIComponent(githubUserId)}`)
+    },
 
     linkRequirement: async (workspaceId, request: RequirementLinkCreateRequest) => json<RequirementLinkDto>(await write('POST', `${workspacePath(workspaceId)}/requirement-links`, request)),
     async unlinkRequirement(workspaceId, linkId) {
