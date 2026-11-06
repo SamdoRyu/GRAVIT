@@ -16,7 +16,9 @@ import { INSTRUCTOR_MSG, assignError } from '../../rules/instructors'
 import { CONVENTION_MSG, conventionRequestError } from '../../rules/conventionLibrary'
 import { REQUIREMENT_MSG, existingLink, linkRequestError, withProgress } from '../../rules/requirements'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
+import { ACTIVITY_MSG, ACTIVITY_PAGE_SIZE, activityCreateError, activityMinutesByKind } from '../../rules/activity'
 import type {
+  ActivityRecordDto,
   AgendaItemDto,
   Change,
   ConventionLibraryItemRequest,
@@ -903,8 +905,72 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       emit(workspaceId, { type: 'changed', resources: ['requirements'] })
     },
 
+    // ---- 「14」 활동 기록 (#173). 서버 ActivityService와 같은 순서. mock에는 강사가 없어 forbidden_role은 작성자 확인뿐이다 ----
+
+    async setActivityConsent(workspaceId, consented) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const id = user.user.userId
+      ws.consentedUserIds = consented ? [...new Set([...ws.consentedUserIds, id])] : ws.consentedUserIds.filter((u) => u !== id)
+      save()
+      return consented
+    },
+
+    async listActivities(workspaceId, status, page = 0, size = ACTIVITY_PAGE_SIZE) {
+      await wait()
+      const ws = accessible(workspaceId, requireUser())
+      if (status !== undefined && status !== 'pending' && status !== 'confirmed') throw new DataError(ACTIVITY_MSG.status, 'invalid')
+      const pageError = timelinePageError(page, size)
+      if (pageError) throw new DataError(pageError, 'invalid')
+      const all = (ws.activities ?? []).filter((a) => status === undefined || a.status === status).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      return structuredClone(slicePage(all, page, size))
+    },
+
+    async createActivity(workspaceId, request) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const error = activityCreateError(request)
+      if (error) throw new DataError(error, 'invalid')
+      if (!ws.consentedUserIds.includes(user.user.userId)) throw new DataError(ACTIVITY_MSG.notConsented, 'conflict')
+      const record: ActivityRecordDto = {
+        id: nextId('ac'),
+        authorMemberId: currentMember(ws, user)!.id,
+        kind: request.kind,
+        content: request.content,
+        durationMinutes: request.durationMinutes,
+        status: 'pending',
+        confirmedByMemberIds: [],
+        createdAt: toInstant(now()),
+      }
+      ws.activities = [...(ws.activities ?? []), record]
+      save()
+      emit(workspaceId, { type: 'changed', resources: ['activities'] })
+      return structuredClone(record)
+    },
+
+    async confirmActivity(workspaceId, activityId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const record = (ws.activities ?? []).find((a) => a.id === activityId)
+      if (!record) throw new DataError(ACTIVITY_MSG.notFound, 'not_found')
+      const me = currentMember(ws, user)!
+      if (record.authorMemberId === me.id) throw new DataError(ACTIVITY_MSG.ownRecord, 'forbidden_role')
+      if (!record.confirmedByMemberIds.includes(me.id)) {
+        record.confirmedByMemberIds.push(me.id)
+        // 첫 확인 때 메모지가 생긴다(confirmedAt = 첫 확인 시각 — 서버 listNotes)
+        if (record.status === 'pending') ws.snapshot.activityNotes.push({ id: record.id, authorMemberId: record.authorMemberId, kind: record.kind, confirmedAt: toInstant(now()) })
+        record.status = 'confirmed'
+        save()
+        emit(workspaceId, { type: 'changed', resources: ['activities'] })
+      }
+      return structuredClone(record)
+    },
+
     // ---- 「15」 개인 API — 학습 타임라인 · 회고 리포트 (#209). 서버와 같은 계산(rules/report.ts) ----
-    // mock에는 강사 계정이 없어 읽기 · 쓰기 모두 본인만이다. 활동 기록이 mock에 없어 그 칸은 빈 목록이다(카드는 #218).
+    // mock에는 강사 계정이 없어 읽기 · 쓰기 모두 본인만이다. 활동 분포는 본인의 확인된 활동(#173), 카드는 #218.
     // 개인 데이터라 Snapshot · SSE에 싣지 않는다(알림 없음).
 
     async getTimeline(workspaceId, memberId, page = 0, size = TIMELINE_PAGE_SIZE) {
@@ -1177,11 +1243,12 @@ function findReport(ws: MockWorkspace, member: MemberDto, reportId: Id): StoredR
   return report
 }
 
-/** 저장된 리포트 + 지금 사무실 데이터 → 응답. 카드는 본인이 확인한 것만(P11). mock에는 활동 기록이 없다 */
+/** 저장된 리포트 + 지금 사무실 데이터 → 응답. 카드는 본인이 확인한 것만(P11), 활동 분포는 본인의 확인된 활동만(FR-ACT-03) */
 function reportView(ws: MockWorkspace, report: StoredReport) {
   const { tasks, submissions, agendaItems } = ws.snapshot
   const decisionCards = cardsOf(ws, report.memberId).filter((c) => c.confirmed)
-  return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution: [], decisionCards }))
+  const activityDistribution = activityMinutesByKind((ws.activities ?? []).filter((a) => a.authorMemberId === report.memberId))
+  return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution, decisionCards }))
 }
 
 /** 그 팀원의 카드 — createdAt 내림차순, 같으면 나중에 만든 것 먼저(서버 findByMemberIdOrderByCreatedAtDescIdDesc) */

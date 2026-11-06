@@ -4,6 +4,7 @@
 // 사본과 공통 JSON이 같은 값인지는 ④ examples.test.ts가 본다. 예시를 바꿀 때는 JSON과 이 사본을 같은 PR에서 함께 바꾼다.
 // JSON을 바로 import하지 않는 이유: 리터럴이 string으로 넓어져 유니언 검사가 안 된다(CONTRACTS.md 「9」).
 import type {
+  ActivityRecordDto,
   AgendaItemCreateRequest,
   AgendaItemDto,
   ConventionLibraryItemDto,
@@ -445,8 +446,21 @@ export const conventionLibraryItemRequestExample = {
   description: 'Git 전략',
 } satisfies ConventionLibraryItemRequest
 
+// contract/examples/activity/activity-record.json — CONTRACTS_API.md 「14」
+export const activityRecordExample = {
+  id: '40',
+  authorMemberId: '12',
+  kind: 'planning',
+  content: '요구사항 정의서 정리',
+  durationMinutes: 90,
+  status: 'confirmed',
+  confirmedByMemberIds: ['13', '14'],
+  createdAt: '2026-11-06T02:00:00Z',
+} satisfies ActivityRecordDto
+
 /** contract/examples/ 기준 상대 경로 → TS 사본. 공통 JSON마다 하나씩 있어야 한다(④가 검사). */
 export const EXAMPLES: Record<string, unknown> = {
+  'activity/activity-record.json': activityRecordExample,
   'auth/me-response.json': meResponseExample,
   'common/error-response.json': errorResponseExample,
   'evaluation/evaluate-request.json': evaluateRequestExample,

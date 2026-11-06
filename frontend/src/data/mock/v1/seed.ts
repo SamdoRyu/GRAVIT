@@ -3,6 +3,7 @@
 // 다루면 바로 드러나게 한다(CONTRACTS.md 「2」 변환 경계). GitHub 식별자는 10진 문자열이다.
 // 안건 · 회의 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []). 요구사항 · 연결은 #197, 도움 요청은 #183.
 import type {
+  ActivityRecordDto,
   ConventionLibraryItemDto,
   DecisionCardDto,
   InstructorAssignmentDto,
@@ -56,6 +57,8 @@ export interface MockWorkspace {
   instructors?: InstructorAssignmentDto[]
   /** 기술 결정 카드 (#218) — 꼬리질문 포함 응답 모양 그대로. mock에는 강사가 없어 꼬리질문은 늘 비어 있다. 없으면 빈 목록 */
   decisionCards?: DecisionCardDto[]
+  /** 활동 기록 (#173) — 응답 모양 그대로. 확인되면 snapshot.activityNotes에 메모지를 더한다. 없으면 빈 목록 */
+  activities?: ActivityRecordDto[]
 }
 
 export interface MockHelpThread {
@@ -88,7 +91,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 7 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 강사 지정 seed (#53) · 7: 내 머지된 PR s_4 · 기술 결정 카드 (#218)
+export const MOCK_STATE_VERSION = 8 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 강사 지정 seed (#53) · 7: 내 머지된 PR s_4 · 기술 결정 카드 (#218) · 8: 활동 기록 seed (#173)
 
 /**
  * 서버 설정의 승인된 강사 계정(INSTRUCTOR_GITHUB_USER_IDS) 흉내 — GitHub 사용자 ID 순. 이름 · 로그인은 그 강사가 로그인한 적이
@@ -510,10 +513,17 @@ function teamWorkspace(now: Date): MockWorkspace {
       ...emptyCollections(),
       ...req,
       helpRequests: help.summaries,
+      // 이삼도가 확인한 내 기획 활동 → 메모지 하나 (#173)
+      activityNotes: [{ id: 'ac_1', authorMemberId: 'm_1', kind: 'planning', confirmedAt: ago(20) }],
       // 평균 리뷰 대기는 응답 시각에 계산한다(rules/flow.ts — mock의 toSnapshot) — 저장해 두지 않는다
       flow: computeFlow({ members, tasks, submissions }),
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
+    // 내 확인된 기획 활동 · 박데브의 확인 대기 자료조사 — 화면에서 확인해 보게 (#173). createdAt 내림차순으로 읽는다
+    activities: [
+      { id: 'ac_1', authorMemberId: 'm_1', kind: 'planning', content: '요구사항 정의서 Must 항목 정리', durationMinutes: 90, status: 'confirmed', confirmedByMemberIds: ['m_2'], createdAt: ago(22) },
+      { id: 'ac_2', authorMemberId: 'm_3', kind: 'research', content: 'OAuth 세션 쿠키 SameSite 자료조사', durationMinutes: 45, status: 'pending', confirmedByMemberIds: [], createdAt: ago(3) },
+    ],
     // 레포 관리자 이삼도가 박멘토를 강사로 지정해 두었다 (#53)
     instructors: [
       { githubUserId: '9001', githubLogin: 'mentor-park', displayName: '박멘토', avatarUrl: null, assignedAt: ago(30), assignedBy: { userId: 'u_2', githubLogin: 'samdo-lee', displayName: '이삼도', avatarUrl: null } },
