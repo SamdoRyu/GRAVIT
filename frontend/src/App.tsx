@@ -1,4 +1,4 @@
-// OWNER: D. Composition root: data source wiring, 진입 화면(로그인 · 사무실 고르기) ↔ 사무실(canvas · HUD), global drag end.
+// OWNER: D. Composition root: data source wiring, 진입 화면(로그인 · 사무실 고르기) ↔ 사무실(canvas · HUD).
 import { lazy, Suspense, useEffect } from 'react'
 import { useOffice } from './store'
 import { createV1ApiDataSource } from './data/api/v1'
@@ -42,24 +42,6 @@ export default function App() {
   useEffect(() => {
     if (signedIn) void loadScene().catch(() => {})
   }, [signedIn])
-
-  useEffect(() => {
-    // A drag can start in the 3D view or the panel and end anywhere.
-    const up = (e: PointerEvent) => {
-      // Only the pointer that carries the drag can drop it (a second finger or palm must not).
-      if (!e.isPrimary) return
-      if (useOffice.getState().drag) useOffice.getState().endDrag()
-    }
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && useOffice.getState().drag) useOffice.getState().cancelDrag()
-    }
-    window.addEventListener('pointerup', up)
-    window.addEventListener('keydown', key)
-    return () => {
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('keydown', key)
-    }
-  }, [])
 
   if (!signedIn || !officeOpen) return <EntryScreen />
 

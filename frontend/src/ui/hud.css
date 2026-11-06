@@ -26,8 +26,6 @@
 .hud.rail-wide { --rail-w: min(760px, calc(100vw - 420px)); }
 @media (max-width: 1280px) { .hud.rail-normal { --rail-w: 360px; } }
 .hud.rail-min { --rail-w: 132px; }
-.hud.is-dragging { user-select: none; -webkit-user-select: none; }
-.hud.is-dragging * { cursor: grabbing !important; }
 
 .hud button, .hud input, .hud select, .hud textarea { font: inherit; color: inherit; }
 .hud button { cursor: pointer; }

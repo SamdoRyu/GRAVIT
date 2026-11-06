@@ -9,7 +9,7 @@ import './dialogs.css'
 import './meeting.css'
 import './responsive.css'
 import { Dialogs } from './Dialogs'
-import { OVERLAY_QUERY, useMediaQuery, useTouchDragGuard } from './hooks'
+import { OVERLAY_QUERY, useMediaQuery } from './hooks'
 import { Rail } from './RightPanel'
 import { Toasts } from './Toasts'
 import { TopBar } from './TopBar'
@@ -68,11 +68,9 @@ export function Hud() {
   const overlay = useMediaQuery(OVERLAY_QUERY)
   useViewInsets(root, overlay)
   useHotkeys()
-  useTouchDragGuard()
   // 사무실(v1 Snapshot)을 읽는 중
   const opening = useOffice((s) => s.office?.status === 'loading')
   const offline = useOffice((s) => s.connection === 'offline')
-  const dragging = useOffice((s) => s.drag !== null)
   // v1 사무실 상세(#102 T5-c-2) — store가 Snapshot에 없는 선택은 비우므로 고른 것이 있으면 서랍이 있다
   const hasDetail = useOffice((s) => s.officeSelection !== null && s.office?.snapshot != null)
   const panelOpen = useUi((s) => s.panelOpen)
@@ -97,18 +95,14 @@ export function Hud() {
   // Overlay drawer: a tap outside closes it (Esc is handled in useHotkeys).
   useEffect(() => {
     if (!overlay || !panelOpen) return
-    // Close on a *tap* only: a press that stays put and ends without a drag. A drag that starts in the
-    // 3D view (4 px / long-press), an orbit or a pan must leave the drawer open so boxes can be
-    // dropped into it.
-    let press: { id: number; x: number; y: number; moved: boolean; dragged: boolean } | null = null
-    const unsub = useOffice.subscribe((s) => {
-      if (press && s.drag) press.dragged = true
-    })
+    // Close on a *tap* only: a press that stays put. A drag that starts in the 3D view, an orbit or a pan
+    // moves the pointer and leaves the drawer open.
+    let press: { id: number; x: number; y: number; moved: boolean } | null = null
     const down = (e: PointerEvent) => {
       const t = e.target
       press = null
       if (!e.isPrimary || !(t instanceof Element) || t.closest('.rail, .modal-backdrop, .toasts, .menu, .ghost')) return
-      press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, dragged: !!useOffice.getState().drag }
+      press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }
     }
     const move = (e: PointerEvent) => {
       if (press && e.pointerId === press.id && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 6) press.moved = true
@@ -117,7 +111,7 @@ export function Hud() {
       const p = press
       if (!p || e.pointerId !== p.id) return
       press = null
-      if (!p.moved && !p.dragged && !useOffice.getState().drag) useUi.getState().setPanelOpen(false)
+      if (!p.moved) useUi.getState().setPanelOpen(false)
     }
     const cancel = () => {
       press = null
@@ -127,7 +121,6 @@ export function Hud() {
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
     return () => {
-      unsub()
       window.removeEventListener('pointerdown', down)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
@@ -138,7 +131,7 @@ export function Hud() {
   const railMode = panelOpen ? (wide ? 'rail-wide' : 'rail-normal') : hasDetail ? 'rail-normal' : 'rail-min'
 
   return (
-    <div ref={root} className={`hud ${railMode}${overlay ? ' is-overlay' : ''}${dragging ? ' is-dragging' : ''}`}>
+    <div ref={root} className={`hud ${railMode}${overlay ? ' is-overlay' : ''}`}>
       <TopBar />
       <div className="hud-bottom">
         <Toasts />

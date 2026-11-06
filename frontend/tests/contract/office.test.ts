@@ -394,16 +394,13 @@ describe('store — 팀 설정 바꾸기 (#38 — FR-PLAN-01)', () => {
 describe('store — v1 상세 선택 (#102 T5-c-2)', () => {
   const flush = () => new Promise<void>((r) => setImmediate(r))
 
-  it('selectInOffice는 데모 선택을 비우고, 데모 select는 v1 선택을 비운다', async () => {
+  it('selectInOffice — 고른 이슈 · PR · 팀원을 두고, null이면 비운다', async () => {
     const h = harness()
     await useOffice.getState().openOffice(h.source, TEAM_WS)
-    useOffice.getState().select({ kind: 'task', id: 'demo_t' })
     useOffice.getState().selectInOffice({ kind: 'task', id: 't_1' })
     assert.deepEqual(useOffice.getState().officeSelection, { kind: 'task', id: 't_1' })
-    assert.equal(useOffice.getState().selection, null)
-    useOffice.getState().select({ kind: 'member', id: 'demo_m' })
+    useOffice.getState().selectInOffice(null)
     assert.equal(useOffice.getState().officeSelection, null)
-    useOffice.getState().select(null)
   })
 
   it('aliveInOffice — 이슈 · PR · 팀원이 Snapshot에 있으면 그대로, 없으면 null', async () => {
