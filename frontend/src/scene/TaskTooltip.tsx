@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group } from 'three'
 import { useOffice } from '../store'
+import { AGENDA_KIND_LABEL } from '../ui/meetingView'
 import { boxLive } from './runtime'
 import { SceneHtml } from './shared'
 
@@ -22,7 +23,8 @@ function useHovered(): { key: string; head: string; title: string } | null {
       if (!a) return null
       const t = a.source?.type === 'task' ? snap.tasks.find((x) => x.id === a.source!.id) : undefined
       const p = a.source?.type === 'submission' ? snap.submissions.find((x) => x.id === a.source!.id) : undefined
-      const of = t ? `이슈 #${t.githubIssueNumber}` : p ? `PR #${p.githubPrNumber}` : '원본 없음'
+      // learning · other items have no source: name the kind instead (#31)
+      const of = t ? `이슈 #${t.githubIssueNumber}` : p ? `PR #${p.githubPrNumber}` : AGENDA_KIND_LABEL[a.kind]
       return `안건|${of}|${a.title}`
     }
     if (kind === 'task') {

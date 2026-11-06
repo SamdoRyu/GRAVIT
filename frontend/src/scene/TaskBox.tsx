@@ -4,15 +4,18 @@
 // position and flies along an arc when its slot changes.
 // An original issue / PR can be dragged onto the bridge to raise it as an agenda item (#30 · #26 — CONTRACTS.md 「8」 드롭 결과):
 // letting go there opens the agenda dialog and the shape flies back to its own place (the agenda never moves the original).
-// Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. Read-only: a click opens the v1 detail drawer; nothing is dragged (the GitHub
-// originals are never changed from the app — CON-02; putting a shape on the agenda comes with #26 · #30).
+// Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
+// original opens the v1 detail drawer (the GitHub originals are never changed from the app — CON-02).
+// A learning · other agenda item has no source (#31): it sits on the bridge table as the design's octahedron (floating,
+// turning, a lilac glow) or memo pad, shows its title on hover and opens nothing.
 import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { BackSide, Color, CylinderGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, type BufferGeometry, type Group } from 'three'
+import { BackSide, Color, CylinderGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, type BufferGeometry, type Group } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { Id } from '../data/types'
 import { useOffice, type OfficeSelection } from '../store'
 import { PALETTE } from '../theme'
+import { Glow } from '../theme/station/parts'
 import { CargoBadges } from './CargoBadges'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
 import type { SceneEntity, ThemeLayout } from './model/types'
@@ -47,6 +50,18 @@ const PRISM = prism(PRISM_R, 1.3)
 const PRISM_BAND = prism(PRISM_R * 1.04, 0.16)
 /** Prism size so its height (1.5 r · s) matches BOX_H */
 const PRISM_S = BOX_H / (1.5 * PRISM_R)
+
+/** Size s of the design's learning · other shapes, matched to the cube (cargo 'octa' · 'pad' are built for a cube of side s) */
+const NOTE_S = 0.4
+/** Learning: the design's octahedron (cargo 'octa') — radius s/2, stretched 1.4× upright, centred 0.95 s above the table */
+const OCTA = new OctahedronGeometry(0.5)
+OCTA.scale(1, 1.4, 1)
+const OCTA_Y = 0.95 * NOTE_S
+const OCTA_BODY = new MeshStandardMaterial({ color: CARGO, emissive: '#2a2030', roughness: 0.55, metalness: 0 })
+const OCTA_GLOW = 0xd9c6ff
+/** Other: the design's memo pad (cargo 'pad') — a thin slab with three blue lines, turned a quarter */
+const PAD_LINE = new MeshBasicMaterial({ color: '#8fa4c4' })
+const PAD_LINES = [0, 1, 2].map((i) => ({ w: (i === 2 ? 0.45 : 0.75) * NOTE_S, x: i === 2 ? -0.15 * NOTE_S : 0, z: (-0.2 + i * 0.2) * NOTE_S }))
 
 const easeInOut = (u: number) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2)
 const easeOutBack = (u: number) => 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2)
@@ -110,7 +125,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
   const { key } = entity
   const blocked = entity.highlight === 'blocked'
   const badges = useMemo(() => cargoBadgeView(entity.badges), [entity.badges])
-  const kind = entity.kind === 'pr' ? 'pr' : 'issue'
+  const kind = entity.kind === 'pr' || entity.kind === 'learning' || entity.kind === 'other' ? entity.kind : 'issue'
   const selected = useOffice((s) => select !== null && s.officeSelection?.kind === select.kind && s.officeSelection.id === select.id)
   const hovered = useOffice((s) => s.hover?.kind === 'task' && s.hover.id === key)
 
@@ -134,6 +149,8 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
   const group = useRef<Group>(null)
   useDynamicLayer(group)
   const outlineMesh = useRef<Mesh>(null)
+  /** The learning octahedron's own turn and bob (inside the group that flies) */
+  const spin = useRef<Group>(null)
   const anim = useRef<Anim>(newAnim())
   const live = useRef<BoxLive>({ x: 0, y: 0, z: 0 })
   const phase = useMemo(() => (key.length * 1.7 + key.charCodeAt(key.length - 1)) % 6.283, [key])
@@ -237,6 +254,12 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
     else if (overdue) body.emissiveIntensity = 0.08 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.4 + phase))
     else if (body.emissiveIntensity !== 0) body.emissiveIntensity = Math.max(0, body.emissiveIntensity - dt * 2)
 
+    const sp = spin.current
+    if (sp) {
+      sp.rotation.y = t * 0.8 + phase
+      sp.position.y = NOTE_S * 0.08 * Math.sin(t * 1.7 + phase)
+    }
+
     const om = outlineMesh.current
     if (om) {
       const on = selected || hovered || dragged
@@ -253,7 +276,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
         if (cargoDrag.key !== null) return
         e.stopPropagation()
         useOffice.getState().setHover({ kind: 'task', id: key })
-        setCursor(raise ? 'grab' : 'pointer')
+        setCursor(raise ? 'grab' : select ? 'pointer' : '')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
@@ -271,7 +294,30 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, drop
         useOffice.getState().selectInOffice(select)
       }}
     >
-      {kind === 'pr' ? (
+      {kind === 'learning' ? (
+        <group ref={spin}>
+          <mesh geometry={OCTA} material={OCTA_BODY} position={[0, OCTA_Y, 0]} scale={NOTE_S} castShadow raycast={meshRaycast} />
+          <mesh ref={outlineMesh} geometry={OCTA} position={[0, OCTA_Y, 0]} scale={NOTE_S * 1.2} material={outline} visible={false} raycast={noRaycast} renderOrder={5} />
+          <Glow color={OCTA_GLOW} size={NOTE_S * 1.8} p={[0, OCTA_Y, 0]} opacity={0.35} />
+        </group>
+      ) : kind === 'other' ? (
+        <group rotation={[0, -Math.PI / 4, 0]}>
+          <mesh geometry={UNIT_BOX} material={body} position={[0, 0.2 * NOTE_S, 0]} scale={[1.1 * NOTE_S, 0.1 * NOTE_S, 0.8 * NOTE_S]} castShadow receiveShadow raycast={meshRaycast} />
+          {PAD_LINES.map((l, i) => (
+            <mesh key={i} geometry={UNIT_BOX} material={PAD_LINE} position={[l.x, 0.26 * NOTE_S, l.z]} scale={[l.w, 0.02 * NOTE_S, 0.07 * NOTE_S]} raycast={meshRaycast} />
+          ))}
+          <mesh
+            ref={outlineMesh}
+            geometry={UNIT_BOX}
+            position={[0, 0.2 * NOTE_S, 0]}
+            scale={[1.1 * NOTE_S * 1.15, 0.1 * NOTE_S + 0.05, 0.8 * NOTE_S * 1.15]}
+            material={outline}
+            visible={false}
+            raycast={noRaycast}
+            renderOrder={5}
+          />
+        </group>
+      ) : kind === 'pr' ? (
         <>
           <mesh geometry={PRISM} material={body} scale={PRISM_S} castShadow receiveShadow raycast={meshRaycast} />
           <mesh geometry={PRISM_BAND} material={band} scale={PRISM_S} castShadow raycast={meshRaycast} />

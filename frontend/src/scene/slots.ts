@@ -1,7 +1,7 @@
 // Where every issue box / PR wants to be. The role comes from the SceneModel (placeRole), the position from the station
 // ThemeLayout; this file only decides the order inside a role and which done items the archive shows.
 import type { Instant, WorkspaceSnapshot } from '../data/types'
-import type { PlaceRole, SceneEntity, ThemeLayout } from './model/types'
+import type { PlaceRole, SceneEntity, SceneEntityKind, ThemeLayout } from './model/types'
 
 export const BOX_W = 0.42
 export const BOX_D = 0.34
@@ -71,11 +71,12 @@ const HOME: Record<'desk' | 'backlog' | 'review' | 'agenda', { jitter: number; s
   agenda: { jitter: 0.14, scale: 0.95 },
 }
 
-/** Agenda shapes drawn as cargo (issue cube · PR prism). Help · learning · other shapes come with #47 · #31. */
-export const isAgendaCargo = (e: SceneEntity) => e.key.startsWith('agenda:') && (e.kind === 'issue' || e.kind === 'pr')
+/** Agenda shapes on the bridge table: issue cube · PR prism (#30 · #26) · learning octahedron · other memo pad (#31). Help comes with #47. */
+const AGENDA_SHAPES: ReadonlySet<SceneEntityKind> = new Set<SceneEntityKind>(['issue', 'pr', 'learning', 'other'])
+export const isAgendaCargo = (e: SceneEntity) => e.key.startsWith('agenda:') && AGENDA_SHAPES.has(e.kind)
 
 /**
- * A slot for every placed issue / PR and every issue / PR agenda shape, keyed by SceneEntity key. Desk, docking bay, scanner
+ * A slot for every placed issue / PR and every agenda shape drawn so far, keyed by SceneEntity key. Desk, docking bay, scanner
  * and the bridge table (agenda, in raised order) keep the SceneModel order
  * (the Snapshot's: issue / PR number ascending) and stack upward when full. The archive shows the DONE_VISIBLE most recent;
  * `doneAssign` keeps which archive cell each one occupies so older ones don't shuffle when a new one arrives. `prev`
@@ -98,7 +99,7 @@ export function computeSlots(
 
   const counts = new Map<PlaceRole, number>()
   for (const e of entities) {
-    if (!isCargo(e)) continue
+    if (!isCargo(e) && !isAgendaCargo(e)) continue
     const role = e.placeRole
     const home = role.startsWith('desk:') ? 'desk' : role === 'backlog' || role === 'review' ? role : role === 'meeting' && isAgendaCargo(e) ? 'agenda' : null
     if (home === null) continue // done: below. Other roles (requirement zones, …) come with their issues.
