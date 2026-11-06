@@ -1,4 +1,4 @@
-// Top bar: wordmark, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 사무실 바꾸기 · 로그아웃). OWNER: D.
+// Top bar: wordmark, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 활동 기록 · 사무실 바꾸기 · 로그아웃). OWNER: D.
 // 사람별 업무량 표현(업무량 오버레이 · 업무 재배정 추천)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2).
 // 데모 화면(데모 지표 줄 · 오버레이 · 작업 만들기 · 데모 스위치 · 팀원 추가 · 초기화)도 뺐다 — v1은 GitHub가 원본이다.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -232,6 +232,18 @@ function MoreMenu() {
           >
             <Icon name="list" size={15} />
             컨벤션 라이브러리
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              useOffice.getState().openDialog({ kind: 'activities' })
+            }}
+          >
+            <Icon name="edit" size={15} />
+            활동 기록
           </button>
           <hr className="menu-sep" />
           {me && (

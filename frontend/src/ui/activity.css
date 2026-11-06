@@ -1,0 +1,15 @@
+/* 활동 기록 대화상자 (#173). 카드 톤은 컨벤션 라이브러리(conventionLibrary.css)와 같다. */
+.act { display: grid; gap: 12px; }
+.act-lead { margin: 0; line-height: 1.5; word-break: keep-all; }
+.act-state, .act-consent-ask { display: grid; gap: 8px; justify-items: start; }
+.act-consent { margin: 0; }
+.act-form { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.act-form-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.act-form-row > .fld { flex: 1 1 140px; }
+.act-submit { justify-self: end; }
+.act-filters { display: flex; gap: 4px; }
+.act-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 45vh; overflow-y: auto; }
+.act-item { display: grid; gap: 4px; padding: 8px 10px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+.act-item-head, .act-item-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.act-pending { color: var(--ink-warn); border-color: var(--ink-warn); }
+.act-content { margin: 0; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }

@@ -59,10 +59,8 @@ class ActivityIntegrationTest {
     static final String ORIGIN = "http://localhost:5173";
     static final long INSTRUCTOR_ID = 9001L;
     private static final Instant T0 = Instant.parse("2026-11-06T00:00:00Z");
-    /** 계약 「14」 ActivityRecordDto 모양 — 값 종류만 본다(ActivityContractTest의 예시와 같은 모양). */
-    private static final String CONTRACT_RECORD_SHAPE = "{\"id\":\"40\",\"authorMemberId\":\"12\",\"kind\":\"planning\","
-            + "\"content\":\"정리\",\"durationMinutes\":90,\"status\":\"pending\",\"confirmedByMemberIds\":[\"13\"],"
-            + "\"createdAt\":\"2026-11-06T02:00:00Z\"}";
+    /** 계약 「14」 ActivityRecordDto 모양 — 값 종류만 본다(contract/examples/activity/activity-record.json). */
+    private static final String CONTRACT_RECORD_SHAPE = ContractShape.readExampleString("activity", "activity-record.json");
 
     @Autowired MockMvc mvc;
     @Autowired AppUserRepository users;

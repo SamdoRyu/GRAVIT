@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, inboxItemExample, conventionLibraryItemExample, conventionLibraryItemRequestExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
+import { activityRecordExample, agendaItemExample, inboxItemExample, conventionLibraryItemExample, conventionLibraryItemRequestExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -171,6 +171,11 @@ async function startFake(): Promise<Fake> {
     }
     // 「16」 강사 요청함 (#224) — answered 쿼리는 빼거나 true · false
     if (r.method === 'GET' && /^\/api\/instructor\/inbox(\?answered=(true|false))?$/.test(path)) return sendJson(res, 200, [inboxItemExample])
+    // 「14」 활동 기록 (#173)
+    if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/activity-consent$/.test(path)) return sendJson(res, 200, { activityConsented: (JSON.parse(r.body) as { consented: boolean }).consented })
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/activities\?/.test(path)) return sendJson(res, 200, { items: [activityRecordExample], page: 0, size: 20, totalItems: 1, totalPages: 1 })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/activities$/.test(path)) return sendJson(res, 201, { ...activityRecordExample, ...(JSON.parse(r.body) as object), status: 'pending', confirmedByMemberIds: [] })
+    if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/activities\/[^/]+\/confirm$/.test(path)) return sendJson(res, 200, activityRecordExample)
     // 「17」 컨벤션 라이브러리 (#225)
     if (r.method === 'GET' && path === '/api/convention-library') return sendJson(res, 200, [conventionLibraryItemExample])
     if (r.method === 'POST' && path === '/api/convention-library') return sendJson(res, 201, { ...conventionLibraryItemExample, ...(JSON.parse(r.body) as object) })
@@ -404,6 +409,30 @@ describe('v1 api — 쓰기 · CSRF', () => {
     )
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '이 작업을 할 권한이 없어요'))
     await rejectsWith(api.getInstructorInbox(), 'forbidden_role', '이 작업을 할 권한이 없어요')
+  })
+
+  it('활동 기록 — 동의 PUT은 activityConsented만 돌려주고, 목록 쿼리 · 기록 POST · 확인 POST는 CSRF와 함께, 409를 그대로 (#173)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.equal(await api.setActivityConsent('3', true), true)
+    assert.equal((await api.listActivities('3')).items[0].id, '40')
+    await api.listActivities('3', 'pending', 2, 10)
+    const request = { kind: 'research' as const, content: '자료조사', durationMinutes: 30 }
+    assert.equal((await api.createActivity('3', request)).status, 'pending')
+    assert.equal((await api.confirmActivity('3', '40')).status, 'confirmed')
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      [
+        'PUT /api/workspaces/3/activity-consent tok-1 {"consented":true}',
+        'GET /api/workspaces/3/activities?page=0&size=20 - -',
+        'GET /api/workspaces/3/activities?status=pending&page=2&size=10 - -',
+        `POST /api/workspaces/3/activities tok-1 ${JSON.stringify(request)}`,
+        'POST /api/workspaces/3/activities/40/confirm tok-1 -',
+      ],
+    )
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '활동 기록 수집에 동의한 뒤 쓸 수 있어요'))
+    await rejectsWith(api.createActivity('3', request), 'conflict', '활동 기록 수집에 동의한 뒤 쓸 수 있어요')
   })
 
   it('컨벤션 라이브러리 — 사무실 경로 밖, 읽기 GET · 등록 POST 201 · 편집 PUT 본문 그대로, 403 · 400을 그대로 (#225)', async () => {

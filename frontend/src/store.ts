@@ -6,7 +6,7 @@ import { DataError, type DataErrorCode, type DataSource } from './data/DataSourc
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot, InstructorFeedbackDto } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
-import type { ConventionLibraryItemDto, ConventionLibraryItemRequest, InstructorAssignmentDto, InstructorCandidateDto, RequirementLinkDto } from './data/types'
+import type { ActivityCreateRequest, ActivityRecordDto, ConventionLibraryItemDto, ConventionLibraryItemRequest, InstructorAssignmentDto, InstructorCandidateDto, RequirementLinkDto } from './data/types'
 
 /** v1 사무실에서 고른 것 — 이슈(task) · PR(submission) · 팀원(member) */
 export type OfficeSelection = { kind: 'task' | 'submission' | 'member'; id: Id }
@@ -32,6 +32,8 @@ export type Dialog =
   | { kind: 'instructorInbox' }
   /** 컨벤션 라이브러리 (#225) — 상단 바 더보기에서 */
   | { kind: 'conventionLibrary' }
+  /** 활동 기록 (#173) — 상단 바 더보기에서. 처음 입장 때는 수집 동의(consent)부터 */
+  | { kind: 'activities'; consent?: boolean }
 
 export interface Toast {
   id: number
@@ -142,6 +144,16 @@ interface OfficeState {
   assignInstructor: (githubUserId: string) => Promise<InstructorAssignmentDto | null>
   /** DELETE W/instructors/{githubUserId} — R2만 */
   revokeInstructor: (githubUserId: string) => Promise<boolean>
+
+  // ---- 활동 기록 (#173 — 「14」). 목록은 Snapshot 밖이라 화면이 열 때 읽는다. 실패하면 알림 후 null ----
+  /** PUT W/activity-consent — 성공하면 snapshot.viewer.activityConsented를 응답으로(SSE 알림이 없다) */
+  setActivityConsent: (consented: boolean) => Promise<boolean | null>
+  /** GET W/activities — createdAt 내림차순, status를 빼면 전부 */
+  loadActivities: (status?: ActivityRecordDto['status'], page?: number) => Promise<PageResponse<ActivityRecordDto> | null>
+  /** POST W/activities — 수집 동의한 팀원만 */
+  createActivity: (request: ActivityCreateRequest) => Promise<ActivityRecordDto | null>
+  /** POST W/activities/{activityId}/confirm — 작성자가 아닌 팀원 */
+  confirmActivity: (activityId: Id) => Promise<ActivityRecordDto | null>
 
   // ---- 컨벤션 라이브러리 (#225 — 「17」). 서버 전체에 하나(사무실 경로 밖)지만 사무실 화면의 대화상자가 쓴다. 실패하면 알림 후 null ----
   /** GET /api/convention-library — target · name 순 */
@@ -611,6 +623,15 @@ export const useOffice = create<OfficeState>((set, get) => {
         await src.revokeInstructor(ws, githubUserId)
         return true as const
       })) !== null,
+
+    setActivityConsent: (consented) =>
+      officeWrite(
+        (src, ws) => src.setActivityConsent(ws, consented),
+        (snapshot, activityConsented) => ({ ...snapshot, viewer: { ...snapshot.viewer, activityConsented } }),
+      ),
+    loadActivities: (status, page) => officeRead((src, ws) => src.listActivities(ws, status, page)),
+    createActivity: (request) => officeRead((src, ws) => src.createActivity(ws, request)),
+    confirmActivity: (activityId) => officeRead((src, ws) => src.confirmActivity(ws, activityId)),
 
     loadConventionLibrary: () => officeRead((src) => src.listConventionLibrary()),
     createConventionLibraryItem: (request) => officeRead((src) => src.createConventionLibraryItem(request)),

@@ -18,8 +18,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 계약 테스트 ① — CONTRACTS_API 「14」 활동 기록 · 수집 동의, 「5」 ActivityNote ↔ Java DTO. 계약 문서에 활동 기록 JSON 예시가 없어
- * TS 인터페이스를 옮겼다. 실제 HTTP 응답(②)은 {@code ActivityIntegrationTest}.
+ * 계약 테스트 ① — CONTRACTS_API 「14」 활동 기록 · 수집 동의, 「5」 ActivityNote ↔ Java DTO. 활동 기록은
+ * {@code contract/examples/activity/activity-record.json}(#173), 메모지는 TS 인터페이스를 옮겼다. 실제 HTTP 응답(②)은 {@code ActivityIntegrationTest}.
  */
 class ActivityContractTest {
 
@@ -32,9 +32,7 @@ class ActivityContractTest {
 
     private static final Validator VALIDATOR = Validation.buildDefaultValidatorFactory().getValidator();
 
-    static final String CONTRACT_RECORD = "{\"id\":\"40\",\"authorMemberId\":\"12\",\"kind\":\"planning\","
-            + "\"content\":\"요구사항 정의서 정리\",\"durationMinutes\":90,\"status\":\"confirmed\","
-            + "\"confirmedByMemberIds\":[\"13\",\"14\"],\"createdAt\":\"2026-11-06T02:00:00Z\"}";
+    static final String CONTRACT_RECORD = ContractShape.readExampleString("activity", "activity-record.json");
 
     static final String CONTRACT_NOTE = "{\"id\":\"40\",\"authorMemberId\":\"12\",\"kind\":\"planning\","
             + "\"confirmedAt\":\"2026-11-06T03:00:00Z\"}";
