@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test'
 import { DataError } from '../../src/data/DataSource'
 import { CSRF_HEADER, createV1ApiDataSource, type V1ApiDataSource } from '../../src/data/api/v1'
 import type { Change, ErrorCode, OpenWorkspaceRequest, SyncStatus } from '../../src/data/types'
-import { agendaItemExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
+import { agendaItemExample, instructorAssignmentExample, instructorCandidateExample, instructorFeedbackCreateRequestExample, helpRequestDetailExample, helpRequestSummaryExample, meResponseExample, meetingExample, retroReportExample, standupExample, standupPrefillExample, timelinePageExample, workspaceSnapshotExample } from './examples'
 
 interface Req {
   method: string
@@ -161,6 +161,14 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+$/.test(path)) return sendJson(res, 200, { ...retroReportExample.decisionCards[0], ...(JSON.parse(r.body) as object) })
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+\/follow-up-request$/.test(path)) return sendJson(res, 200, { ...retroReportExample.decisionCards[0], followUpRequested: true })
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/decision-cards\/[^/]+\/follow-up-questions$/.test(path)) return sendJson(res, 201, { id: '21', instructor: meResponseExample.user, ...(JSON.parse(r.body) as object), createdAt: '2026-11-06T02:00:00Z' })
+    // 「7」 강사 지정 (#53)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/instructors$/.test(path)) return sendJson(res, 200, [instructorAssignmentExample])
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/instructor-candidates$/.test(path)) return sendJson(res, 200, [instructorCandidateExample])
+    if (r.method === 'PUT' && /^\/api\/workspaces\/[^/]+\/instructors\/[^/]+$/.test(path)) return sendJson(res, 200, instructorAssignmentExample)
+    if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/instructors\/[^/]+$/.test(path)) {
+      res.writeHead(204)
+      return res.end()
+    }
     // 「8」 요구사항 연결 (#197)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/requirement-links$/.test(path)) return sendJson(res, 201, { id: '30', ...(JSON.parse(r.body) as object), linkedAt: '2026-11-05T02:30:00Z' })
     if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/requirement-links\/[^/]+$/.test(path)) {
@@ -353,6 +361,29 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.startMeeting('3', { attendeeMemberIds: [] }), 'conflict', '이미 진행 중인 회의가 있어요')
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요'))
     await rejectsWith(api.clearDueDate('3', '7'), 'forbidden_role', '레포 관리자와 그 이슈 담당자만 마감을 바꿀 수 있어요')
+  })
+
+  it('강사 지정 — 읽기는 CSRF 없이 GET, 지정 PUT · 해제 DELETE 204, 400 · 409를 그대로 (#53)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.deepEqual(await api.listInstructors('3'), [instructorAssignmentExample])
+    assert.deepEqual(await api.listInstructorCandidates('3'), [instructorCandidateExample])
+    assert.deepEqual(await api.assignInstructor('3', '9001'), instructorAssignmentExample)
+    assert.equal(await api.revokeInstructor('3', '9001'), undefined)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      [
+        'GET /api/workspaces/3/instructors - -',
+        'GET /api/workspaces/3/instructor-candidates - -',
+        'PUT /api/workspaces/3/instructors/9001 tok-1 -',
+        'DELETE /api/workspaces/3/instructors/9001 tok-1 -',
+      ],
+    )
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '승인된 강사 계정이 아니에요'))
+    await rejectsWith(api.assignInstructor('3', '42'), 'invalid', '승인된 강사 계정이 아니에요')
+    fake.next.push((_r, res) => sendError(res, 409, 'conflict', '자기 자신은 강사로 지정할 수 없어요'))
+    await rejectsWith(api.assignInstructor('3', '1001'), 'conflict', '자기 자신은 강사로 지정할 수 없어요')
   })
 
   it('요구사항 연결 — POST 본문 · DELETE 204, 경로 · CSRF, 403 · 409를 그대로 (#197)', async () => {

@@ -4,6 +4,7 @@
 // 안건 · 회의 · 활동 메모는 각 기능 Issue에서 채운다(지금은 []). 요구사항 · 연결은 #197, 도움 요청은 #183.
 import type {
   DecisionCardDto,
+  InstructorAssignmentDto,
   EvaluationRoundDto,
   FlowSummary,
   HelpCommentDto,
@@ -50,6 +51,8 @@ export interface MockWorkspace {
   standups?: StandupDto[]
   /** 회고 리포트 (#209) — 저장하는 칸만(종류 · 배운 점 · 만든 시각), 나머지는 읽을 때 계산한다. 없으면 빈 목록 */
   reports?: StoredReport[]
+  /** 강사 지정 (#53) — 현재 지정만(해제하면 뺀다). 없으면 빈 목록 */
+  instructors?: InstructorAssignmentDto[]
   /** 기술 결정 카드 (#218) — 꼬리질문 포함 응답 모양 그대로. mock에는 강사가 없어 꼬리질문은 늘 비어 있다. 없으면 빈 목록 */
   decisionCards?: DecisionCardDto[]
 }
@@ -84,7 +87,17 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 5 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197)
+export const MOCK_STATE_VERSION = 6 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 강사 지정 seed (#53)
+
+/**
+ * 서버 설정의 승인된 강사 계정(INSTRUCTOR_GITHUB_USER_IDS) 흉내 — GitHub 사용자 ID 순. 이름 · 로그인은 그 강사가 로그인한 적이
+ * 있을 때만 안다(없으면 null — CONTRACTS_API.md 「7」).
+ */
+export const MOCK_INSTRUCTOR_ALLOWLIST: { githubUserId: string; githubLogin: string | null; displayName: string | null }[] = [
+  { githubUserId: '9001', githubLogin: 'mentor-park', displayName: '박멘토' },
+  { githubUserId: '9002', githubLogin: null, displayName: null },
+  { githubUserId: '9003', githubLogin: 'mentor-han', displayName: '한멘토' },
+]
 
 export const MOCK_USERS: Record<MockSession, MeResponse> = {
   github: {
@@ -440,6 +453,10 @@ function teamWorkspace(now: Date): MockWorkspace {
       flow: computeFlow({ members, tasks, submissions }),
     },
     consentedUserIds: ['u_1', 'u_2', 'u_3', 'u_4'],
+    // 레포 관리자 이삼도가 박멘토를 강사로 지정해 두었다 (#53)
+    instructors: [
+      { githubUserId: '9001', githubLogin: 'mentor-park', displayName: '박멘토', avatarUrl: null, assignedAt: ago(30), assignedBy: { userId: 'u_2', githubLogin: 'samdo-lee', displayName: '이삼도', avatarUrl: null } },
+    ],
     helpThreads: help.threads,
     // 오늘 이삼도 · 박데브(막힌 것 있음), 어제 나(김옥토). 오늘 내 스탠드업은 비워 둔다 — 화면에서 써 보게 (#190)
     standups: [
