@@ -6,7 +6,7 @@ import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionRequest, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TaskStatus, TeamSettings, WorkspaceSnapshot } from './data/types'
 import { afterComment, toHelpSummary } from './data/rules/help'
-import { withProgress } from './data/rules/requirements'
+import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { RequirementLinkDto } from './data/types'
 
 export type Selection = { kind: 'task'; id: Id } | { kind: 'member'; id: Id }
@@ -26,6 +26,8 @@ export type Dialog =
   | { kind: 'projectPeriod' }
   /** 3D에서 이슈 · PR을 회의실에 놓았을 때 안건 올리기 (#30 · #26 — C의 MeetingDialogs) */
   | { kind: 'raiseAgenda'; source: { type: 'task' | 'submission'; id: Id } }
+  /** 요구사항 대기 목록 (#197). linkTaskId가 있으면 그 이슈를 연결할 요구사항 고르기 */
+  | { kind: 'requirementWaiting'; linkTaskId: Id | null }
 
 /** Where a dragged task would land if released now. Set by whoever is under the pointer. */
 export type DropTarget =
@@ -54,6 +56,23 @@ export interface OfficeView {
 
 /** 'changed' 알림을 이만큼 모아서 Snapshot을 한 번 다시 읽는다 (CONTRACTS_API.md 「6」 "짧게 모아서") */
 export const OFFICE_RELOAD_DELAY_MS = 300
+
+/** 이 브라우저에 둔 교환 결과 — 저장소를 읽지 못하면 null(기본 순서) */
+function readDeckOrder(workspaceId: Id): Id[] | null {
+  try {
+    return parseDeckOrder(localStorage.getItem(deckOrderKey(workspaceId)))
+  } catch {
+    return null
+  }
+}
+function writeDeckOrder(workspaceId: Id, ids: Id[] | null) {
+  try {
+    if (ids === null) localStorage.removeItem(deckOrderKey(workspaceId))
+    else localStorage.setItem(deckOrderKey(workspaceId), JSON.stringify(ids))
+  } catch {
+    // 저장소를 못 쓰면 이번 화면에서만 바뀐다
+  }
+}
 
 /** 요구사항 연결을 바꾸고 진행 수를 같은 규칙으로 다시 센다 */
 const withLinks = (snap: WorkspaceSnapshot, requirementLinks: RequirementLinkDto[]): WorkspaceSnapshot => ({
@@ -113,6 +132,17 @@ interface OfficeState {
   linkRequirement: (requirementId: Id, taskId: Id) => Promise<RequirementLinkDto | null>
   /** DELETE W/requirement-links/{linkId} */
   unlinkRequirement: (linkId: Id) => Promise<boolean>
+
+  // ---- 요구사항 판 배치 교환 결과 (#197 — CONTRACTS.md 「8」 · 「10」). 3D(SceneModel planRequirementDeck)와 대기 목록이 읽는다 ----
+  /**
+   * 지금 연 사무실의 교환 결과 — 판에 올린 요구사항 ID 목록. null = 기본 순서(position).
+   * 사무실별로 이 브라우저에만 둔다. 버리는 때(active 10개 이하 · 교환한 요구사항이 active가 아님 · 저장소를 읽지 못함)는 store가 null로 바꾼다.
+   */
+  requirementDeckOrder: Id[] | null
+  /** 교환 결과를 바꾼다(null = "기본 순서로"). 쓸 수 없는 목록이면 null로 저장한다 */
+  setRequirementDeckOrder: (ids: Id[] | null) => void
+  /** 대기 목록을 연다 — 3D 대기 칸을 누르면 인자 없이, 대기 칸에 이슈 상자를 놓으면 그 이슈 ID로(연결할 요구사항 고르기) */
+  openRequirementWaiting: (linkTaskId?: Id) => void
 
   // ---- 도움 요청 (#183 — 「11」). 목록은 Snapshot의 helpRequests. 위와 같이 실패하면 알림 후 null ----
   /** GET W/help-requests/{id} — 상세(코멘트 포함) */
@@ -301,7 +331,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       get().closeOffice()
       const gen = officeGen
       officeSource = src
-      set({ office: { workspaceId, status: 'loading', snapshot: null, error: null } })
+      set({ office: { workspaceId, status: 'loading', snapshot: null, error: null }, requirementDeckOrder: readDeckOrder(workspaceId) })
       // 읽기 전에 구독한다 — 읽는 사이에 온 알림을 놓치지 않게
       officeUnsubscribe = src.subscribe(workspaceId, (c) => applyOfficeChange(gen, c))
       await loadOffice(gen)
@@ -315,7 +345,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeSource = null
       officeLoadPending = false
       syncDuringLoad = null
-      if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null })
+      if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null, requirementDeckOrder: null })
     },
     officeSelection: null,
     selectInOffice: (officeSelection) => set(officeSelection ? { officeSelection, selection: null } : { officeSelection }),
@@ -507,5 +537,27 @@ export const useOffice = create<OfficeState>((set, get) => {
     },
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
+    requirementDeckOrder: null,
+    setRequirementDeckOrder: (ids) => {
+      const office = get().office
+      if (!office) return
+      // Snapshot을 받기 전이면 목록 그대로 두고, 받은 뒤 아래 구독이 버리는 규칙을 적용한다
+      const next = ids === null ? null : office.snapshot ? keepDeckOrder(ids, office.snapshot.requirements) : [...new Set(ids)]
+      writeDeckOrder(office.workspaceId, next)
+      if (!sameDeckOrder(next, get().requirementDeckOrder)) set({ requirementDeckOrder: next })
+    },
+    openRequirementWaiting: (linkTaskId) => set({ dialog: { kind: 'requirementWaiting', linkTaskId: linkTaskId ?? null } }),
   }
+})
+
+// 교환 결과를 버리는 때(「10」) — 사무실의 요구사항이 바뀔 때마다(재동기화로 missing · needs_review가 됨, active가 10개 이하로 줄어듦) 다시 본다
+useOffice.subscribe((s, prev) => {
+  const office = s.office
+  const order = s.requirementDeckOrder
+  if (!office?.snapshot || order === null) return
+  if (office.snapshot.requirements === prev.office?.snapshot?.requirements && order === prev.requirementDeckOrder) return
+  const kept = keepDeckOrder(order, office.snapshot.requirements)
+  if (sameDeckOrder(kept, order)) return
+  writeDeckOrder(office.workspaceId, kept)
+  useOffice.setState({ requirementDeckOrder: kept })
 })
