@@ -1,0 +1,13 @@
+{
+  "id": "20",
+  "roundNumber": 1,
+  "headSha": "9b1d3e5f7a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b",
+  "openedReason": "new_pr",
+  "openedAt": "2026-11-04T05:00:00Z",
+  "closedAt": "2026-11-05T01:55:00Z",
+  "recommendCount": 1,
+  "notRecommendCount": 0,
+  "reasons": [{ "verdict": "recommend", "reason": "로그인 흐름을 나눠서 읽기 쉬워요" }],
+  "myEvaluation": { "verdict": "recommend", "reason": "로그인 흐름을 나눠서 읽기 쉬워요", "updatedAt": "2026-11-04T06:20:00Z" },
+  "canEvaluate": false
+}

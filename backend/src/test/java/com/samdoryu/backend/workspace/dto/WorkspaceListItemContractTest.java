@@ -13,8 +13,8 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 계약 테스트 ① — CONTRACTS_API 「3」 {@code WorkspaceListItem}(= {@code WorkspaceSummary} + {@code myRole}) ↔ Java DTO.
- * 목록 한 줄만의 예시 JSON은 없어서 {@code contract/examples/workspace/workspace-snapshot.json}의 {@code workspace}에
- * {@code myRole}을 붙여 쓴다. 실제 {@code GET /api/workspaces} 응답(②)은 {@code InstructorWorkspacesIntegrationTest}.
+ * 예시는 {@code contract/examples/workspace/workspace-list-item.json}이고, 역할마다 {@code myRole}만 바꿔 본다.
+ * 실제 {@code GET /api/workspaces} 응답(②)은 {@code InstructorWorkspacesIntegrationTest}.
  */
 class WorkspaceListItemContractTest {
 
@@ -25,8 +25,7 @@ class WorkspaceListItemContractTest {
             .build();
 
     static JsonNode example(String myRole) {
-        ObjectNode item = (ObjectNode) ContractShape.readExample("workspace", "workspace-snapshot.json")
-                .get("workspace").deepCopy();
+        ObjectNode item = (ObjectNode) ContractShape.readExample("workspace", "workspace-list-item.json");
         item.put("myRole", myRole);
         return item;
     }
