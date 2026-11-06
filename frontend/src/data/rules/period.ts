@@ -1,7 +1,7 @@
 // 프로젝트 기간과 D-day (FR-PLAN-01) — 화면 계산 규칙 · 팀 설정 검사. 소유: D.
 // 날짜는 한국 시간 기준 달력 날짜(LocalDate "YYYY-MM-DD" — CONTRACTS.md 「1」 · 「5」)로 비교한다.
 // 브라우저 시간대와 상관없이 같은 날을 같은 날로 본다.
-import type { LocalDate, TeamSettings } from '../types'
+import type { LocalDate, OpenWorkspaceRequest, TeamSettings } from '../types'
 
 const DAY_MS = 86_400_000
 /** 한국 시간은 UTC+9이고 일광 절약 시간이 없다 */
@@ -83,10 +83,31 @@ export function settingsError(s: TeamSettings): string | null {
   if (typeof s !== 'object' || s === null) return SETTINGS_MSG.invalidDate
   const period = periodError(s.projectStartDate, s.projectEndDate)
   if (period) return period
-  const path = s.specDocumentPath
-  if (path !== null && (typeof path !== 'string' || path.length < 1 || path.length > SPEC_PATH_MAX_LENGTH)) return SETTINGS_MSG.invalidSpecPath
+  if (!specPathOk(s.specDocumentPath)) return SETTINGS_MSG.invalidSpecPath
   if (!isThresholdHours(s.reviewWaitHours) || !isThresholdHours(s.noCommitHours)) return SETTINGS_MSG.invalidHours
   return null
+}
+
+/** 명세 문서 경로 — 건너뛰면 null, 아니면 1~300자 (FR-REQ-01) */
+const specPathOk = (path: unknown) => path === null || (typeof path === 'string' && path.length >= 1 && path.length <= SPEC_PATH_MAX_LENGTH)
+
+/**
+ * 사무실 열기(`POST /api/workspaces`) 요청의 기간 · 명세 문서 경로 검사 (#13 · FR-PLAN-01). 맞으면 null.
+ * 레포 · 권한 · 이미 열림은 서버(mock)가 본다. 화면 입력 검사와 mock이 같은 규칙 · 문구를 쓴다.
+ */
+export function openWorkspaceError(r: Pick<OpenWorkspaceRequest, 'projectStartDate' | 'projectEndDate' | 'specDocumentPath'>): string | null {
+  const period = periodError(r.projectStartDate, r.projectEndDate)
+  if (period) return period
+  if (!specPathOk(r.specDocumentPath)) return SETTINGS_MSG.invalidSpecPath
+  return null
+}
+
+/** 입력한 명세 문서 경로를 요청 값으로 — 앞뒤 공백을 빼고, 비면 null(건너뜀) */
+export const specPathValue = (input: string): string | null => (input.trim() === '' ? null : input.trim())
+
+/** 오늘(한국 날짜)에서 days일 뒤 */
+export function addLocalDays(date: LocalDate, days: number): LocalDate {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 }
 
 /** 상단 바 D-day 칸의 큰 글자 · 작은 글자 */

@@ -158,3 +158,43 @@ describe('로그인 · 로그아웃', () => {
     assert.equal(st().status, 'signed_out')
   })
 })
+
+describe('레포에서 사무실 열기 (#13 · #68)', () => {
+  const request = (githubRepoId: string) => ({ githubRepoId, projectStartDate: '2026-11-05', projectEndDate: '2026-11-18', specDocumentPath: 'docs/req.md', activityConsent: true })
+
+  it('레포 목록 — GitHub 사용자는 조직 · 레포(열린 사무실 ID 포함), 심사용 계정은 비어 있다', async () => {
+    await st().start(make())
+    const repos = await st().listRepositories()
+    assert.deepEqual(
+      repos?.organizations.map((o) => [o.login, o.appInstalled, o.repositories.map((r) => [r.name, r.myRole, r.workspaceId])]),
+      [
+        ['team-samdo', true, [['gitvillage', 'participant', 'ws_1'], ['side-lab', 'repo_admin', null]]],
+        ['bootcamp-lab', false, [['final-project', 'participant', null]]],
+      ],
+    )
+    resetSessionForTest()
+    await st().start(make('review'))
+    assert.deepEqual(await st().listRepositories(), { organizations: [] })
+  })
+
+  it('R2가 열면 사무실이 생기고 바로 들어간다 — 기간 · 명세 문서 경로가 팀 설정에 남는다', async () => {
+    await st().start(make())
+    assert.equal(await st().openNewWorkspace(request('880001300')), null)
+    const o = office()
+    assert.equal(o?.status, 'ready')
+    assert.equal(o?.snapshot?.workspace.displayName, 'team-samdo/side-lab')
+    assert.equal(o?.snapshot?.viewer.role, 'repo_admin')
+    assert.deepEqual([o?.snapshot?.settings.projectEndDate, o?.snapshot?.settings.specDocumentPath], ['2026-11-18', 'docs/req.md'])
+    // 다시 열면 이미 열림, 목록에는 새 사무실
+    assert.equal(await st().openNewWorkspace(request('880001300')), '이미 열린 사무실이에요')
+    assert.ok((await st().listWorkspaces())?.some((w) => w.displayName === 'team-samdo/side-lab'))
+  })
+
+  it('거부 문구 — 참여자 레포 · 끝 날짜가 시작보다 빠름 · 없는 레포, 사무실은 열리지 않는다', async () => {
+    await st().start(make())
+    assert.equal(await st().openNewWorkspace(request('880002001')), '레포 관리자만 사무실을 열 수 있어요')
+    assert.equal(await st().openNewWorkspace({ ...request('880001300'), projectEndDate: '2026-11-01' }), '끝 날짜는 시작 날짜보다 빠를 수 없어요')
+    assert.equal(await st().openNewWorkspace(request('999')), '레포를 찾을 수 없어요')
+    assert.equal(office(), null)
+  })
+})
