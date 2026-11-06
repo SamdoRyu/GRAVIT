@@ -2,6 +2,7 @@
 // 칸반 · 목록은 v1 이슈 · PR만 보인다(데모 작업 칸반 · 필터는 뺐다 — #102 T5-c-2).
 import { useOffice } from '../store'
 import { HelpPanel } from './HelpBoard'
+import { StandupPanel } from './StandupBoard'
 import { Icon } from './icons'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
 import { OfficeDetailDrawer } from './OfficeDetail'
@@ -13,6 +14,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'list', label: '목록' },
   { id: 'week', label: '주간' },
   { id: 'help', label: '도움 요청' },
+  { id: 'standup', label: '스탠드업' },
 ]
 
 function Panel() {
@@ -22,7 +24,7 @@ function Panel() {
   // 도움 요청 탭은 아직 해결 · 종료되지 않은 것만 센다
   const helpCount = useOffice((s) => s.office?.snapshot?.helpRequests.filter((h) => h.status !== 'resolved' && h.status !== 'ended').length ?? 0)
   const ui = useUi.getState()
-  const count = (t: Tab) => (t === 'week' ? null : t === 'help' ? helpCount : taskCount)
+  const count = (t: Tab) => (t === 'week' || t === 'standup' ? null : t === 'help' ? helpCount : taskCount)
 
   return (
     <section className="panel glass" aria-label="관리 패널">
@@ -65,6 +67,7 @@ function Panel() {
         {tab === 'list' && <OfficeList />}
         {tab === 'week' && <WeekView />}
         {tab === 'help' && <HelpPanel />}
+        {tab === 'standup' && <StandupPanel />}
       </div>
     </section>
   )

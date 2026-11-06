@@ -10,7 +10,7 @@ import { relativeTime } from './format'
 import { useNow } from './hooks'
 import { Icon } from './icons'
 import { MemberAvatar } from './officeParts'
-import { useUi } from './uiState'
+import { useUi, type HelpDraft } from './uiState'
 import './help.css'
 
 const STATUS_LABEL: Record<HelpRequestStatus, string> = {
@@ -67,9 +67,11 @@ function HelpList({ data }: { data: { helpRequests: HelpRequestSummary[]; member
     () => [...data.helpRequests].sort((a, b) => Number(DONE.includes(a.status)) - Number(DONE.includes(b.status)) || b.createdAt.localeCompare(a.createdAt)),
     [data.helpRequests],
   )
+  // 스탠드업 "막힌 것"에서 넘어온 초안(#190)이 있으면 그 내용으로 쓰기 폼을 새로 연다
+  const draft = useUi((s) => s.helpDraft)
   return (
     <div className="help">
-      {canWrite && <HelpCompose />}
+      {canWrite && <HelpCompose key={draft ? `draft:${draft.fromStandupId}:${draft.content}` : 'new'} draft={draft} />}
       {sorted.length === 0 ? (
         <Empty icon="inbox" title="아직 도움 요청이 없어요" hint={canWrite ? '막힌 것을 적으면 팀원이 코멘트로 도와줘요.' : '학생이 도움 요청을 올리면 여기에 보여요.'} />
       ) : (
@@ -100,11 +102,19 @@ function HelpList({ data }: { data: { helpRequests: HelpRequestSummary[]; member
   )
 }
 
-function HelpCompose() {
-  const [open, setOpen] = useState(false)
-  const [content, setContent] = useState('')
+function HelpCompose({ draft }: { draft: HelpDraft | null }) {
+  const [open, setOpen] = useState(draft !== null)
+  const [content, setContent] = useState(draft?.content ?? '')
+  const [fromStandupId, setFromStandupId] = useState<Id | null>(draft?.fromStandupId ?? null)
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const close = () => {
+    setOpen(false)
+    setContent('')
+    setFromStandupId(null)
+    setSubmitted(false)
+    if (draft) useUi.getState().startHelpDraft(null) // 초안을 다 썼다 — 다시 열면 빈 폼
+  }
   if (!open) {
     return (
       <button type="button" className="btn btn-sm btn-primary help-new" onClick={() => setOpen(true)}>
@@ -112,7 +122,7 @@ function HelpCompose() {
       </button>
     )
   }
-  const request = { content: content.trim(), fromStandupId: null }
+  const request = { content: content.trim(), fromStandupId }
   const error = helpCreateError(request)
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -123,16 +133,15 @@ function HelpCompose() {
     setBusy(false)
     if (created) {
       useOffice.getState().toast('good', '도움 요청을 올렸어요')
-      setContent('')
-      setSubmitted(false)
-      setOpen(false)
+      close()
     }
   }
   return (
     <form className="help-form" onSubmit={submit} noValidate aria-label="도움 요청 쓰기">
       <TextField label="무엇이 막혔나요?" value={content} max={HELP_CONTENT_MAX} rows={3} error={submitted ? error : null} placeholder="해 본 것과 막힌 지점을 적어 주세요" onChange={setContent} autoFocus />
+      {fromStandupId && <p className="dim small dnote">스탠드업의 "막힌 것"에서 넘어왔어요</p>}
       <div className="help-actions">
-        <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOpen(false)}>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={close}>
           취소
         </button>
         <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
@@ -388,7 +397,7 @@ function CloseForm({ summary, detail, onClosed, onCancel }: { summary: HelpReque
 }
 
 /** 글자 수가 보이는 입력 — rows가 있으면 여러 줄 */
-function TextField(props: { label: string; value: string; max: number; rows?: number; error: string | null; placeholder?: string; autoFocus?: boolean; onChange: (v: string) => void }) {
+export function TextField(props: { label: string; value: string; max: number; rows?: number; error: string | null; placeholder?: string; autoFocus?: boolean; onChange: (v: string) => void }) {
   const length = Array.from(props.value).length
   const common = {
     className: 'select',

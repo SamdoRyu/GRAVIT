@@ -386,10 +386,10 @@ describe('mock v1 — 동기화', () => {
       tab(storage, 'github')
       const saved = JSON.parse(storage.getItem(V1_STORAGE_KEY) ?? 'null')
       saved.version = MOCK_STATE_VERSION - 1
-      saved.workspaces[0].snapshot.flow.averageReviewWaitHours = null // 옛 seed 모양
+      saved.workspaces[0].snapshot.workspace.displayName = '옛 사무실' // 옛 seed 표시
       storage.setItem(V1_STORAGE_KEY, JSON.stringify(saved))
       const source = quiet(() => tab(storage))
-      assert.equal((await source.load(TEAM_WS)).flow.averageReviewWaitHours, 6.5)
+      assert.equal((await source.load(TEAM_WS)).workspace.displayName, 'team-samdo/gitvillage')
     })
   })
 

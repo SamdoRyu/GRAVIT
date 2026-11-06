@@ -8,7 +8,7 @@ test('loads the office: HUD, KPI numbers, 3D canvas, no console errors', async (
   await expect(page.getByRole('tablist').getByRole('tab', { name: /^칸반/ })).toBeVisible()
   await expect(page.getByRole('region', { name: '관리 패널' })).toBeVisible()
   // 사람별 업무량 표현은 HUD에 없다 — 팀원 탭 · 업무량 오버레이 · 업무 재배정 추천 (FR-FLOW-06, #102 T5-c-2)
-  await expect(page.getByRole('tablist').getByRole('tab')).toHaveText([/^칸반/, /^목록/, /^주간/, /^도움 요청/])
+  await expect(page.getByRole('tablist').getByRole('tab')).toHaveText([/^칸반/, /^목록/, /^주간/, /^도움 요청/, /^스탠드업/])
   // 데모 화면(오버레이 · 작업 만들기 · 데모 스위치)도 없다 — 3D가 v1이라 오버레이가 할 일이 없고, v1은 GitHub가 원본 (#102 T5-c-2)
   await expect(page.getByRole('radiogroup', { name: '화면 오버레이' })).toHaveCount(0)
   await expect(page.getByRole('banner').getByRole('button', { name: /^작업/ })).toHaveCount(0)

@@ -17,7 +17,8 @@
 .panel-reopen { align-self: flex-end; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 12px; border-radius: 999px; font-size: var(--fs-s); color: var(--text-dim); animation: slide-in-right 0.3s ease both; }
 .panel-reopen:hover { background: #fff; color: var(--text); }
 .panel-head { display: flex; align-items: center; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); }
-.tabs { display: inline-flex; gap: 2px; }
+/* 탭이 늘어 좁은 화면을 넘으면 접기 버튼을 밀어내지 않고 탭 줄만 가로로 넘긴다 (#190) */
+.tabs { display: inline-flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .tabs button { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text-dim); font-size: var(--fs-m); font-weight: 500; transition: background 0.15s, color 0.15s; }
 .tabs button:hover { color: var(--text); }
 .tabs button.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }

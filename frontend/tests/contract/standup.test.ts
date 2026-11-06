@@ -5,6 +5,7 @@ import { DataError, type DataErrorCode } from '../../src/data/DataSource'
 import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import { STANDUP_MSG, STANDUP_TEXT_MAX, kstDayRange, prefillText, standupSaveError } from '../../src/data/rules/standup'
+import { kstToday } from '../../src/data/rules/period'
 import type { Change } from '../../src/data/types'
 import { standupExample, standupPrefillExample } from './examples'
 
@@ -28,13 +29,13 @@ async function rejectsCode(p: Promise<unknown>, code: DataErrorCode, message?: s
 describe('스탠드업 규칙', () => {
   it('저장 검사 — 날짜 형식 · 한국 시간 오늘 뒤 · 각 2000자. 빈 "어제 한 일"과 null "막힌 것"은 된다', () => {
     const ok = { yesterday: '', blockers: null }
-    assert.equal(standupSaveError(TODAY, ok, NOW), null)
-    assert.equal(standupSaveError('2026-11-5', ok, NOW), STANDUP_MSG.date)
-    assert.equal(standupSaveError('2026-11-06', ok, NOW), STANDUP_MSG.futureDate)
+    assert.equal(standupSaveError(TODAY, ok, TODAY), null)
+    assert.equal(standupSaveError('2026-11-5', ok, TODAY), STANDUP_MSG.date)
+    assert.equal(standupSaveError('2026-11-06', ok, TODAY), STANDUP_MSG.futureDate)
     // UTC로는 아직 11-05지만 한국 시간으로는 11-06 — 11-06은 오늘이다
-    assert.equal(standupSaveError('2026-11-06', ok, new Date('2026-11-05T15:30:00Z')), null)
-    assert.equal(standupSaveError(TODAY, { yesterday: 'a'.repeat(STANDUP_TEXT_MAX + 1), blockers: null }, NOW), STANDUP_MSG.yesterday)
-    assert.equal(standupSaveError(TODAY, { yesterday: '', blockers: 'a'.repeat(STANDUP_TEXT_MAX + 1) }, NOW), STANDUP_MSG.blockers)
+    assert.equal(standupSaveError('2026-11-06', ok, kstToday(new Date('2026-11-05T15:30:00Z'))), null)
+    assert.equal(standupSaveError(TODAY, { yesterday: 'a'.repeat(STANDUP_TEXT_MAX + 1), blockers: null }, TODAY), STANDUP_MSG.yesterday)
+    assert.equal(standupSaveError(TODAY, { yesterday: '', blockers: 'a'.repeat(STANDUP_TEXT_MAX + 1) }, TODAY), STANDUP_MSG.blockers)
   })
 
   it('한국 시간 하루 범위 · 미리 채우기 초안 문장', () => {

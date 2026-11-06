@@ -5,9 +5,10 @@
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
+import { averageReviewWaitHours } from '../../rules/flow'
 import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, meetingEndError } from '../../rules/meeting'
-import { SETTINGS_MSG, addLocalDays, isLocalDate, openWorkspaceError, settingsError } from '../../rules/period'
+import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { STANDUP_MSG, kstDayRange, standupSaveError } from '../../rules/standup'
 import type {
   AgendaItemDto,
@@ -199,7 +200,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       meetings: s.meetings,
       helpRequests,
       activityNotes: s.activityNotes,
-      flow: s.flow,
+      // 평균 리뷰 대기는 응답 시각에 계산한다 — 서버와 같은 규칙(CONTRACTS.md 「3」, #24)
+      flow: { ...s.flow, averageReviewWaitHours: averageReviewWaitHours(s.submissions, at) },
       generatedAt: toInstant(at),
     }
   }
@@ -714,7 +716,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       await wait()
       const user = requireUser()
       const ws = accessible(workspaceId, user)
-      const error = standupSaveError(date, request, now())
+      const error = standupSaveError(date, request, kstToday(now()))
       if (error) throw new DataError(error, 'invalid')
       const me = currentMember(ws, user)!.id
       ws.standups ??= []

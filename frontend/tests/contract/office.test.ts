@@ -5,6 +5,7 @@ import { afterEach, describe, it, mock } from 'node:test'
 import { DataError, type DataSource } from '../../src/data/DataSource'
 import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
+import { averageReviewWaitHours } from '../../src/data/rules/flow'
 import type { Change, SyncStatus, WorkspaceSnapshot } from '../../src/data/types'
 import { OFFICE_RELOAD_DELAY_MS, aliveInOffice, useOffice } from '../../src/store'
 import { finiteOrNull, formatHours } from '../../src/ui/format'
@@ -342,7 +343,9 @@ describe('상단 바 팀 지표 (#24 — FR-FLOW-05)', () => {
     const flow = office()!.snapshot!.flow
     const subs = office()!.snapshot!.submissions
     assert.equal(flow.openSubmissionCount, subs.filter((s) => s.state === 'open' || s.state === 'draft').length)
-    assert.equal(flow.averageReviewWaitHours, 6.5, 'mock 예시 값')
+    // 평균 리뷰 대기 — mock도 서버와 같은 규칙으로 응답 시각에 계산한다(#24)
+    assert.equal(flow.averageReviewWaitHours, averageReviewWaitHours(subs, office()!.snapshot!.generatedAt))
+    assert.notEqual(flow.averageReviewWaitHours, null, '팀 사무실에는 열린 PR이 있다')
     // 사람별 합계 · 순위 칸이 없다 (FR-FLOW-06) — 계약 예시와 같은 키만
     assert.deepEqual(Object.keys(flow), Object.keys(workspaceSnapshotExample.flow))
   })
