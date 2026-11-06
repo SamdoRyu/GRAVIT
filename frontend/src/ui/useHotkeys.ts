@@ -2,8 +2,9 @@
 //   M start/end meeting · / search · Esc close dialog, else clear selection
 //   (데모의 N 새 작업 · 1-3 오버레이는 v1에서 뺐다 — #102 T5-c-2)
 import { useEffect } from 'react'
-import { ongoingMeeting, useOffice } from '../store'
+import { useOffice } from '../store'
 import { OVERLAY_QUERY } from './hooks'
+import { ongoingMeetingOf } from './meetingView'
 import { useUi } from './uiState'
 
 function isTyping(el: EventTarget | null): boolean {
@@ -32,7 +33,8 @@ export function useHotkeys() {
 
       if (e.code === 'KeyM') {
         e.preventDefault()
-        const live = ongoingMeeting(st.meetings)
+        // v1 사무실의 진행 중 회의 — 상단 바와 같은 값
+        const live = st.office?.snapshot ? ongoingMeetingOf(st.office.snapshot) : null
         st.openDialog(live ? { kind: 'endMeeting', meetingId: live.id } : { kind: 'startMeeting' })
       } else if (e.code === 'Slash') {
         e.preventDefault()
