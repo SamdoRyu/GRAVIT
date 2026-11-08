@@ -40,6 +40,7 @@ import java.util.stream.Stream;
 public record BlockedRule(Duration reviewWait, Duration noCommit) {
 
     private static final String DISMISSED = "dismissed";
+    private static final double HOUR_MILLIS = Duration.ofHours(1).toMillis();
 
     public BlockedRule {
         Objects.requireNonNull(reviewWait);
@@ -110,15 +111,40 @@ public record BlockedRule(Duration reviewWait, Duration noCommit) {
         return submission.state() == SubmissionState.OPEN || submission.state() == SubmissionState.DRAFT;
     }
 
+    /**
+     * 평균 리뷰 대기(FR-FLOW-05, CONTRACTS.md 「3」) — 열린 PR(Draft 제외)마다 리뷰 대기 시작부터 첫 센 리뷰(없으면 {@code now})까지의
+     * 시간, 그 평균을 소수 첫째 자리로. 열린 PR이 없으면 null. "리뷰 대기 시작" · "센 리뷰"는 막힘 판정과 같고, 기준 시간과는 상관없다.
+     */
+    public static Double averageReviewWaitHours(List<SubmissionDto> submissions, Instant now) {
+        List<Duration> waits = submissions.stream()
+                .filter(submission -> submission.state() == SubmissionState.OPEN)
+                .map(submission -> {
+                    Instant waitingSince = latest(submission.stateChangedAt(), submission.lastCommitAt());
+                    Instant end = countedReviewTimes(submission, waitingSince).min(Instant::compareTo).orElse(now);
+                    Duration wait = Duration.between(waitingSince, end);
+                    return wait.isNegative() ? Duration.ZERO : wait; // 시계가 어긋나 시작이 응답 시각보다 늦으면 0
+                })
+                .toList();
+        if (waits.isEmpty()) {
+            return null;
+        }
+        double meanHours = waits.stream().mapToLong(Duration::toMillis).average().orElseThrow() / HOUR_MILLIS;
+        return Math.round(meanHours * 10) / 10.0;
+    }
+
     /** 리뷰 대기 시작 뒤에 작성자가 아닌 사람이 남긴 리뷰 중 마지막 제출 시각. 없으면 null. */
     private static Instant lastReviewSince(SubmissionDto submission, Instant waitingSince) {
+        return countedReviewTimes(submission, waitingSince).max(Instant::compareTo).orElse(null);
+    }
+
+    /** 센 리뷰의 제출 시각 — 리뷰 대기 시작 뒤, 작성자 본인 · {@code dismissed} 제외. */
+    private static Stream<Instant> countedReviewTimes(SubmissionDto submission, Instant waitingSince) {
         return submission.reviews().stream()
                 .filter(review -> !DISMISSED.equals(review.state()))
                 .filter(review -> !isAuthor(submission, review))
                 .map(GithubReviewDto::submittedAt)
                 .filter(Objects::nonNull)
-                .filter(submittedAt -> !submittedAt.isBefore(waitingSince))
-                .max(Instant::compareTo).orElse(null);
+                .filter(submittedAt -> !submittedAt.isBefore(waitingSince));
     }
 
     // GitHub 로그인 이름은 대소문자를 가리지 않는다
