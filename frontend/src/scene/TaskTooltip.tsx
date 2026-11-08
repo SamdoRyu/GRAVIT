@@ -1,10 +1,13 @@
 // A small label that follows the hovered issue / PR box of the v1 office: number, state, title. For an agenda shape on the
-// bridge table: "안건 · <source>" and the agenda title.
+// bridge table: "안건 · <source>" and the agenda title. For an activity memo (#173): the kind, who and when it was confirmed —
+// never the time spent or the content (they are not in the Snapshot — P6).
 import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group } from 'three'
 import { useOffice } from '../store'
+import { ACTIVITY_KIND_LABEL } from '../data/rules/report'
 import { AGENDA_KIND_LABEL } from '../ui/meetingView'
+import { formatMonthDay, localDateOf } from '../ui/format'
 import { boxLive } from './runtime'
 import { SceneHtml } from './shared'
 
@@ -19,6 +22,12 @@ function useHovered(): { key: string; head: string; title: string } | null {
     const snap = s.office?.snapshot
     if (!key || !snap) return null
     const [kind, id] = key.split(':')
+    if (kind === 'activity') {
+      const n = snap.activityNotes.find((x) => x.id === id)
+      if (!n) return null
+      const who = snap.members.find((m) => m.id === n.authorMemberId)?.displayName ?? '알 수 없는 팀원'
+      return `활동|${ACTIVITY_KIND_LABEL[n.kind]}|${who} · ${formatMonthDay(localDateOf(n.confirmedAt))} 확인`
+    }
     if (kind === 'agenda') {
       const a = snap.agendaItems.find((x) => x.id === id)
       if (!a) return null
@@ -37,7 +46,7 @@ function useHovered(): { key: string; head: string; title: string } | null {
   })
   if (!key || !head) return null
   const [n, state, ...title] = head.split('|')
-  return { key, head: n === '안건' ? `안건 · ${state}` : `#${n} · ${state}`, title: title.join('|') }
+  return { key, head: n === '안건' || n === '활동' ? `${n} · ${state}` : `#${n} · ${state}`, title: title.join('|') }
 }
 
 export function TaskTooltip() {

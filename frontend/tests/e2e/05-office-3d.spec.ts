@@ -24,6 +24,9 @@ async function sceneFacts(page: Page) {
     return {
       crew: (scene.crew as { id: string; displayName: string }[]).map((m) => ({ id: m.id, name: m.displayName })),
       avatars: [...rt.avatarLive.keys()].sort(),
+      // 확인된 활동 메모지(#173): Snapshot activityNotes마다 하나, 화면에 등록된 메모지
+      notes: (snap.activityNotes as { id: string }[]).map((n) => `activity:${n.id}`).sort(),
+      memos: [...rt.boxLive.keys()].filter((k: string) => k.startsWith('activity:')).sort(),
       issue: issue ? { key: issueKey as string, id: issue.id as string, title: issue.title as string } : null,
     }
   })
@@ -45,6 +48,9 @@ test('the 3D station shows the v1 crew and boxes, opens the detail on click, and
   const facts = await sceneFacts(page)
   expect(facts.crew.length).toBeGreaterThan(0)
   await expect.poll(async () => (await sceneFacts(page)).avatars).toEqual(facts.crew.map((m) => m.id).sort())
+  // Every confirmed activity note is a memo on a console desk (the seed's authors all have pods, so none is over the 4-memo cap).
+  expect(facts.notes.length).toBeGreaterThan(0)
+  await expect.poll(async () => (await sceneFacts(page)).memos).toEqual(facts.notes)
   test.skip(facts.issue === null, 'mock seed에 포드 위 이슈가 없다')
   const issue = facts.issue!
 

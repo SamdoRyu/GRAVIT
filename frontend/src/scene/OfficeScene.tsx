@@ -5,6 +5,7 @@ import { useThree } from '@react-three/fiber'
 import { Suspense, useEffect } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
+import { ActivityNotes } from './ActivityNotes'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
@@ -64,6 +65,7 @@ export function OfficeScene() {
         <MeetingRoomState />
         <RequirementDeck />
         <CommBoard />
+        <ActivityNotes />
         <ArchiveTag />
       </group>
       <TaskTooltip />
