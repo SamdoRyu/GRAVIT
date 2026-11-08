@@ -24,7 +24,7 @@ frontend/ backend/ contract/examples/ docs/ compose.yaml .env.example .github/ .
 ## 프론트엔드 데이터 흐름
 
 - 화면은 `frontend/src/data/DataSource.ts` 인터페이스로만 데이터를 받는다. 화면 코드에서 `fetch`를 직접 부르지 않는다.
-- 구현 둘: `src/data/mock/`(기본 — 브라우저 seed + localStorage, 서버 없이 동작) · `src/data/api/`(`?source=api` — `/api/**` + SSE). **지금 api 쪽은 데모 API 기준이라 Spring에 연결되지 않는다**(v1 API 구현 뒤 교체).
+- 구현 둘: `src/data/mock/`(기본 — 브라우저 seed + localStorage, 서버 없이 동작) · `src/data/api/`(`?source=api` — Spring v1 API `/api/**` + SSE). v1 구현은 각 폴더의 `v1/`이다. 기본은 아직 mock이라, 실제 GitHub 사무실은 `?source=api`로 연다(로컬 설정은 README 「5. GitHub App 설정」).
 - 상태는 `src/store.ts`(Zustand), 공용 규칙은 `src/data/rules/`. 방향: 도메인 데이터 → SceneModel → ThemeLayout → R3F.
 
 ## 백엔드 패키지 원칙
