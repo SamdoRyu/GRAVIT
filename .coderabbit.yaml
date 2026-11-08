@@ -1,0 +1,138 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# 강사 가이드(2026-11-06)를 GRAVIT에 맞춤. CodeRabbit은 코멘트만 — 승인 · Reviewer · 커밋 · PR · 머지는 사람이 한다(CLAUDE.md).
+# 운영 규칙: GitHub 브랜치 보호의 필수 검사에 CodeRabbit을 넣지 않는다(이 파일로는 정할 수 없는 GitHub 설정).
+# 운영 규칙: 코드 변경 명령(autofix · local commit · docstring/테스트 생성 · 충돌 해결 · 새 PR)은 쓰지 않는다 — 코멘트 · 질문 · 요약만.
+language: "ko-KR"
+early_access: false
+tone_instructions: "부트캠프 수강생이 이해하도록 원인과 수정 예시를 짧게 설명한다. 코멘트 첫머리에 [필수] 또는 [선택]을 붙인다. 보안 · 권한 · 계약 위반을 스타일보다 먼저 본다. 과한 추상화나 새 디자인 패턴은 제안하지 않는다."
+
+reviews:
+  profile: "chill"
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true   # 요약은 Walkthrough 코멘트에만 — PR 본문(템플릿 · 작성자 글)을 고치지 않는다
+  high_level_summary_instructions: "영향받은 영역(backend 패키지 · frontend data/ui/scene/theme · contract · docs)을 먼저 적고, 변경을 한국어 3~5줄로 요약한다."
+  collapse_walkthrough: false
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  review_status: true
+  poem: false
+  in_progress_fortune: false
+  enable_prompt_for_ai_agents: true
+
+  # 승인 · Reviewer · 라벨은 사람이 한다
+  auto_approvals:
+    enabled: false
+    allow_author_approval: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  auto_apply_labels: false
+  fail_commit_status: false   # 리뷰가 오류로 멈춰도 실패로 보고하지 않는다(필수 검사 여부와는 무관 — 위 운영 규칙)
+
+  # CodeRabbit이 사람 승인 없이 코드를 고치거나 커밋 · PR을 만들지 않게
+  finishing_touches:
+    docstrings: { enabled: false }
+    unit_tests: { enabled: false }
+    simplify: { enabled: false }
+    autofix: { enabled: false }
+    fix_ci: { enabled: false }
+    resolve_merge_conflict: { enabled: false }
+
+  post_merge_actions: []        # 머지 뒤 자동 작업 없음(스키마 기본값도 [] — 명시만)
+
+  auto_review:
+    enabled: false              # 처음엔 PR 코멘트 @coderabbitai review 로 시험 — 팀이 정하면 true
+    drafts: false
+    ignore_title_keywords: ["WIP"]
+
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!backend/gradle/wrapper/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+
+  path_instructions:
+    - path: "backend/src/main/java/**/controller/**"
+      instructions: "요청 매핑 · 요청 DTO 검증 · 인가 검사 · 응답 DTO만. 인가는 로그인 → 사무실 접근(AuthorizationService) → 역할 순서. Entity를 응답으로 내보내거나 Repository를 직접 부르면 [필수]."
+    - path: "backend/src/main/java/**/service/**"
+      instructions: "규칙과 @Transactional 경계는 Service 공개 메서드. 사무실 단위 데이터는 항상 workspaceId 조건으로 조회 · 저장(다른 사무실 ID는 404). 다른 패키지의 Repository를 직접 쓰지 않는다. SSE 알림은 커밋 뒤."
+    - path: "backend/src/main/java/**/repository/**"
+      instructions: "workspaceId 조건 없는 findById 류 조회, 문자열로 이어 붙인 쿼리, N+1을 본다."
+    - path: "backend/src/main/java/com/samdoryu/backend/common/security/**"
+      instructions: "세션 · CSRF(XSRF-TOKEN → X-XSRF-TOKEN) · Origin 검사 · 401 JSON. 전역 permitAll이나 CSRF 끄기는 [필수]."
+    - path: "backend/src/main/java/com/samdoryu/backend/auth/**"
+      instructions: "심사용 계정은 시연 사무실에만. 강사는 허용 목록(GitHub 사용자 ID) + 사무실 지정을 요청마다 DB에서 확인. 비밀번호는 PasswordEncoder 해시만."
+    - path: "backend/src/main/java/com/samdoryu/backend/workspace/**"
+      instructions: "권한 없는 사무실 · 다른 사무실 ID는 404(존재 숨김), 사무실 안 역할 위반은 403 forbidden_role. 사무실 열기 · 목록은 계정 종류와 역할을 확인한다(심사용 계정은 시연 사무실만)."
+    - path: "backend/src/main/java/com/samdoryu/backend/sync/**"
+      instructions: "동기화 실패를 삼키지 않는다 — 마지막 성공 시각과 실패 사유를 남기고 화면은 마지막 데이터 유지. 재동기화 때 기존 식별자와 앱이 만든 연결을 지우지 않는다. GitHub 번호와 내부 ID를 섞지 않는다."
+    - path: "backend/src/main/java/com/samdoryu/backend/instructor/**"
+      instructions: "강사 쓰기는 학생이 요청한 건(도움 요청 답변 · 꼬리질문 · 결정 피드백)과 컨벤션 라이브러리만, 나머지는 forbidden_role. 지정 여부는 요청마다 DB에서 확인."
+    - path: "backend/src/main/java/com/samdoryu/backend/realtime/**"
+      instructions: "SSE 연결도 로그인 → 사무실 접근 → 역할 검사를 거친다. 이벤트는 트랜잭션 커밋 뒤, 그 사무실 구독자에게만 보낸다."
+    - path: "backend/src/main/java/com/samdoryu/backend/github/**"
+      instructions: "GitHub 원본(이슈 · PR · 코멘트 · 라벨 · 담당자 · 상태)을 바꾸는 API 동작은 [필수]. HTTP POST 자체는 위반이 아니다 — GraphQL query, OAuth 코드 교환, GitHub App 설치 토큰 요청은 허용. GraphQL mutation이나 원본 변경 REST 호출이 위반이다. 토큰 · 인증정보를 로그 · 응답에 남기지 않는다."
+    - path: "backend/src/main/java/com/samdoryu/backend/evaluation/**"
+      instructions: "PR 평가는 익명 — 어떤 응답에도 평가자 식별값 금지. 작성자 자기 평가 금지. recommend/not_recommend 모두 이유 필수. 사람별 합계 · 순위 금지."
+    - path: "backend/src/main/java/com/samdoryu/backend/report/**"
+      instructions: "개인 학습 데이터(타임라인 · 회고 리포트 · 결정 카드)는 본인과 지정 강사만. 사람별 합계 · 순위 · 비교 필드 금지."
+    - path: "backend/src/main/java/com/samdoryu/backend/activity/**"
+      instructions: "활동 기록은 수집 동의한 본인 것만. 3D 메모지에는 시간 · 내용을 담지 않는다."
+    - path: "backend/src/main/resources/db/migration/**"
+      instructions: "이미 있는 V{n} 파일 수정은 [필수](적용된 Flyway는 고치지 않는다). 새 변경은 새 V{n+1}. 데이터 손실 · 잠금이 큰 변경을 본다."
+    - path: "backend/src/test/**"
+      instructions: "새 기능은 성공 경로와 실패 경로(401 · 403 forbidden_role · 404 다른 사무실)를 함께 본다. 실제 GitHub를 부르지 않는다."
+    - path: "frontend/src/data/**"
+      instructions: "화면은 DataSource로만 데이터를 받는다. mock과 api가 같은 계약 모양을 내는지, types.ts가 CONTRACTS_API.md와 맞는지 본다."
+    - path: "frontend/src/ui/**"
+      instructions: "fetch를 직접 부르지 않는다. 버튼 숨기기는 권한 검사가 아니다. 이벤트 리스너 · 타이머 정리 누락을 본다."
+    - path: "frontend/src/scene/**"
+      instructions: "SceneModel은 테마를 모르는 순수 함수, R3F는 그리기만. 매 프레임 객체 생성 · dispose 누락 · 불필요한 리렌더를 본다. 작업 포드는 deskIndex 0~7. 3D 코드는 첫 화면 번들에 넣지 않는다."
+    - path: "frontend/src/theme/**"
+      instructions: "ThemeLayout은 정거장 좌표 · 드롭 구역 · 이동 경로만. 도메인 규칙을 넣지 않는다."
+    - path: "frontend/src/store.ts"
+      instructions: "전역 상태는 이 Zustand store 하나. 비동기 응답 순서가 뒤바뀌는 경우와 파생 값 중복 저장을 본다."
+    - path: "frontend/public/station/**"
+      instructions: "확정 디자인 시안 원본 — 원칙적으로 고치지 않는다. 바뀌었으면 이유가 PR에 있는지만 확인하고 스타일 지적은 하지 않는다."
+    - path: "frontend/package-lock.json"
+      instructions: "새 의존성 추가 · 메이저 버전 변경만 본다(필요성 · 유지보수 상태 · 알려진 취약점). 형식 · 정렬 지적은 하지 않는다."
+    - path: "contract/examples/**"
+      instructions: "실제 API 계약(경로 · 요청/응답 필드 · enum · 에러 코드)이 바뀐 PR이면 예시 JSON · Java DTO · TS 타입 · 계약 문서가 서로 맞는지 본다. 기존 예시 보완만이면 계약 문서와 맞는지만 본다."
+    - path: "docs/CONTRACTS*.md"
+      instructions: "계약 문서는 문서 담당자만 바꾼다. 바뀌었으면 PR 본문의 기준 계약 커밋을 확인한다."
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+      requirements: "형식 ^(feat|fix|refactor|perf|test|docs|style|build|ci|chore)(\\([a-z0-9-]+\\))?: .{1,50}$ — 설명 50자 이내, 끝에 마침표 없음."
+    description:
+      mode: "warning"
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: "AI 작성자 표기 없음"
+        mode: "warning"
+        instructions: "PR 본문과 커밋 메시지에 'Co-authored-by: Claude', 'noreply@anthropic.com', 'Generated with Claude Code'가 하나라도 있으면 실패, 없으면 통과."
+      - name: "적용된 Flyway 파일 수정 금지"
+        mode: "warning"
+        instructions: "backend/src/main/resources/db/migration/ 아래 이미 있던 파일이 수정 · 삭제 · 이름 변경되었으면 실패. 새 파일 추가만 있거나 변경이 없으면 통과."
+      - name: "API 계약 변경 정합성"
+        mode: "warning"
+        instructions: "이 PR이 실제 API 계약(엔드포인트 경로, 요청 · 응답 필드 이름이나 타입, enum 값, 에러 코드)을 바꿨는지 먼저 판단한다. 바꾸지 않았으면(내부 구현 · 내부 DTO 리팩터링 · 주석 · 기존 계약 예시 JSON 보완 · 테스트만) 통과. 바꿨다면 docs/CONTRACTS_API.md 또는 docs/CONTRACTS.md, Java 요청 · 응답 DTO, frontend/src/data/types.ts, contract/examples/의 해당 부분이 서로 같은 값을 말하면 통과, 어긋나거나 계약 문서에 없는 계약을 코드가 먼저 만들었으면 실패. 파일이 바뀌었다는 사실만으로 실패로 판정하지 않는다."
+      - name: "관련 이슈 번호"
+        mode: "warning"
+        instructions: "PR 본문 「관련 Issue」 절에 #숫자가 하나 이상 있으면 통과, 없으면 실패."
+
+  tools:
+    pmd: { enabled: true }
+    oxc: { enabled: true }
+    gitleaks: { enabled: true }
+    languagetool: { enabled: false }
+    markdownlint: { enabled: false }
+
+chat:
+  auto_reply: true
+  allow_non_org_members: false   # 공개 레포 — 조직 밖 사람이 봇을 부르지 못하게
+
+issue_enrichment:
+  planning: { enabled: false }   # 이슈에 AI 계획 코멘트를 달지 않는다
