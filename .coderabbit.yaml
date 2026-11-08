@@ -131,7 +131,7 @@ reviews:
     markdownlint: { enabled: false }
 
 chat:
-  auto_reply: true
+  auto_reply: false              # 처음엔 수동 호출(@coderabbitai …)로만 — 리뷰 코멘트에 자동으로 답하지 않는다
   allow_non_org_members: false   # 공개 레포 — 조직 밖 사람이 봇을 부르지 못하게
 
 issue_enrichment:
