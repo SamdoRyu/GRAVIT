@@ -38,6 +38,13 @@ class ReportContractTest {
     }
 
     @Test
+    void retroReportSummaryExampleRoundTrips() throws IOException {
+        JsonNode example = MAPPER.readTree(Files.readString(EXAMPLES.resolve("retro-report-summary.json")));
+        Object value = MAPPER.treeToValue(example, RetroReportSummary.class);
+        assertThat((JsonNode) MAPPER.valueToTree(value)).isEqualTo(example);
+    }
+
+    @Test
     void reportKindUsesContractJsonValues() {
         assertThat(MAPPER.writeValueAsString(ReportKind.values())).isEqualTo("[\"final\",\"midterm\"]");
         assertThat(MAPPER.readValue("{\"kind\":\"midterm\"}", ReportCreateRequest.class).kind())

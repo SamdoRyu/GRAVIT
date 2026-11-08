@@ -11,6 +11,7 @@ import type {
   DecisionRequest,
   ErrorResponse,
   EvaluateRequest,
+  EvaluationRoundDto,
   HelpCommentCreateRequest,
   HelpRequestCloseRequest,
   HelpRequestCreateRequest,
@@ -22,12 +23,16 @@ import type {
   InstructorFeedbackCreateRequest,
   MeResponse,
   MeetingDto,
+  OpenWorkspaceRequest,
   PageResponse,
+  RepositoryChoiceResponse,
   RetroReportDto,
+  RetroReportSummary,
   StandupDto,
   StandupPrefill,
   TaskDueDateDto,
   TimelineEntry,
+  WorkspaceListItem,
   WorkspaceSnapshot,
 } from '../../src/data/types'
 
@@ -50,6 +55,21 @@ export const evaluateRequestExample = {
   verdict: 'not_recommend',
   reason: '실패 응답 모양이 계약과 달라요',
 } satisfies EvaluateRequest
+
+// contract/examples/evaluation/evaluation-round.json — CONTRACTS_API.md 「9」 (닫힌 회차 · 내 평가 있음)
+export const evaluationRoundExample = {
+  id: '20',
+  roundNumber: 1,
+  headSha: '9b1d3e5f7a2c4e6b8d0f1a3c5e7b9d2f4a6c8e0b',
+  openedReason: 'new_pr',
+  openedAt: '2026-11-04T05:00:00Z',
+  closedAt: '2026-11-05T01:55:00Z',
+  recommendCount: 1,
+  notRecommendCount: 0,
+  reasons: [{ verdict: 'recommend', reason: '로그인 흐름을 나눠서 읽기 쉬워요' }],
+  myEvaluation: { verdict: 'recommend', reason: '로그인 흐름을 나눠서 읽기 쉬워요', updatedAt: '2026-11-04T06:20:00Z' },
+  canEvaluate: false,
+} satisfies EvaluationRoundDto
 
 // contract/examples/meeting/agenda-item-create-request.json — CONTRACTS_API.md 「10」
 export const agendaItemCreateRequestExample = {
@@ -224,6 +244,58 @@ export const retroReportExample = {
   ],
 } satisfies RetroReportDto
 
+// contract/examples/report/retro-report-summary.json — CONTRACTS_API.md 「15」
+export const retroReportSummaryExample = {
+  id: '2',
+  kind: 'midterm',
+  createdAt: '2026-11-10T09:00:00Z',
+} satisfies RetroReportSummary
+
+// contract/examples/workspace/repository-choice-response.json — CONTRACTS_API.md 「3」 (설치 안 된 조직 · 열린 사무실 있는 레포 · 없는 레포)
+export const repositoryChoiceResponseExample = {
+  organizations: [
+    {
+      githubOwnerId: '880000001',
+      login: 'samdo-lab',
+      appInstalled: false,
+      installUrl: 'https://github.com/apps/gravit-office/installations/new',
+      repositories: [],
+    },
+    {
+      githubOwnerId: '880000002',
+      login: 'team-samdo',
+      appInstalled: true,
+      installUrl: null,
+      repositories: [
+        { githubRepoId: '880001234', owner: 'team-samdo', name: 'gitvillage', myRole: 'repo_admin', workspaceId: '3', adminLogins: [] },
+        { githubRepoId: '880001235', owner: 'team-samdo', name: 'gitvillage-docs', myRole: 'participant', workspaceId: null, adminLogins: ['samdo-lee'] },
+      ],
+    },
+  ],
+} satisfies RepositoryChoiceResponse
+
+// contract/examples/workspace/workspace-list-item.json — CONTRACTS_API.md 「3」
+export const workspaceListItemExample = {
+  id: '3',
+  kind: 'github',
+  displayName: 'team-samdo/gitvillage',
+  githubOwner: 'team-samdo',
+  githubRepo: 'gitvillage',
+  githubRepoId: '880001234',
+  htmlUrl: 'https://github.com/team-samdo/gitvillage',
+  openedAt: '2026-11-04T00:10:00Z',
+  myRole: 'participant',
+} satisfies WorkspaceListItem
+
+// contract/examples/workspace/open-workspace-request.json — CONTRACTS_API.md 「3」
+export const openWorkspaceRequestExample = {
+  githubRepoId: '880001234',
+  projectStartDate: '2026-11-04',
+  projectEndDate: '2026-11-17',
+  specDocumentPath: 'docs/requirements.md',
+  activityConsent: true,
+} satisfies OpenWorkspaceRequest
+
 // contract/examples/workspace/workspace-snapshot.json — CONTRACTS_API.md 「5」
 export const workspaceSnapshotExample = {
   workspace: {
@@ -284,7 +356,7 @@ export const workspaceSnapshotExample = {
       state: 'open',
       headSha: '3f2c9a1e5b7d4c6a8e0f1b2c3d4e5f6a7b8c9d0e',
       reviewRequestedMemberIds: ['13'],
-      reviews: [],
+      reviews: [{ reviewerMemberId: '13', reviewerGithubLogin: 'samdo-lee', state: 'changes_requested', submittedAt: '2026-11-05T01:40:00Z' }],
       suggestedReviewerMemberIds: [],
       labels: ['area:auth'],
       priority: null,
@@ -450,6 +522,7 @@ export const EXAMPLES: Record<string, unknown> = {
   'auth/me-response.json': meResponseExample,
   'common/error-response.json': errorResponseExample,
   'evaluation/evaluate-request.json': evaluateRequestExample,
+  'evaluation/evaluation-round.json': evaluationRoundExample,
   'help/help-comment-create-request.json': helpCommentCreateRequestExample,
   'help/help-request-close-request.json': helpRequestCloseRequestExample,
   'help/help-request-create-request.json': helpRequestCreateRequestExample,
@@ -468,7 +541,11 @@ export const EXAMPLES: Record<string, unknown> = {
   'meeting/standup-prefill.json': standupPrefillExample,
   'meeting/standup.json': standupExample,
   'plan/task-due-date.json': taskDueDateExample,
+  'report/retro-report-summary.json': retroReportSummaryExample,
   'report/retro-report.json': retroReportExample,
   'report/timeline-page.json': timelinePageExample,
+  'workspace/open-workspace-request.json': openWorkspaceRequestExample,
+  'workspace/repository-choice-response.json': repositoryChoiceResponseExample,
+  'workspace/workspace-list-item.json': workspaceListItemExample,
   'workspace/workspace-snapshot.json': workspaceSnapshotExample,
 }
