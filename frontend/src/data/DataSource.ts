@@ -1,6 +1,8 @@
 // 앱과 데이터 사이의 유일한 문. 소유: D (프론트 HUD · 데이터).
 // 구현: mock(src/data/mock — 브라우저 seed + localStorage) · api(src/data/api — Spring /api/**).
 import type {
+  ActivityCreateRequest,
+  ActivityRecordDto,
   AgendaItemCreateRequest,
   AgendaItemDto,
   Change,
@@ -178,6 +180,16 @@ export interface DataSource {
   linkRequirement(workspaceId: Id, request: RequirementLinkCreateRequest): Promise<RequirementLinkDto>
   /** DELETE W/requirement-links/{linkId} — 204. R2만(forbidden_role) */
   unlinkRequirement(workspaceId: Id, linkId: Id): Promise<void>
+
+  // ---- 「14」 활동 기록 (#173 — FR-ACT-01 ~ 03). 목록은 Snapshot에 없다(확인된 것만 activityNotes) — 화면을 열 때 읽는다 ----
+  /** PUT W/activity-consent — 팀원 본인 동의 · 철회, 응답은 바뀐 값. 강사 forbidden_role. SSE 알림이 없다 */
+  setActivityConsent(workspaceId: Id, consented: boolean): Promise<boolean>
+  /** GET W/activities?status=&page=&size= — createdAt 내림차순. status를 빼면 전부 */
+  listActivities(workspaceId: Id, status?: ActivityRecordDto['status'], page?: number, size?: number): Promise<PageResponse<ActivityRecordDto>>
+  /** POST W/activities — 201(pending). 내용 1~500자 · 1~1440분 invalid → 강사 forbidden_role → 동의 안 함 conflict */
+  createActivity(workspaceId: Id, request: ActivityCreateRequest): Promise<ActivityRecordDto>
+  /** POST W/activities/{activityId}/confirm — 작성자가 아닌 팀원. 1명 이상이면 confirmed, 이미 확인했으면 그대로. 작성자 · 강사 forbidden_role */
+  confirmActivity(workspaceId: Id, activityId: Id): Promise<ActivityRecordDto>
 
   // ---- 「15」 개인 API — 학습 타임라인 · 회고 리포트 (#209). Snapshot · SSE에 실리지 않는다 — 화면을 열 때 읽는다 ----
   // 경로 팀원(빠진 팀원 포함)이 아니면 not_found, 읽기는 본인 · 지정된 강사, 쓰기는 본인만(아니면 forbidden_role)

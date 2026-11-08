@@ -166,7 +166,7 @@ describe('mock v1 — 회고 리포트', () => {
     assert.deepEqual(Object.keys(final), Object.keys(retroReportExample))
     assert.deepEqual(
       [final.kind, final.createdAt, final.memberId, final.summary, final.areaLabels, final.learning, final.activityDistribution, final.decisionCards],
-      ['final', '2026-11-05T03:05:00Z', ME, '맡은 이슈 2개(닫힘 0) · 작성한 PR 2개(머지 1) · 올린 안건 1건(결론 1)', ['area:auth', 'area:workspace'], null, [], []],
+      ['final', '2026-11-05T03:05:00Z', ME, '맡은 이슈 2개(닫힘 0) · 작성한 PR 2개(머지 1) · 올린 안건 1건(결론 1)', ['area:auth', 'area:workspace'], null, [{ kind: 'planning', totalMinutes: 90 }], []],
     )
     assert.deepEqual(final.agendaResults, [{ agendaItemId: item.id, title: '에러 응답 모양', conclusion: '전역 예외 처리 한 곳', learning: '처음부터 한 곳에서', prDecision: null, decidedAt: '2026-11-05T03:00:00Z' }])
     assert.deepEqual(final.instructorFeedbacks, [])

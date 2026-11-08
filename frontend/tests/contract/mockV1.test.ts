@@ -169,7 +169,8 @@ describe('mock v1 — Snapshot', () => {
     assert.ok(snap.members.length > 0 && snap.tasks.length > 0 && snap.submissions.length > 0)
     assert.ok(snap.helpRequests.length > 0, '도움 요청 seed (#183 — help.test.ts)')
     assert.ok(snap.requirements.length > 0 && snap.requirementLinks.length > 0, '요구사항 seed (#197 — requirements.test.ts)')
-    for (const key of ['agendaItems', 'meetings', 'activityNotes'] as const) {
+    assert.ok(snap.activityNotes.length > 0, '활동 메모지 seed (#173 — activity.test.ts)')
+    for (const key of ['agendaItems', 'meetings'] as const) {
       assert.deepEqual(snap[key], [], key)
     }
   })

@@ -4,6 +4,8 @@
 // 데모 api(../index.ts)와 상태를 나누지 않는다. 이름은 데모 api를 지울 때 createApiDataSource로 바꾼다.
 import { DataError, type DataErrorCode, type DataSource } from '../../DataSource'
 import type {
+  ActivityCreateRequest,
+  ActivityRecordDto,
   Change,
   ConnectionStatus,
   AgendaItemCreateRequest,
@@ -60,6 +62,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../../types'
+import { ACTIVITY_PAGE_SIZE } from '../../rules/activity'
 import { TIMELINE_PAGE_SIZE } from '../../rules/report'
 import { createSseParser } from '../sse'
 
@@ -406,6 +409,14 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     async unlinkRequirement(workspaceId, linkId) {
       await write('DELETE', `${workspacePath(workspaceId)}/requirement-links/${encodeURIComponent(linkId)}`)
     },
+
+    setActivityConsent: async (workspaceId, consented) =>
+      (await json<{ activityConsented: boolean }>(await write('PUT', `${workspacePath(workspaceId)}/activity-consent`, { consented }))).activityConsented,
+    listActivities: async (workspaceId, status, page = 0, size = ACTIVITY_PAGE_SIZE) =>
+      json<PageResponse<ActivityRecordDto>>(await read(`${workspacePath(workspaceId)}/activities?${status ? `status=${status}&` : ''}page=${page}&size=${size}`)),
+    createActivity: async (workspaceId, request: ActivityCreateRequest) => json<ActivityRecordDto>(await write('POST', `${workspacePath(workspaceId)}/activities`, request)),
+    confirmActivity: async (workspaceId, activityId) =>
+      json<ActivityRecordDto>(await write('POST', `${workspacePath(workspaceId)}/activities/${encodeURIComponent(activityId)}/confirm`)),
 
     getTimeline: async (workspaceId, memberId, page = 0, size = TIMELINE_PAGE_SIZE) =>
       json<PageResponse<TimelineEntry>>(await read(`${memberPath(workspaceId, memberId)}/timeline?page=${page}&size=${size}`)),

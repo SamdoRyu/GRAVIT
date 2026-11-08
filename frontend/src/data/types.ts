@@ -604,6 +604,28 @@ export interface TaskDueDateDto {
   updatedBy: UserRef
 }
 
+// ---- 「14」 활동 기록 (FR-ACT-01 ~ 03 — Should). 동료 피드백(FR-ACT-04)은 v1 보류 ----------
+
+export type ActivityKind = ActivityNote['kind']
+
+export interface ActivityRecordDto {
+  id: Id
+  authorMemberId: Id
+  kind: ActivityKind
+  content: string
+  /** 본인 분포에만 쓰고 팀 화면에 합산하지 않는다 (P6) */
+  durationMinutes: number
+  status: 'pending' | 'confirmed'
+  confirmedByMemberIds: Id[]
+  createdAt: Instant
+}
+/** `POST W/activities` — 내용 1~500자, 1~1440분 */
+export interface ActivityCreateRequest {
+  kind: ActivityKind
+  content: string
+  durationMinutes: number
+}
+
 // ---- 「15」 개인 API — 학습 타임라인 ------------------------------------------
 
 export type TimelineKind =

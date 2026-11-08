@@ -9,6 +9,8 @@ import { RequirementWaitingDialog } from './RequirementWaiting'
 import { InstructorDialog } from './InstructorDialog'
 import { InstructorInboxDialog } from './InstructorInbox'
 import { ConventionLibraryDialog } from './ConventionLibraryDialog'
+import { ActivityDialog } from './ActivityDialog'
+import { useActivityConsentPrompt } from './activityConsent'
 import { useUi } from './uiState'
 
 const FOCUSABLE = 'input:not([disabled]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -68,6 +70,7 @@ export function Modal({ title, onClose, children, width = 460 }: { title: string
 export function Dialogs() {
   const dialog = useOffice((s) => s.dialog)
   const historyOpen = useUi((s) => s.historyOpen)
+  useActivityConsentPrompt()
   return (
     <>
       {dialog && <DialogSwitch key={dialogKey(dialog)} dialog={dialog} />}
@@ -96,6 +99,8 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <InstructorInboxDialog />
     case 'conventionLibrary':
       return <ConventionLibraryDialog />
+    case 'activities':
+      return <ActivityDialog consent={dialog.consent} />
     case 'requirementWaiting':
       return <RequirementWaitingDialog linkTaskId={dialog.linkTaskId} />
   }
