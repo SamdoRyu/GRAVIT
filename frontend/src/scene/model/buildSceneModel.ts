@@ -1,8 +1,8 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
 // 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26 · #31),
-// 요구사항 구역(#16 · #17), 통신 허브 게시판(#205)을 만든다.
+// 요구사항 구역(#16 · #17), 통신 허브 게시판(#205), 확인된 활동 메모지(#173)를 만든다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
-import type { AgendaItemDto, AgendaKind, HelpRequestSummary, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
+import type { ActivityNote, AgendaItemDto, AgendaKind, HelpRequestSummary, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
 import { planRequirementDeck } from './requirementDeck'
 import type { PlaceRole, SceneEntity, SceneEntityKind } from './types'
 
@@ -170,6 +170,16 @@ function boardEntity(helpRequests: readonly HelpRequestSummary[]): SceneEntity {
 }
 
 /**
+ * 활동 메모지(FR-ACT-03 — #173): Snapshot `activityNotes`(확인된 활동만, 시간 · 내용 없음)마다 하나, key는 `activity:<id>`.
+ * 자리는 작성자의 책상(desk:<작성자>) — 이슈 상자가 대표 담당자 책상에 놓이는 것과 같은 규칙(2026-11-08 결정). 작성자에게
+ * 책상 자리가 없으면(빠진 팀원 · 자리 없는 팀원) 게시판(board). 배지는 활동 유형 하나 — 그리는 쪽이 아이콘으로 보인다.
+ * 시간 합계 · 사람별 개수 같은 수치는 만들지 않는다(P6).
+ */
+function activityEntity(n: ActivityNote, seated: ReadonlySet<string>): SceneEntity {
+  return { key: `activity:${n.id}`, kind: 'activity', refId: n.id, placeRole: seated.has(n.authorMemberId) ? deskRole(n.authorMemberId) : 'board', badges: [n.kind] }
+}
+
+/**
  * @param deckOrder 요구사항 대기 칸 교환 결과(판에 올린 요구사항 ID 목록) — 스토어가 사무실별로 내준다(CONTRACTS.md 「8」).
  * 없으면 position 순서.
  */
@@ -184,5 +194,6 @@ export function buildSceneModel(snapshot: WorkspaceSnapshot, deckOrder: readonly
     ...snapshot.agendaItems.filter((a) => a.status === 'confirmed').map(agendaEntity),
     ...requirementEntities(snapshot.requirements, deckOrder),
     boardEntity(snapshot.helpRequests),
+    ...snapshot.activityNotes.map((n) => activityEntity(n, seated)),
   ]
 }

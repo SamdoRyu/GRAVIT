@@ -50,12 +50,14 @@ export function podsShown(seats: ReadonlyMap<string, number>): Set<number> {
  * Snapshot → StationScene. 순수 함수. `deckOrder` = 보는 사람의 요구사항 대기 칸 교환 결과(스토어 requirementDeckOrder — 버리는 규칙은
  * 스토어가 이미 적용, CONTRACTS.md 「8」 요구사항 판 배치). SceneModel 입력으로 그대로 넘긴다.
  * 포드 번호가 정거장 포드 수를 넘는 팀원(deskIndex 8 · 9)은 3D에 없고, 그 팀원이 대표 담당인 이슈는 도킹 베이(backlog)에 둔다 —
- * 포드가 없는 팀원의 이슈와 같다(2026-11-04 결정).
+ * 포드가 없는 팀원의 이슈와 같다(2026-11-04 결정). 그 팀원의 활동 메모지는 게시판(board)으로 — SceneModel의 자리 없는 작성자 규칙(#173).
  */
 export function stationSceneOf(snapshot: WorkspaceSnapshot, deckOrder: readonly Id[] | null = null): StationScene {
   const seats = new Map([...deskSeats(snapshot.members)].filter(([, i]) => i < PODS.length))
   const entities = buildSceneModel(snapshot, deckOrder).map((e) =>
-    e.placeRole.startsWith('desk:') && e.kind !== 'avatar' && !seats.has(e.placeRole.slice('desk:'.length)) ? { ...e, placeRole: 'backlog' as const } : e,
+    e.placeRole.startsWith('desk:') && e.kind !== 'avatar' && !seats.has(e.placeRole.slice('desk:'.length))
+      ? { ...e, placeRole: e.kind === 'activity' ? ('board' as const) : ('backlog' as const) }
+      : e,
   )
   const crew = snapshot.members.filter((m) => seats.has(m.id))
   const deck = deckPlan(entities)
