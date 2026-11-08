@@ -180,6 +180,7 @@ class WorkspaceSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.requirementLinks").value(empty()))
                 .andExpect(jsonPath("$.activityNotes").value(empty()))
                 .andExpect(jsonPath("$.flow.openSubmissionCount").value(0))
+                .andExpect(jsonPath("$.flow.averageReviewWaitHours").value(nullValue())) // 열린 PR 없음
                 .andExpect(jsonPath("$.generatedAt").isString())
                 .andReturn().getResponse().getContentAsString();
 
@@ -246,6 +247,8 @@ class WorkspaceSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.submissions[2].currentRound").value(nullValue()))
                 .andExpect(jsonPath("$.submissions[0].state").value("draft"))
                 .andExpect(jsonPath("$.flow.openSubmissionCount").value(2))
+                // #249 평균 리뷰 대기 — Draft 제외 열린 PR 5만: T0(01:20) → 첫 센 리뷰 carol 02:00 = 40분 → 0.7
+                .andExpect(jsonPath("$.flow.averageReviewWaitHours").value(0.7))
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode actual = ContractShape.readTree(response);

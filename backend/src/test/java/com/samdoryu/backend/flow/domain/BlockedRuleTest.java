@@ -163,4 +163,59 @@ class BlockedRuleTest {
         assertThat(BlockedRule.ofHours(48, 48).isBlocked(pr, NOW)).isTrue();
         assertThat(BlockedRule.ofHours(72, 48).isBlocked(pr, NOW)).isFalse();
     }
+
+    // --- 평균 리뷰 대기 (FR-FLOW-05 · #249) — 프론트 tests/contract/flow.test.ts와 같은 예시 ---
+
+    private static SubmissionDto openPrBy(String authorLogin, Instant stateChangedAt, GithubReviewDto... reviews) {
+        return new SubmissionDto("9", 9, "PR 9", null, authorLogin, SubmissionState.OPEN,
+                "0123456789abcdef0123456789abcdef01234567", List.of(), List.of(reviews), List.of(), List.of(), null,
+                List.of(), false, null, hoursAgo(500), hoursAgo(1), null, null, null, stateChangedAt, hoursAgo(0), null);
+    }
+
+    @Test
+    void averageReviewWaitIsNullWithoutOpenPrsAndSkipsDraftMergedClosed() {
+        assertThat(BlockedRule.averageReviewWaitHours(List.of(), NOW)).isNull();
+        assertThat(BlockedRule.averageReviewWaitHours(List.of(
+                pr("1", SubmissionState.DRAFT, hoursAgo(10), null),
+                pr("2", SubmissionState.MERGED, hoursAgo(10), null),
+                pr("3", SubmissionState.CLOSED, hoursAgo(10), null)), NOW)).isNull();
+    }
+
+    @Test
+    void averageReviewWaitRunsToNowWithoutReviewAndStartsAtTheLaterOfOpeningAndLastCommit() {
+        assertThat(BlockedRule.averageReviewWaitHours(List.of(pr("1", SubmissionState.OPEN, hoursAgo(19), null)), NOW))
+                .isEqualTo(19.0);
+        assertThat(BlockedRule.averageReviewWaitHours(
+                List.of(pr("1", SubmissionState.OPEN, hoursAgo(10), hoursAgo(4))), NOW)).isEqualTo(4.0);
+    }
+
+    @Test
+    void averageReviewWaitEndsAtTheFirstCountedReview() {
+        SubmissionDto pr = pr("1", SubmissionState.OPEN, hoursAgo(10), hoursAgo(8),
+                review("samdo-lee", "approved", hoursAgo(9)),           // 마지막 커밋 전 — 세지 않음
+                review("Alice", "commented", hoursAgo(7)),              // 작성자 본인(대소문자 무시)
+                review("dev-park", "dismissed", hoursAgo(6)),
+                review("hana-choi", "changes_requested", hoursAgo(3)),  // 첫 센 리뷰
+                review("samdo-lee", "approved", hoursAgo(1)));
+        assertThat(BlockedRule.averageReviewWaitHours(List.of(pr), NOW)).isEqualTo(5.0);
+    }
+
+    @Test
+    void averageReviewWaitAveragesPerPrAndRoundsToOneDecimal() {
+        List<SubmissionDto> submissions = List.of(
+                pr("1", SubmissionState.OPEN, hoursAgo(2), null),                                       // 2
+                pr("2", SubmissionState.OPEN, hoursAgo(3), null,
+                        review("samdo-lee", "commented", NOW.minus(Duration.ofMinutes(165)))),          // 0.25
+                pr("3", SubmissionState.DRAFT, hoursAgo(30), null));                                    // 빠짐
+        // (2 + 0.25) / 2 = 1.125 → 1.1
+        assertThat(BlockedRule.averageReviewWaitHours(submissions, NOW)).isEqualTo(1.1);
+    }
+
+    @Test
+    void averageReviewWaitCountsReviewsWhenAuthorIsUnknownAndNeverGoesNegative() {
+        assertThat(BlockedRule.averageReviewWaitHours(
+                List.of(openPrBy(null, hoursAgo(6), review("alice", "commented", hoursAgo(4)))), NOW)).isEqualTo(2.0);
+        assertThat(BlockedRule.averageReviewWaitHours(List.of(openPrBy("alice", NOW.plus(Duration.ofHours(1)))), NOW))
+                .isEqualTo(0.0);
+    }
 }

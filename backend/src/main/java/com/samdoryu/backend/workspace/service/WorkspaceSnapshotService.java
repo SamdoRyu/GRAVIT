@@ -111,7 +111,8 @@ public class WorkspaceSnapshotService {
                 meetingService.listRecent(workspaceId),
                 helpRequestService.listSummaries(workspaceId, now),
                 activityService.listNotes(workspaceId),
-                FlowSummary.blockedAndOpenCount(blocked.blockedMemberIds(), countOpen(submissions)),
+                FlowSummary.of(blocked.blockedMemberIds(), countOpen(submissions),
+                        BlockedRule.averageReviewWaitHours(submissions, now)),
                 now);
     }
 
