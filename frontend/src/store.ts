@@ -96,6 +96,11 @@ interface OfficeState {
    */
   updateOfficeSettings: (settings: TeamSettings) => Promise<boolean>
   /**
+   * 수동 동기화(POST W/sync — 팀원, #234). 성공하면 snapshot.sync를 응답(running)으로 바꾸고 true — 끝나면 SSE sync · changed가
+   * 상태와 데이터를 다시 맞춘다. 실패(강사 forbidden_role · 진행 중 conflict 등)하면 사유를 알림으로 보이고 false.
+   */
+  requestOfficeSync: () => Promise<boolean>
+  /**
    * PR 추천 · 비추천 평가(PUT evaluations/mine — #19 · #20). 성공하면 snapshot의 그 PR currentRound를 응답으로 바꾸고 회차를 돌려준다.
    * 실패하면 사유를 알림으로 보이고 null. 회차가 바뀌었거나 PR이 닫혔으면(conflict) Snapshot을 다시 읽는다.
    */
@@ -396,6 +401,15 @@ export const useOffice = create<OfficeState>((set, get) => {
         fail(e)
         return false
       }
+    },
+    requestOfficeSync: async () => {
+      const sent = get().office?.snapshot?.sync
+      const result = await officeWrite(
+        (src, ws) => src.requestSync(ws),
+        // 응답보다 먼저 온 SSE sync(이미 끝남 등)가 더 새 값이다 — 그때는 응답의 running으로 덮지 않는다
+        (snapshot, status) => (snapshot.sync === sent ? { ...snapshot, sync: status } : snapshot),
+      )
+      return result !== null
     },
     evaluateSubmission: async (submissionId, request) => {
       const src = officeSource
