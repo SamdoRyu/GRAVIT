@@ -78,6 +78,8 @@ test('close my request with the helpful comment and a learning', async ({ page }
   await expect(detail.getByText('배운 점: SameSite는 세션 쿠키 설정에서 바꾼다')).toBeVisible()
   await expect(detail.getByText('도움이 됨')).toBeVisible()
   await expect(detail.getByRole('form', { name: '코멘트 쓰기' })).toHaveCount(0)
+  // 닫힌 글은 강사가 답할 수 없어 "강사에게 요청"도 없다 (#272)
+  await expect(detail.getByRole('button', { name: '강사에게 요청' })).toHaveCount(0)
   await expect.poll(() => helpStatus(page, '세션이 자꾸')).toBe('resolved')
 })
 

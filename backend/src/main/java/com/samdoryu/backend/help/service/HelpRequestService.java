@@ -16,11 +16,13 @@ import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
 import com.samdoryu.backend.help.repository.HelpCommentRepository;
 import com.samdoryu.backend.help.repository.HelpRequestRepository;
+import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import com.samdoryu.backend.meeting.domain.Standup;
 import com.samdoryu.backend.realtime.SnapshotResource;
 import com.samdoryu.backend.realtime.WorkspaceEventHub;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
+import com.samdoryu.backend.workspace.domain.WorkspaceKind;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Collection;
@@ -41,13 +43,16 @@ public class HelpRequestService {
 
     private final HelpRequestRepository helpRequestRepository;
     private final HelpCommentRepository helpCommentRepository;
+    private final InstructorAssignmentService instructorAssignmentService;
     private final WorkspaceEventHub eventHub;
     private final EntityManager entityManager;
 
     public HelpRequestService(HelpRequestRepository helpRequestRepository,
-            HelpCommentRepository helpCommentRepository, WorkspaceEventHub eventHub, EntityManager entityManager) {
+            HelpCommentRepository helpCommentRepository, InstructorAssignmentService instructorAssignmentService,
+            WorkspaceEventHub eventHub, EntityManager entityManager) {
         this.helpRequestRepository = helpRequestRepository;
         this.helpCommentRepository = helpCommentRepository;
+        this.instructorAssignmentService = instructorAssignmentService;
         this.eventHub = eventHub;
         this.entityManager = entityManager;
     }
@@ -117,8 +122,10 @@ public class HelpRequestService {
     }
 
     /**
-     * "강사에게 요청" 켜기(FR-LRN-21) — 요청자만. 검사 순서는 대상(404) → 요청자(403 — 강사 포함).
-     * 계약에 상태 조건이 없어 어느 상태에서든 켤 수 있고, 이미 켜져 있으면 그대로(처음 시각 유지)다.
+     * "강사에게 요청" 켜기(FR-LRN-21 · CONTRACTS_API 「11」) — 요청자만. 검사 순서는 대상(404) → 요청자(403 — 강사 포함)
+     * → 상태(409 — 강사가 답할 수 있는 {@code open} · {@code discussing} · {@code on_agenda}만, 이미 켜져 있어도)
+     * → 이미 켜져 있으면 그대로(처음 시각 유지 · 변경 알림 없음) → 지정된 강사 없음(409). 시연 사무실은 심사용 강사 계정이
+     * 강사라 지정 행을 보지 않는다.
      */
     @Transactional
     public HelpRequestSummary requestInstructor(WorkspaceAccess access, Long helpRequestId) {
@@ -127,7 +134,17 @@ public class HelpRequestService {
         if (!access.isSelf(helpRequest.getRequester().getId())) {
             throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
         }
+        if (!helpRequest.getStatus().acceptsComments()) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
         Instant now = Instant.now();
+        if (helpRequest.isInstructorRequested()) {
+            return HelpRequestSummary.of(helpRequest, now);
+        }
+        if (helpRequest.getWorkspace().getKind() != WorkspaceKind.DEMO
+                && !instructorAssignmentService.hasCurrentInstructor(access.workspaceId())) {
+            throw new ApiException(ErrorCode.CONFLICT);
+        }
         helpRequest.requestInstructor(now);
         eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.HELP_REQUESTS);
         return HelpRequestSummary.of(helpRequest, now);

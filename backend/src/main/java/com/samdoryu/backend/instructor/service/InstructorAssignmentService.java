@@ -25,6 +25,15 @@ public class InstructorAssignmentService {
                 workspaceId, instructorGithubUserId);
     }
 
+    /**
+     * 그 사무실에 지금 지정된 강사가 있는가 — 새 "강사에게 요청"의 조건(CONTRACTS_API 「11」). {@code GET W/instructors}와 같은
+     * 기준(해제되지 않은 지정 행)이다. 시연 사무실의 심사용 강사는 지정 행이 없어 부르는 쪽이 따로 다룬다.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasCurrentInstructor(Long workspaceId) {
+        return instructorAssignmentRepository.existsByWorkspaceIdAndUnassignedAtIsNull(workspaceId);
+    }
+
     /** 이 강사가 지금 지정된 사무실 ID 전부 — {@code GET /api/workspaces}(강사는 지정된 사무실 전부). */
     @Transactional(readOnly = true)
     public List<Long> currentWorkspaceIds(Long instructorGithubUserId) {

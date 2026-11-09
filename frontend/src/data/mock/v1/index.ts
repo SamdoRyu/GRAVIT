@@ -7,7 +7,7 @@ import { DataError, type DataSource } from '../../DataSource'
 import { CARD_MSG, cardConfirmError, cardCreateError, cardUpdateError, draftCardCells, followUpQuestionError, type CardMaterials } from '../../rules/decisionCard'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { averageReviewWaitHours } from '../../rules/flow'
-import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
+import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
@@ -761,7 +761,10 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const user = requireUser()
       const ws = accessible(workspaceId, user)
       const help = findOwnHelpRequest(ws, helpRequestId, currentMember(ws, user)!)
-      // 이미 켜져 있으면 그대로(처음 시각 유지). 상태 조건은 없다
+      // 상태 → 이미 켜짐이면 그대로(처음 시각 유지 · 알림 없음) → 지정된 강사. 시연 사무실은 심사용 강사가 강사다 (#272)
+      const hasInstructor = ws.snapshot.workspace.kind === 'demo' || (ws.instructors ?? []).length > 0
+      const error = instructorRequestError(help, hasInstructor)
+      if (error) throw new DataError(error, 'conflict')
       if (!help.instructorRequested) {
         help.instructorRequested = true
         help.instructorRequestedAt = toInstant(now())
