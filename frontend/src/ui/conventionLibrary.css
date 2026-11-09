@@ -3,7 +3,9 @@
 .conv-state { display: grid; gap: 8px; justify-items: start; }
 .conv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .conv-lead { margin: 0; line-height: 1.5; word-break: keep-all; }
-.conv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; }
+/* 스크롤 영역은 밖으로 나간 그림을 자른다(#280). 카드 테두리(바깥 1px)와 HUD 포커스 링(2px + 간격 1px)이 들어가게
+   안쪽 여백 3px를 두고, 같은 크기의 음수 바깥 여백으로 카드 위치는 그대로 둔다. */
+.conv-list { list-style: none; margin: -3px; padding: 3px; display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; }
 .conv-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); font: inherit; text-align: left; cursor: pointer; }
 .conv-item:hover { box-shadow: 0 0 0 1px var(--accent); }
 .conv-item strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

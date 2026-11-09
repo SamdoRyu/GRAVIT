@@ -61,3 +61,30 @@ test('a GitHub instructor sees the form; it checks lengths, and the server refus
   await expect(edit.getByLabel('이름', { exact: true })).toHaveValue('커밋 메시지 한 줄 요약')
   await expect(edit.getByRole('combobox', { name: /^대상/ })).toHaveValue('commit_message')
 })
+
+// #280: 목록은 스크롤 영역(overflow)이라 그 밖으로 나간 그림은 잘린다. 카드 테두리(바깥 1px 그림자)와
+// 키보드 포커스 링(outline + offset)이 목록의 보이는 영역 안에 있어야 네 변이 다 보인다.
+test('item borders and the keyboard focus ring stay inside the scrolling list (#280)', async ({ page }) => {
+  await openApp(page, 'mock', { scene: false })
+  const dialog = await openLibrary(page)
+  const list = dialog.getByRole('list', { name: '컨벤션 목록' })
+  await expect(list.getByRole('button')).toHaveCount(4)
+
+  // 닫기(자동 포커스)에서 Shift+Tab → 마지막 카드에 키보드 포커스
+  await page.keyboard.press('Shift+Tab')
+  await expect(list.getByRole('button').last()).toBeFocused()
+
+  const outside = await list.evaluate((ul) => {
+    const box = ul.getBoundingClientRect()
+    return [...ul.querySelectorAll<HTMLElement>('.conv-item')].map((el) => {
+      const cs = getComputedStyle(el)
+      const outline = cs.outlineStyle === 'none' ? 0 : parseFloat(cs.outlineWidth) + parseFloat(cs.outlineOffset)
+      const ring = Math.max(1, outline) // 테두리 그림자는 바깥 1px
+      const r = el.getBoundingClientRect()
+      const over = Math.max(box.left - (r.left - ring), r.right + ring - box.right, box.top - (r.top - ring), r.bottom + ring - box.bottom)
+      return { name: el.textContent, ring, over: Math.round(Math.max(0, over) * 10) / 10 }
+    })
+  })
+  expect(outside.filter((o) => o.over > 0)).toEqual([])
+  expect(outside.at(-1)?.ring).toBeGreaterThan(1) // 마지막 카드는 실제로 포커스 링을 그리고 있다
+})
