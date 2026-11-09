@@ -18,6 +18,11 @@ export interface StationScene {
   pods: Set<number>
   /** 요구사항 데크의 판 배치 */
   deck: DeckPlan
+  /**
+   * 진행 중인 회의에 와 있는 팀원(SceneModel 아바타 자리 meeting) → 지휘 브리지 좌석 번호. 포드 번호 순서로 0번부터 —
+   * 회의 중 누가 들어오거나 나가도 남은 사람의 순서가 흔들리지 않는다. 회의가 없으면 비어 있다.
+   */
+  meetingSeats: Map<string, number>
   layout: ThemeLayout
 }
 
@@ -61,12 +66,18 @@ export function stationSceneOf(snapshot: WorkspaceSnapshot, deckOrder: readonly 
   )
   const crew = snapshot.members.filter((m) => seats.has(m.id))
   const deck = deckPlan(entities)
+  const visible = entities.filter((e) => e.kind !== 'avatar' || seats.has(e.refId ?? ''))
+  const attendees = visible
+    .filter((e) => e.kind === 'avatar' && e.placeRole === 'meeting' && e.refId !== null)
+    .map((e) => e.refId!)
+    .sort((a, b) => (seats.get(a) ?? 0) - (seats.get(b) ?? 0))
   return {
-    entities: entities.filter((e) => e.kind !== 'avatar' || seats.has(e.refId ?? '')),
+    entities: visible,
     seats,
     crew,
     pods: podsShown(seats),
     deck,
+    meetingSeats: new Map(attendees.map((id, i) => [id, i])),
     layout: createStationLayout(seats, deck.places),
   }
 }

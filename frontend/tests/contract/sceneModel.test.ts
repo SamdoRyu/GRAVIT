@@ -312,3 +312,30 @@ describe('SceneModel — 회의실의 안건 (#30 · #26)', () => {
     assert.notEqual(model.find((e) => e.key === `submission:${p.id}`)?.placeRole, 'meeting')
   })
 })
+
+describe('SceneModel — 회의 참석 (CONTRACTS.md 「10」 아바타 이동)', () => {
+  const meeting = (status: 'ongoing' | 'ended', attendeeMemberIds: string[]) => ({
+    id: 'mt_t',
+    status,
+    startedAt: '2026-11-05T02:00:00Z',
+    endedAt: status === 'ended' ? '2026-11-05T02:30:00Z' : null,
+    attendeeMemberIds,
+    notes: null,
+    discussedAgendaItemIds: [],
+  })
+
+  it('진행 중 회의 참석자는 meeting, 나머지 팀원은 desk:<memberId>', async () => {
+    const snap = await load('ws_1')
+    const [a, b] = avatars(snap)
+    const placed = avatars({ ...snap, meetings: [meeting('ongoing', [a.refId!])] })
+    assert.equal(placed.find((e) => e.refId === a.refId)?.placeRole, 'meeting')
+    assert.equal(placed.find((e) => e.refId === b.refId)?.placeRole, `desk:${b.refId}`)
+  })
+
+  it('끝난 회의 참석자는 자기 포드로 돌아간다', async () => {
+    const snap = await load('ws_1')
+    const [a] = avatars(snap)
+    const placed = avatars({ ...snap, meetings: [meeting('ended', [a.refId!])] })
+    assert.equal(placed.find((e) => e.refId === a.refId)?.placeRole, `desk:${a.refId}`)
+  })
+})

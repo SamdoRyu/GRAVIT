@@ -1,7 +1,8 @@
 // 우주정거장 ThemeLayout — 공간 역할 → 좌표 · 드롭 구역 (CONTRACTS.md 「8」). 소유: C.
 // 도메인 규칙(무엇이 어느 역할인지)은 SceneModel이 정한다. 여기는 그 역할이 정거장의 어디인지만 안다.
 import type { PlaceRole, ThemeLayout, Vec3 } from '../../scene/model/types'
-import { ARCHIVE, BRIDGE, CARGO_PITCH, CARGO_STACK, COMM_HUB, DOCK, POD, PODS, REQ_DECK, REQ_PLATE, REQ_PLATE_SLOTS, reqPlateCenter, SCANNER, WORLD_SCALE, type Pod } from './geometry'
+import { ARCHIVE, BRIDGE, CARGO_PITCH, CARGO_STACK, COMM_HUB, DOCK, HULL_Y, POD, PODS, REQ_DECK, REQ_PLATE, REQ_PLATE_SLOTS, reqPlateCenter, SCANNER, WORLD_SCALE, type Pod } from './geometry'
+import { BRIDGE_NODE, podNode, shortestPath } from './tubeGraph'
 
 /** 포드 하나의 작업 상자 칸: 열(포드 축을 따라 허브 쪽으로) × 층 */
 const POD_COLUMNS = 3
@@ -131,6 +132,25 @@ export function createStationLayout(seats: ReadonlyMap<string, number>, plates: 
       if (plate >= 0) return `${REQUIREMENT_PREFIX}${plates[plate]}`
       if (insideModule(DOCK, 'z', x, z)) return 'backlog'
       return null
+    },
+
+    /**
+     * 아바타 이동 빛 점의 길(CONTRACTS.md 「10」 아바타 이동 연출): 책상(desk:<팀원>) ↔ 회의 공간(meeting) 사이의 통로 중심선,
+     * 출발 모듈 중심부터 도착 모듈 중심까지. 높이는 모듈 축(HULL_Y). 그 밖의 역할 · 자리 없는 팀원이면 빈 배열.
+     */
+    route(from: PlaceRole, to: PlaceRole): Vec3[] {
+      const node = (role: PlaceRole): string | null => {
+        if (role === 'meeting') return BRIDGE_NODE
+        if (role.startsWith(DESK_PREFIX)) {
+          const deskIndex = seats.get(role.slice(DESK_PREFIX.length))
+          return deskIndex === undefined ? null : podNode(deskIndex)
+        }
+        return null
+      }
+      const a = node(from)
+      const b = node(to)
+      if (a === null || b === null || a === b) return []
+      return shortestPath(a, b).map((p) => [p.x * WORLD_SCALE, HULL_Y * WORLD_SCALE, p.z * WORLD_SCALE] as Vec3)
     },
   }
 }

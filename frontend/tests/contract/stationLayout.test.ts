@@ -5,7 +5,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import { deskSeats } from '../../src/scene/model/buildSceneModel'
 import type { PlaceRole, Vec3 } from '../../src/scene/model/types'
-import { ALWAYS_SHOWN_PODS, POD, PODS, WORLD_SCALE } from '../../src/theme/station/geometry'
+import { ALWAYS_SHOWN_PODS, BRIDGE, POD, PODS, WORLD_SCALE } from '../../src/theme/station/geometry'
 import { createStationLayout } from '../../src/theme/station/stationLayout'
 
 const load = (workspaceId: string) =>
@@ -90,5 +90,30 @@ describe('stationLayout — 공용 구역', () => {
 
   it('데크에 판이 없는 요구사항 구역은 호출 쪽 버그로 본다 (#16)', () => {
     assert.throws(() => layout.anchor('requirement:r_1', 0))
+  })
+})
+
+describe('stationLayout — 이동 길 route (CONTRACTS.md 「8」 · 「10」 아바타 이동 연출)', () => {
+  const layout = createStationLayout(fullSeats)
+  const near = (a: Vec3, b: Vec3) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6)
+  const length = (pts: Vec3[]) => pts.reduce((s, p, i) => (i === 0 ? 0 : s + Math.hypot(p[0] - pts[i - 1][0], p[2] - pts[i - 1][2])), 0)
+
+  it('포드 8개 모두 지휘 브리지까지 통로 길이 있고, 포드 중심에서 시작해 브리지 중심에서 끝난다', () => {
+    PODS.forEach((p, i) => {
+      const path = layout.route!(`desk:m${i}` as PlaceRole, 'meeting')
+      assert.ok(path.length >= 2, `pod ${i}`)
+      assert.ok(near(path[0], [p.x * WORLD_SCALE, path[0][1], p.z * WORLD_SCALE]), `pod ${i} start`)
+      const end = path[path.length - 1]
+      assert.ok(near(end, [BRIDGE.x * WORLD_SCALE, end[1], BRIDGE.z * WORLD_SCALE]), `pod ${i} end`)
+      assert.ok(length(path) > 0)
+      // 돌아오는 길은 같은 길을 거꾸로 간다
+      assert.deepEqual(layout.route!('meeting', `desk:m${i}` as PlaceRole), [...path].reverse())
+    })
+  })
+
+  it('자리가 없는 팀원 · 같은 곳 · 이동 대상이 아닌 역할은 빈 길(빛 점 없이 페이드만)', () => {
+    assert.deepEqual(layout.route!('desk:nobody' as PlaceRole, 'meeting'), [])
+    assert.deepEqual(layout.route!('meeting', 'meeting'), [])
+    assert.deepEqual(layout.route!('backlog', 'meeting'), [])
   })
 })
