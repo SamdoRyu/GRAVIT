@@ -28,8 +28,8 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await offices.filter({ hasText: 'gitvillage' }).click()
   await arrive(page, '김옥토', 'team-samdo/gitvillage')
 
-  // 사무실 — 상단 바와 v1 데이터
-  await expect(page.getByRole('banner').getByText('팀 오피스')).toBeVisible()
+  // 사무실 — 상단 바(저장소 이름)와 v1 데이터
+  await expect(page.getByRole('banner').getByText('gitvillage', { exact: true })).toBeVisible()
   await expect.poll(() => readStore(page, (s) => s.office?.workspaceId ?? null)).toBe('ws_1')
   await expect(page.locator('.kpis .kpi').first().locator('.kpi-label')).toHaveText(/^(시작 전|종료까지|오늘 종료|종료됨)$/)
 
@@ -122,7 +122,8 @@ test('open a new office from a repository: admin form with period and spec path,
   const settings = await readStore(page, (s) => s.office!.snapshot!.settings)
   expect([settings.projectStartDate, settings.projectEndDate, settings.specDocumentPath]).toEqual([start, end, 'docs/requirements.md'])
   expect(await readStore(page, (s) => s.office!.snapshot!.viewer.role)).toBe('repo_admin')
-  await expect(page.getByRole('banner').getByText('팀 오피스')).toBeVisible()
+  // 새로 연 사무실로 바꾸면 상단 바 저장소 이름도 바뀐다
+  await expect(page.getByRole('banner').getByText('side-lab', { exact: true })).toBeVisible()
 })
 
 test('a GitHub user with no visible organization still sees the app-install hint (#238)', async ({ page }) => {

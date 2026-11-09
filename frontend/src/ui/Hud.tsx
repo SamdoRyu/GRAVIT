@@ -8,6 +8,7 @@ import './panel.css'
 import './dialogs.css'
 import './meeting.css'
 import './responsive.css'
+import './ivoryTopbar.css'
 import { Dialogs } from './Dialogs'
 import { OVERLAY_QUERY, useMediaQuery } from './hooks'
 import { Rail } from './RightPanel'
@@ -131,7 +132,7 @@ export function Hud() {
   const railMode = panelOpen ? (wide ? 'rail-wide' : 'rail-normal') : hasDetail ? 'rail-normal' : 'rail-min'
 
   return (
-    <div ref={root} className={`hud ${railMode}${overlay ? ' is-overlay' : ''}`}>
+    <div ref={root} className={`hud ivory-hud ${railMode}${overlay ? ' is-overlay' : ''}`}>
       <TopBar />
       <div className="hud-bottom">
         <Toasts />
