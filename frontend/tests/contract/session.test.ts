@@ -238,3 +238,18 @@ describe('도착 장면 (로그인 디자인 전환 A)', () => {
     assert.equal(st().landing, false, '로그아웃하면 끈다')
   })
 })
+
+describe('우주선으로 다른 사무실로 옮기기 (scene/DockShip.tsx)', () => {
+  it('사무실 안에서 바로 다른 사무실을 열고 기억한다 — 처음이어도 도착 장면은 없다(우주선 비행이 도착 연출)', async () => {
+    const source = make()
+    await st().start(source, { preferredWorkspace: TEAM_WS })
+    await st().travelToWorkspace(DEMO_WS)
+    assert.equal(office()?.workspaceId, DEMO_WS)
+    assert.equal(st().landing, false)
+
+    useOffice.getState().closeOffice()
+    resetSessionForTest()
+    await st().start(source)
+    assert.equal(office()?.workspaceId, DEMO_WS, '다음에 앱을 열면 옮겨 간 사무실로')
+  })
+})

@@ -164,6 +164,8 @@ export type WorldSpec =
   | { kind: 'box'; id: string }
   | { kind: 'member'; id: string }
   | { kind: 'agenda' }
+  /** 도킹 베이의 우주선(사무실 바꾸기 — scene/DockShip.tsx) */
+  | { kind: 'ship' }
   | { kind: 'point'; x: number; y: number; z: number }
 
 export interface ScreenPoint {
@@ -190,6 +192,7 @@ export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null
     if (!api) return null
     let w: [number, number, number] | null = null
     if (s.kind === 'point') w = [s.x, s.y, s.z]
+    else if (s.kind === 'ship') w = [rt.shipLive.x, rt.shipLive.y, rt.shipLive.z]
     else if (s.kind === 'box') {
       // Every box has the same height now (scene/slots.ts BOX_H): aim at its middle.
       const b = rt.boxLive.get(s.id)
@@ -228,6 +231,15 @@ export function project(page: Page, spec: WorldSpec): Promise<ScreenPoint | null
     const py = rect.top + ((1 - cy / cw) / 2) * rect.height
     return { x: px, y: py, free: document.elementFromPoint(px, py) === api.gl.domElement }
   }, spec)
+}
+
+/** Click the docking-bay ship (사무실 바꾸기) and return its destination list. */
+export async function openShip(page: Page): Promise<Locator> {
+  const at = await settled(page, { kind: 'ship' })
+  await page.mouse.click(at.x, at.y)
+  const list = page.getByRole('dialog', { name: '다른 정거장으로 이동' })
+  await expect(list).toBeVisible()
+  return list
 }
 
 /** Pixel offsets probed around a projected point (centre first, then growing rings, lower side first). */

@@ -9,7 +9,8 @@
 export const WORLD_SCALE = 0.42
 
 /** 정거장이 차지하는 범위(시안 단위) — 카메라 맞춤용 */
-export const STATION_BOUNDS = { minX: 0, maxX: 56, minY: -3, maxY: 11, minZ: 0, maxZ: 44 } as const
+// maxZ: 도킹 링(z 41.8) 앞에 가로로 붙은 우주선(scene/DockShip.tsx — 동체 축 z 45.7, 날개 끝 z 48.5)까지
+export const STATION_BOUNDS = { minX: 0, maxX: 56, minY: -3, maxY: 11, minZ: 0, maxZ: 49 } as const
 
 /** 모듈 축의 높이 */
 export const HULL_Y = 3.2
