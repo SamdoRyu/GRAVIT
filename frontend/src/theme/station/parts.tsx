@@ -72,7 +72,7 @@ export function Bx({ s, p, c, rot }: { s: V3; p: V3; c: MeshLambertMaterial | Me
 
 // ---- 빛 번짐(시안 glow sprite) ----
 let glowTexture: CanvasTexture | null = null
-function glowTex(): CanvasTexture {
+export function glowTex(): CanvasTexture {
   if (glowTexture) return glowTexture
   const c = document.createElement('canvas')
   c.width = c.height = 128

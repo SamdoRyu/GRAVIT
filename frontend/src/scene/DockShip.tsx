@@ -13,6 +13,7 @@ import { useSession } from '../session'
 import { useOffice } from '../store'
 import { COLORS, lam } from '../theme/station/parts'
 import { DOCK, HULL_Y, WORLD_SCALE } from '../theme/station/geometry'
+import { skyPaletteFor } from '../theme/station/skyPalette'
 import { clickSlop, noRaycast, setCursor, shipLive } from './runtime'
 import { SceneHtml } from './shared'
 import { shipPose, type ShipFlight } from './shipFlight'
@@ -124,6 +125,8 @@ function DestinationList({ onPick, onClose }: { onPick: (d: Destination) => void
   }, [onClose])
 
   const others = Array.isArray(items) ? items.filter((w) => w.id !== current) : []
+  // 정거장마다 그 사무실의 행성 색 점(#277) — 배경과 같은 짝짓기
+  const accessible = Array.isArray(items) ? items.map((w) => w.id) : null
   return (
     <div
       role="dialog"
@@ -161,6 +164,10 @@ function DestinationList({ onPick, onClose }: { onPick: (d: Destination) => void
                 onMouseEnter={(e) => (e.currentTarget.style.background = '#f1eefa')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
               >
+                <span
+                  aria-hidden="true"
+                  style={{ flex: 'none', width: 10, height: 10, borderRadius: '50%', background: `#${skyPaletteFor(w.id, accessible).swatch.toString(16).padStart(6, '0')}`, boxShadow: '0 0 0 2px rgba(255,255,255,0.9), 0 0 0 3px rgba(30,45,90,0.12)' }}
+                />
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{w.displayName}</span>
                 {w.kind === 'demo' && <span className="flag">시연</span>}
                 <span className="flag">{ROLE_LABEL[w.myRole]}</span>

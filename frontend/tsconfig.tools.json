@@ -19,5 +19,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["tests", "scripts", "src/data", "src/scene/model", "src/theme/station/geometry.ts", "src/theme/station/stationLayout.ts", "src/theme/station/tubeGraph.ts", "src/theme/station/memoSpots.ts", "src/scene/stationScene.ts", "src/scene/slots.ts", "src/scene/requirementPlate.ts", "src/scene/cargoDrop.ts", "src/scene/badgeView.ts", "src/scene/shipFlight.ts", "src/theme/station/crewPalette.ts", "src/store.ts", "src/session.ts", "src/ui/syncText.ts", "src/ui/format.ts", "src/ui/weekPlan.ts", "src/ui/meetingView.ts"]
+  "include": ["tests", "scripts", "src/data", "src/scene/model", "src/theme/station/geometry.ts", "src/theme/station/stationLayout.ts", "src/theme/station/tubeGraph.ts", "src/theme/station/memoSpots.ts", "src/theme/station/skyPalette.ts", "src/scene/stationScene.ts", "src/scene/slots.ts", "src/scene/requirementPlate.ts", "src/scene/cargoDrop.ts", "src/scene/badgeView.ts", "src/scene/shipFlight.ts", "src/theme/station/crewPalette.ts", "src/store.ts", "src/session.ts", "src/ui/syncText.ts", "src/ui/format.ts", "src/ui/weekPlan.ts", "src/ui/meetingView.ts"]
 }

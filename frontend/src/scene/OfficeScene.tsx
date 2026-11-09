@@ -19,6 +19,7 @@ import { TaskTooltip } from './TaskTooltip'
 import { clickSlop, sceneApi } from './runtime'
 import { NoPick } from './shared'
 import { useStationScene } from './useStationScene'
+import { useSkyPalette } from './useSkyPalette'
 import { useOffice } from '../store'
 
 const NO_PODS = podsShown(new Map())
@@ -37,10 +38,11 @@ function SceneApiBridge() {
 
 export function OfficeScene() {
   const scene = useStationScene()
+  const skyPalette = useSkyPalette()
   return (
     <>
       <SceneApiBridge />
-      <StationSky />
+      <StationSky palette={skyPalette} />
       <CameraRig />
       {/* Anything that doesn't stop propagation lands here: a click on empty space / the hull clears the selection. */}
       <group
