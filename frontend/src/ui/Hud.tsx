@@ -76,6 +76,11 @@ export function Hud() {
   const hasDetail = useOffice((s) => s.officeSelection !== null && s.office?.snapshot != null)
   const panelOpen = useUi((s) => s.panelOpen)
   const wide = useUi((s) => s.wide)
+  // 도움 요청이 바뀌면 강사 답변 확인을 맞춘다(#290 — 도움 요청 탭의 점 · 3D 강사 우주선)
+  const helpRequests = useOffice((s) => s.office?.snapshot?.helpRequests)
+  useEffect(() => {
+    if (helpRequests) void useOffice.getState().checkInstructorAnswers()
+  }, [helpRequests])
 
   // Crossing the breakpoint: entering overlay mode collapses the rail but remembers the docked
   // choice; leaving it restores that choice.

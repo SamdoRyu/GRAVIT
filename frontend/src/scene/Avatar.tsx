@@ -8,7 +8,7 @@
 import { useAnimations, useGLTF } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
-import { Color, MeshBasicMaterial, MeshStandardMaterial, NoColorSpace, OctahedronGeometry, SphereGeometry, type Group, type Material, type Mesh, type Texture } from 'three'
+import { Color, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, SphereGeometry, type Group, type Material, type Mesh, type Texture } from 'three'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { Id, MemberDto } from '../data/types'
 import { useOffice } from '../store'
@@ -17,6 +17,7 @@ import { crewEnvironment } from '../theme/station/crewEnvironment'
 import { applyCrewPalette, crewColor, setCrewColor } from '../theme/station/crewPalette'
 import { EXIT_SPOT, type Spot } from '../theme/station/spots'
 import { WORLD_SCALE } from '../theme/station/geometry'
+import { useLinearTextures } from './linearTextures'
 import type { Vec3 } from './model/types'
 import { SceneHtml, useDynamicLayer } from './shared'
 import { avatarLive, clickSlop, noRaycast, setCursor, trailLive, type AvatarLive, type TrailLive } from './runtime'
@@ -80,20 +81,6 @@ function pointAt(pts: readonly Vec3[], d: number, out: { x: number; y: number; z
       return
     }
     left -= seg
-  }
-}
-
-/**
- * The design paints its textures for three r150's legacy output (no colour decoding); the canvas renders the same
- * way (`linear`), so the glTF's colour textures are read as-is. Shared by every clone, set once.
- */
-const preparedTextures = new WeakSet<Texture>()
-function useLinearTextures(textures: (Texture | null)[]) {
-  for (const t of textures) {
-    if (!t || preparedTextures.has(t)) continue
-    t.colorSpace = NoColorSpace
-    t.needsUpdate = true
-    preparedTextures.add(t)
   }
 }
 

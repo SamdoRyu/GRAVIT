@@ -9,6 +9,7 @@ import { StandupPanel } from './StandupBoard'
 import { Icon } from './icons'
 import { OfficeBoardSearch, OfficeKanban, OfficeList } from './OfficeBoard'
 import { OfficeDetailDrawer } from './OfficeDetail'
+import { useUnreadInstructorAnswers } from './useAwaitingInstructor'
 import { WeekView } from './WeekView'
 import { useUi, type Tab } from './uiState'
 
@@ -31,6 +32,8 @@ function Panel() {
   const helpCount = useOffice((s) => s.office?.snapshot?.helpRequests.filter((h) => h.status !== 'resolved' && h.status !== 'ended').length ?? 0)
   // 요구사항 탭은 문서에 있는 요구사항(active)만 센다 (#197)
   const requirementCount = useOffice((s) => s.office?.snapshot?.requirements.filter((r) => r.status === 'active').length ?? 0)
+  // 새 강사 답변이 있으면 탭에 빨간 점 — 그 글들을 열어 보면 사라진다(#290)
+  const newInstructorAnswer = useUnreadInstructorAnswers().size > 0
   const ui = useUi.getState()
   const count = (t: Tab) => (t === 'week' || t === 'standup' || t === 'decisions' || t === 'retro' ? null : t === 'help' ? helpCount : t === 'requirements' ? requirementCount : taskCount)
 
@@ -48,6 +51,7 @@ function Panel() {
               onClick={() => ui.setTab(t.id)}
             >
               {t.label}
+              {t.id === 'help' && newInstructorAnswer && <i className="tab-dot" role="img" aria-label="새 강사 답변" />}
               {count(t.id) !== null && <span className="tab-count">{count(t.id)}</span>}
             </button>
           ))}

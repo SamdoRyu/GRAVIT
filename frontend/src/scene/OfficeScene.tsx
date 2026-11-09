@@ -11,6 +11,7 @@ import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
 import { CommBoard } from './CommBoard'
 import { DockShip } from './DockShip'
+import { InstructorShip } from './InstructorShip'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
 import { podsShown } from './stationScene'
@@ -68,6 +69,10 @@ export function OfficeScene() {
         <MeetingRoomState />
         <RequirementDeck />
         <CommBoard />
+        {/* 강사 우주선(#290) — 라코 glTF를 기다리는 동안에도 나머지 장면은 그대로 */}
+        <Suspense fallback={null}>
+          <InstructorShip />
+        </Suspense>
         <ActivityNotes />
         <ArchiveTag />
         <DockShip />

@@ -91,7 +91,7 @@ export interface MockState {
  * 저장 모양(MockState · seed)을 바꾸면 올린다. 그래야 개발자 브라우저에 남은 옛 데이터를 읽지 않고 seed로 다시 시작한다.
  * (올리지 않으면 옛 데이터에 새 칸 · 새 seed가 없어 화면에 안 보이거나, 뼈대 검사에서 걸러져 seed로 돌아간다.)
  */
-export const MOCK_STATE_VERSION = 8 // 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 강사 지정 seed (#53) · 7: 내 머지된 PR s_4 · 기술 결정 카드 (#218) · 8: 활동 기록 seed (#173)
+export const MOCK_STATE_VERSION = 10 // 10: hr_4 강사 답변 (#290) · 9: hr_2 강사에게 요청 (#290) · 2: 팀 사무실 seed에 평균 리뷰 대기 예시 값 (#24) · 3: 도움 요청 seed · helpThreads (#183) · 4: 스탠드업 seed (#190) · 5: 요구사항 · 연결 seed (#197) · 6: 강사 지정 seed (#53) · 7: 내 머지된 PR s_4 · 기술 결정 카드 (#218) · 8: 활동 기록 seed (#173)
 
 /**
  * 서버 설정의 승인된 강사 계정(INSTRUCTOR_GITHUB_USER_IDS) 흉내 — GitHub 사용자 ID 순. 이름 · 로그인은 그 강사가 로그인한 적이
@@ -539,7 +539,8 @@ function teamWorkspace(now: Date): MockWorkspace {
 }
 
 /**
- * 도움 요청 3건 (#183) — 로그인 사용자(m_1)의 48시간 지난 안건 후보 · 박데브의 열린 요청 · 최하나의 해결된 요청.
+ * 도움 요청 4건 (#183 · #290) — 로그인 사용자(m_1)의 48시간 지난 안건 후보 · 박데브의 열린 요청(강사에게 요청, 답 없음) ·
+ * 최하나의 해결된 요청 · 이삼도의 열린 요청(강사 답변 있음).
  * 안건 후보 여부(isAgendaCandidate)는 load 때 지금 시각으로 다시 계산한다.
  */
 function teamHelpRequests(members: MemberDto[], ago: (hours: number) => Instant): { summaries: HelpRequestSummary[]; threads: MockHelpThread[] } {
@@ -549,14 +550,16 @@ function teamHelpRequests(members: MemberDto[], ago: (hours: number) => Instant)
   }
   const comment = (id: Id, memberId: Id, content: string, hoursAgo: number): HelpCommentDto => ({ id, author: ref(memberId), authorMemberId: memberId, isInstructorAnswer: false, content, createdAt: ago(hoursAgo) })
   // 키 순서는 계약 표 그대로
-  const summary = (s: Pick<HelpRequestSummary, 'id' | 'requesterMemberId' | 'content' | 'status' | 'commentCount' | 'createdAt' | 'closedAt'>): HelpRequestSummary => ({
+  const summary = (
+    s: Pick<HelpRequestSummary, 'id' | 'requesterMemberId' | 'content' | 'status' | 'commentCount' | 'createdAt' | 'closedAt'> & Partial<Pick<HelpRequestSummary, 'instructorRequestedAt'>>,
+  ): HelpRequestSummary => ({
     id: s.id,
     requesterMemberId: s.requesterMemberId,
     content: s.content,
     status: s.status,
     isAgendaCandidate: false,
-    instructorRequested: false,
-    instructorRequestedAt: null,
+    instructorRequested: s.instructorRequestedAt != null,
+    instructorRequestedAt: s.instructorRequestedAt ?? null,
     agendaItemId: null,
     fromStandupId: null,
     commentCount: s.commentCount,
@@ -567,12 +570,30 @@ function teamHelpRequests(members: MemberDto[], ago: (hours: number) => Instant)
     summaries: [
       summary({ id: 'hr_1', requesterMemberId: 'm_1', content: '로컬에서 GitHub 로그인 뒤 세션이 자꾸 끊겨요. SameSite 설정을 어디서 바꾸나요?', status: 'discussing', commentCount: 1, createdAt: ago(50), closedAt: null }),
       summary({ id: 'hr_3', requesterMemberId: 'm_4', content: '회고 리포트를 마크다운으로 내보낼 때 팀원 이름은 어떻게 바꾸나요?', status: 'resolved', commentCount: 1, createdAt: ago(30), closedAt: ago(20) }),
-      summary({ id: 'hr_2', requesterMemberId: 'm_3', content: '3D 상자를 끌면 가끔 책상 밖으로 튀어요. 원인을 같이 봐 줄 사람 있나요?', status: 'open', commentCount: 0, createdAt: ago(6), closedAt: null }),
+      // 강사에게 요청했고 아직 강사 답변이 없다 — 3D 강사 우주선이 와 있다 (#290)
+      summary({ id: 'hr_2', requesterMemberId: 'm_3', content: '3D 상자를 끌면 가끔 책상 밖으로 튀어요. 원인을 같이 봐 줄 사람 있나요?', status: 'open', commentCount: 0, createdAt: ago(6), closedAt: null, instructorRequestedAt: ago(5) }),
+      // 강사가 답했다 — 아직 열어 보지 않은 팀원에게 빨간 점 (#290). 강사 답변은 상태를 바꾸지 않아 open 그대로(「11」)
+      summary({ id: 'hr_4', requesterMemberId: 'm_2', content: '요구사항 판에 이슈를 놓아도 연결이 안 돼요. 레포 관리자만 할 수 있나요?', status: 'open', commentCount: 1, createdAt: ago(5), closedAt: null, instructorRequestedAt: ago(4) }),
     ],
     threads: [
       { helpRequestId: 'hr_1', comments: [comment('hc_1', 'm_2', 'application.yaml의 server.servlet.session.cookie.same-site를 확인해 보세요', 49)], helpfulCommentId: null, learning: null },
       { helpRequestId: 'hr_3', comments: [comment('hc_2', 'm_1', '처음 나온 순서대로 "팀원 A" · "팀원 B"로 바꿔요', 28)], helpfulCommentId: 'hc_2', learning: '익명화는 내보낼 때 한 번에 한다' },
       { helpRequestId: 'hr_2', comments: [], helpfulCommentId: null, learning: null },
+      {
+        helpRequestId: 'hr_4',
+        comments: [
+          {
+            id: 'hc_3',
+            author: { userId: 'u_90', githubLogin: 'mentor-park', displayName: '박멘토', avatarUrl: null },
+            authorMemberId: null, // 강사는 팀원이 아니다
+            isInstructorAnswer: true,
+            content: '맞아요, 요구사항 연결은 레포 관리자(R2)만 할 수 있어요. 레포 관리자에게 연결을 부탁해 보세요.',
+            createdAt: ago(2),
+          },
+        ],
+        helpfulCommentId: null,
+        learning: null,
+      },
     ],
   }
 }

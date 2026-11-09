@@ -1,8 +1,10 @@
 // The communication hub's board (#205 — CONTRACTS.md 「8」 게시판): the big screen on the hub's back wall is the one board object.
 // Above it, a pill with the SceneModel board badges — 열린 · 논의 중 도움 요청 수 (help:N) and, orange, 그중 48시간 안건 후보 수
 // (candidate:k); no pill when both are 0. A click opens the panel's help-request list. The contents (help requests, …) stay in
-// the HUD — no shape per help request (the shelf's sphere · octahedron · pad are decoration). OWNER: C.
+// the HUD — no shape per help request (the shelf's sphere · octahedron · pad are decoration). A red dot "새 강사 답변" joins the
+// pill while this viewer has an instructor answer they have not opened yet (#290 — same value as the help tab's dot). OWNER: C.
 import { MeshBasicMaterial } from 'three'
+import { useUnreadInstructorAnswers } from '../ui/useAwaitingInstructor'
 import { useUi } from '../ui/uiState'
 import { COMM_HUB, WORLD_SCALE } from '../theme/station/geometry'
 import { BADGE, BOARD_KEY } from './model/buildSceneModel'
@@ -39,11 +41,17 @@ const pill = {
   userSelect: 'none' as const,
 }
 
+/** 새 강사 답변 점(#290) — 알약 오른쪽 위 모서리에 겹친다. 알약이 없으면(열린 도움 요청 0 — 안건이 된 글의 답변) 점만 */
+const dotBase = { display: 'block', width: 9, height: 9, borderRadius: '50%', background: '#e5484d', boxShadow: '0 0 0 2px #fff' } as const
+const cornerDot = { ...dotBase, position: 'absolute' as const, top: -3, right: -3 }
+const soloDot = dotBase
+
 export function CommBoard() {
   const scene = useStationScene()
   const badges = scene?.entities.find((e) => e.key === BOARD_KEY)?.badges ?? []
   const help = badgeCount(badges, BADGE.help)
   const candidates = badgeCount(badges, BADGE.candidate)
+  const newAnswer = useUnreadInstructorAnswers().size > 0
   if (!scene) return null
   return (
     <group scale={WORLD_SCALE} name="board">
@@ -66,11 +74,17 @@ export function CommBoard() {
       >
         <boxGeometry args={[SCREEN.w, SCREEN.h, 0.6]} />
       </mesh>
-      {help > 0 && (
+      {(help > 0 || newAnswer) && (
         <SceneHtml center position={[SCREEN.x, SCREEN.y + SCREEN.h / 2 + 0.9, SCREEN.z]} zIndexRange={[0, 0]} pointerEvents="none">
-          <div style={pill} data-board-tag="">
-            <span>도움 요청 {help}</span>
-            {candidates > 0 && <span style={{ color: '#d9711f' }}>· 안건 후보 {candidates}</span>}
+          {/* 알약은 원래 모양 · 크기 그대로, 새 강사 답변 점은 오른쪽 위 모서리에 겹쳐 붙인다(크기를 바꾸지 않게) */}
+          <div style={{ position: 'relative' }}>
+            {help > 0 && (
+              <div style={pill} data-board-tag="">
+                <span>도움 요청 {help}</span>
+                {candidates > 0 && <span style={{ color: '#d9711f' }}>· 안건 후보 {candidates}</span>}
+              </div>
+            )}
+            {newAnswer && <i data-board-new-answer="" title="새 강사 답변" style={help > 0 ? cornerDot : soloDot} />}
           </div>
         </SceneHtml>
       )}
