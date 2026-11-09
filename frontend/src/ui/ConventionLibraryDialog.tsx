@@ -11,12 +11,14 @@ import {
   canEditConventionLibrary,
   conventionRequestError,
 } from '../data/rules/conventionLibrary'
+import { panelProblem, type PanelProblem } from '../data/rules/errors'
 import { blankToNull } from '../data/rules/meeting'
 import type { ConventionLibraryItemDto, ConventionLibraryItemRequest, ConventionTarget, Id } from '../data/types'
 import { useSession } from '../session'
 import { useOffice } from '../store'
 import { Field } from './common'
 import { Modal } from './Dialogs'
+import { PanelEmpty, PanelState } from './ErrorStates'
 import { formatDate } from './format'
 import './conventionLibrary.css'
 
@@ -30,7 +32,9 @@ type View = { mode: 'list' } | { mode: 'detail'; id: Id } | { mode: 'edit'; item
 export function ConventionLibraryDialog() {
   const canEdit = canEditConventionLibrary(useSession((s) => s.me))
   const [items, setItems] = useState<ConventionLibraryItemDto[] | null>(null)
-  const [failed, setFailed] = useState(false)
+  /** 읽기 실패의 원인 — 권한 오류 ↔ 조회 실패를 대화상자 안에서 나눈다 (#274 — D 공용) */
+  const [failed, setFailed] = useState<PanelProblem | null>(null)
+  const [loading, setLoading] = useState(false)
   const [reload, setReload] = useState(0)
   const [view, setView] = useState<View>({ mode: 'list' })
 
@@ -38,19 +42,25 @@ export function ConventionLibraryDialog() {
     let alive = true
     void useOffice
       .getState()
-      .loadConventionLibrary()
+      .loadConventionLibrary((e) => {
+        if (alive) setFailed(panelProblem('conventionLibrary', e))
+      })
       .then((list) => {
         if (!alive) return
-        if (list === null) setFailed(true)
-        else setItems(list)
+        setLoading(false)
+        if (list !== null) {
+          setFailed(null)
+          setItems(list)
+        }
       })
     return () => {
       alive = false
     }
   }, [reload])
 
+  // 다시 불러오기 — 이 라이브러리 목록만. 실패 안내는 결과가 올 때까지 그대로 둔다
   const refresh = () => {
-    setFailed(false)
+    setLoading(true)
     setReload((n) => n + 1)
   }
 
@@ -65,13 +75,8 @@ export function ConventionLibraryDialog() {
   return (
     <Modal title="컨벤션 라이브러리" onClose={close} width={600}>
       <div className="modal-body conv">
-        {failed ? (
-          <div className="conv-state">
-            <p className="notice notice-warn">컨벤션 라이브러리를 불러오지 못했어요.</p>
-            <button type="button" className="btn btn-sm" onClick={refresh}>
-              다시 읽기
-            </button>
-          </div>
+        {failed?.kind === 'state' && items === null ? (
+          <PanelState problem={failed} busy={loading} onRetry={refresh} />
         ) : items === null ? (
           <p className="dim small">불러오는 중…</p>
         ) : view.mode === 'edit' ? (
@@ -109,7 +114,7 @@ export function ConventionLibraryDialog() {
               )}
             </div>
             {items.length === 0 ? (
-              <p className="dim small">아직 등록된 컨벤션이 없어요.</p>
+              <PanelEmpty icon="list" title="아직 등록된 컨벤션이 없어요" body={canEdit ? '팀이 함께 볼 규칙을 등록하면 모두가 같은 기준을 보게 돼요.' : '강사가 컨벤션을 등록하면 여기에 모여요.'} />
             ) : (
               <ul className="conv-list" aria-label="컨벤션 목록">
                 {items.map((i) => (

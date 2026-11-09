@@ -10,6 +10,8 @@ import type { AgendaItemCreateRequest, AgendaItemDto, Id, MeetingDto, MemberDto,
 import { useOffice } from '../store'
 import { Empty, Field } from './common'
 import { Modal } from './Dialogs'
+import { FieldError, FormAlert } from './ErrorStates'
+import { useWriteProblem } from './useWriteProblem'
 import { formatClock, formatDate, formatDuration, localDateOf } from './format'
 import { Icon } from './icons'
 import {
@@ -176,6 +178,9 @@ export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submis
   const [unresolved, setUnresolved] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  // 실패해도 쓴 내용은 그대로 — 원인 · 다음 행동은 폼 위, 입력 오류는 아래 (#274 — D 공용)
+  const formRef = useRef<HTMLFormElement>(null)
+  const w = useWriteProblem('raiseAgenda', { resubmit: () => formRef.current?.requestSubmit() })
 
   if (!snapshot) return null
   if (!original) {
@@ -204,8 +209,9 @@ export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submis
     setSubmitted(true)
     if (error || busy || !allowed) return
     setBusy(true)
+    w.clear()
     const st = useOffice.getState()
-    if (await st.raiseAgendaItem({ ...request, title: title.trim() })) {
+    if (await st.raiseAgendaItem({ ...request, title: title.trim() }, w.report)) {
       st.toast('good', '안건을 올렸어요')
       close()
     } else {
@@ -215,8 +221,9 @@ export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submis
 
   return (
     <Modal title="안건 올리기" onClose={close} width={520}>
-      <form onSubmit={submit} noValidate>
+      <form ref={formRef} onSubmit={submit} noValidate>
         <div className="modal-body">
+          {w.notice && <FormAlert notice={w.notice} busy={w.busy} onAction={w.act} />}
           <p className="raise-source">
             <span className="agenda-kind">{AGENDA_KIND_LABEL[kind]}</span>
             <span className="card-key">{label}</span>
@@ -239,6 +246,7 @@ export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submis
           {pr?.currentRound && <p className="dim small">지금 평가 회차({pr.currentRound.roundNumber}회차)를 함께 기억해요</p>}
           <p className="dim small">원본 {AGENDA_KIND_LABEL[kind]}은 제자리에 그대로 있어요</p>
           {submitted && error && error !== MEETING_MSG.agendaTitle && <p className="notice notice-warn">{error}</p>}
+          {w.field && <FieldError text={w.field} />}
           {!allowed && <p className="notice notice-warn">강사는 안건을 올릴 수 없어요.</p>}
         </div>
         <footer className="modal-foot">
@@ -274,6 +282,8 @@ function AgendaNoteForm() {
   const [unresolved, setUnresolved] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const w = useWriteProblem('raiseAgenda', { resubmit: () => formRef.current?.requestSubmit() })
 
   if (!open) {
     return (
@@ -302,6 +312,7 @@ function AgendaNoteForm() {
     setUnresolved('')
     setSubmitted(false)
     setBusy(false)
+    w.clear()
   }
 
   const submit = async (e: FormEvent) => {
@@ -309,8 +320,9 @@ function AgendaNoteForm() {
     setSubmitted(true)
     if (error || busy) return
     setBusy(true)
+    w.clear()
     const st = useOffice.getState()
-    if (await st.raiseAgendaItem({ ...request, title: title.trim() })) {
+    if (await st.raiseAgendaItem({ ...request, title: title.trim() }, w.report)) {
       st.toast('good', `${AGENDA_KIND_LABEL[kind]} 안건을 올렸어요`)
       reset()
     } else {
@@ -319,7 +331,8 @@ function AgendaNoteForm() {
   }
 
   return (
-    <form className="agenda-note" onSubmit={submit} noValidate aria-label="배운 점 · 기타 안건 쓰기">
+    <form ref={formRef} className="agenda-note" onSubmit={submit} noValidate aria-label="배운 점 · 기타 안건 쓰기">
+      {w.notice && <FormAlert notice={w.notice} busy={w.busy} onAction={w.act} />}
       <div className="seg" role="radiogroup" aria-label="안건 종류">
         {NOTE_KINDS.map((k) => (
           <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>
@@ -344,6 +357,7 @@ function AgendaNoteForm() {
         </>
       )}
       {submitted && error && error !== MEETING_MSG.agendaTitle && <p className="notice notice-warn">{error}</p>}
+      {w.field && <FieldError text={w.field} />}
       <div className="decision-foot">
         <button type="button" className="btn btn-sm" onClick={reset}>
           취소

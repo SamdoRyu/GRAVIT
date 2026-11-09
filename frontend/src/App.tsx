@@ -7,7 +7,9 @@ import { useSession } from './session'
 import { EntryScreen } from './ui/entry/EntryScreen'
 import { Landing } from './ui/entry/Landing'
 import { Hud } from './ui/Hud'
+import { OfficeBlocker } from './ui/ErrorStates'
 import { SceneBoundary } from './app/SceneBoundary'
+import { officeProblem } from './data/rules/errors'
 
 // One source per page load (module scope, so StrictMode's double effects don't create two).
 const params = new URLSearchParams(location.search)
@@ -50,6 +52,11 @@ export default function App() {
   const officeOpen = useOffice((s) => s.office !== null)
   // 계정마다 처음 사무실을 고를 때 한 번 — 도착 장면이 사무실 위를 덮었다가 걷힌다(그동안 사무실은 뒤에서 읽힌다)
   const landing = useSession((s) => s.landing)
+  // 사무실을 쓸 수 없다(첫 읽기 실패 · 열 수 없음) — 전체 화면이 덮는 동안 뒤의 사무실은 키보드로도 닿지 않게 (#274)
+  const blocked = useOffice((s) => {
+    const p = s.office ? officeProblem(s.office.error, s.office.snapshot !== null) : null
+    return p === 'boot' || p === 'closed'
+  })
   // 로그인되면 3D 묶음을 미리 받아 둔다 — 사무실을 고르는 사이에 받아져 사무실이 빨리 뜬다
   useEffect(() => {
     if (signedIn) void loadScene().catch(() => {})
@@ -59,7 +66,7 @@ export default function App() {
 
   return (
     <>
-      <div className="app" inert={landing}>
+      <div className="app" inert={landing || blocked}>
         <SceneBoundary>
           {(attempt) => {
             const SceneCanvas = sceneFor(attempt)
@@ -72,6 +79,8 @@ export default function App() {
         </SceneBoundary>
         <Hud />
       </div>
+      {/* 첫 Snapshot 읽기 실패 · 404(열 수 없음) — 3D는 뒤에 그대로 두고 덮는다 (#274) */}
+      {!landing && <OfficeBlocker />}
       {landing && <Landing />}
     </>
   )

@@ -128,12 +128,12 @@ async function toError(res: Response): Promise<DataError> {
     if (typeof e === 'object' && e !== null) {
       const { code, message } = e as { code?: unknown; message?: unknown }
       const known = ERROR_CODES.includes(code as ErrorCode) ? (code as ErrorCode) : codeForStatus(res.status)
-      return new DataError(typeof message === 'string' && message ? message : fallback, known)
+      return new DataError(typeof message === 'string' && message ? message : fallback, known, res.status)
     }
   } catch {
     // 본문이 JSON이 아니면 상태 코드로만 판단한다
   }
-  return new DataError(fallback, codeForStatus(res.status))
+  return new DataError(fallback, codeForStatus(res.status), res.status)
 }
 
 const workspacePath = (workspaceId: Id) => `/api/workspaces/${encodeURIComponent(workspaceId)}`
@@ -173,7 +173,8 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     try {
       return await fetch(base + path, { method, headers, body: payload === undefined ? undefined : form ? payload.toString() : JSON.stringify(payload) })
     } catch {
-      throw new DataError(UNREACHABLE, 'unavailable')
+      // 응답을 받지 못했다(status 0) — 쓰기라면 서버에 닿았는지 모른다. 화면은 자동으로 다시 보내지 않는다
+      throw new DataError(UNREACHABLE, 'unavailable', 0)
     }
   }
 

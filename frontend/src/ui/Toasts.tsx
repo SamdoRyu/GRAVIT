@@ -1,5 +1,4 @@
 // Toast stack (rendered under the top bar, centered over the 3D view). OWNER: ui-builder.
-import { useEffect, useRef } from 'react'
 import { useOffice } from '../store'
 import { Icon, type IconName } from './icons'
 
@@ -23,36 +22,4 @@ export function Toasts() {
   )
 }
 
-/** Connection state for server-backed sources (null for the local mock = render nothing). */
-export function ConnectionBanner() {
-  const conn = useOffice((s) => s.connection)
-  const everOnline = useRef(false)
-  const prev = useRef(conn)
-  const wasOnline = everOnline.current
-
-  useEffect(() => {
-    if (conn === 'online') {
-      if (everOnline.current && prev.current !== 'online') useOffice.getState().toast('good', '다시 연결됐어요')
-      everOnline.current = true
-    }
-    prev.current = conn
-  }, [conn])
-
-  if (conn === 'offline') {
-    return (
-      <div className="conn conn-bad" role="status">
-        <span className="spinner spinner-sm" />
-        서버에 연결할 수 없어요 · 다시 연결하는 중…
-      </div>
-    )
-  }
-  if (conn === 'connecting' && wasOnline) {
-    return (
-      <div className="conn conn-warn" role="status">
-        <span className="spinner spinner-sm" />
-        다시 연결하는 중…
-      </div>
-    )
-  }
-  return null
-}
+// 실시간 연결 끊김 안내는 상단 배너(ErrorStates.tsx SystemBanners — #274)로 옮겼다

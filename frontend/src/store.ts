@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot, InstructorFeedbackDto } from './data/types'
+import { toDataError } from './data/rules/errors'
 import { afterComment, toHelpSummary } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { ActivityCreateRequest, ActivityRecordDto, ConventionLibraryItemDto, ConventionLibraryItemRequest, InstructorAssignmentDto, InstructorCandidateDto, RequirementLinkDto } from './data/types'
@@ -50,6 +51,20 @@ export interface OfficeView {
   snapshot: WorkspaceSnapshot | null
   /** 마지막 읽기 실패. 다음에 읽기에 성공하면 null */
   error: { code: DataErrorCode; message: string } | null
+  /** 마지막으로 Snapshot을 받아 반영한 시각(ms). 상단 배너가 "복구 뒤 최신 데이터가 반영됐는가"를 본다 (#274) */
+  loadedAt?: number
+}
+
+/**
+ * 화면이 실패를 직접 보일 때 넘긴다(#274 — 폼 · 패널 안 오류). 넘기면 알림(toast)을 띄우지 않고 이것을 부른다.
+ * 세션 만료(unauthorized)는 넘겨도 전체 화면(다시 로그인)이 함께 뜬다.
+ */
+export type OnDataError = (e: DataError) => void
+
+let sessionExpiredHandler: (() => void) | null = null
+/** 사무실 API가 401(세션 만료)을 받으면 부를 것 — 진입 흐름(session.ts)이 등록한다. store가 session을 import하지 않게 */
+export function onSessionExpired(handler: (() => void) | null) {
+  sessionExpiredHandler = handler
 }
 
 /** 'changed' 알림을 이만큼 모아서 Snapshot을 한 번 다시 읽는다 (CONTRACTS_API.md 「6」 "짧게 모아서") */
@@ -93,6 +108,11 @@ interface OfficeState {
   /** 구독을 끊고 office를 비운다 */
   closeOffice: () => void
   /**
+   * 지금 연 사무실의 Snapshot을 지금 다시 읽는다(#274 — 첫 읽기 실패의 "다시 시도", 배너의 "지금 새로고침", 폼의 "최신 상태 보기").
+   * 실패해도 마지막 snapshot은 그대로. 반영했으면 true
+   */
+  reloadOffice: () => Promise<boolean>
+  /**
    * 팀 설정을 바꾼다(PUT W/settings — R2만). 성공하면 snapshot.settings를 응답으로 바꾸고 true,
    * 실패하면 마지막 값을 그대로 두고 사유를 알림으로 보인 뒤 false.
    */
@@ -106,7 +126,7 @@ interface OfficeState {
    * PR 추천 · 비추천 평가(PUT evaluations/mine — #19 · #20). 성공하면 snapshot의 그 PR currentRound를 응답으로 바꾸고 회차를 돌려준다.
    * 실패하면 사유를 알림으로 보이고 null. 회차가 바뀌었거나 PR이 닫혔으면(conflict) Snapshot을 다시 읽는다.
    */
-  evaluateSubmission: (submissionId: Id, request: EvaluateRequest) => Promise<EvaluationRoundDto | null>
+  evaluateSubmission: (submissionId: Id, request: EvaluateRequest, onError?: OnDataError) => Promise<EvaluationRoundDto | null>
   /** PR의 평가 회차 전부(GET rounds — 현재 회차가 처음). 실패하면 알림 후 null */
   loadRounds: (submissionId: Id) => Promise<EvaluationRoundDto[] | null>
 
@@ -118,7 +138,7 @@ interface OfficeState {
   /** POST W/meetings/{id}/end — 회의록 0~5000자(null 가능) */
   endOfficeMeeting: (meetingId: Id, notes: string | null) => Promise<MeetingDto | null>
   /** POST W/agenda-items — 이슈 · PR · 배운 점 · 기타 안건 올리기 */
-  raiseAgendaItem: (request: AgendaItemCreateRequest) => Promise<AgendaItemDto | null>
+  raiseAgendaItem: (request: AgendaItemCreateRequest, onError?: OnDataError) => Promise<AgendaItemDto | null>
   /** POST W/agenda-items/{id}/withdraw — 올린 사람만, 결정 전만 */
   withdrawAgendaItem: (agendaItemId: Id) => Promise<AgendaItemDto | null>
   /** POST W/agenda-items/{id}/decision — 결론 · 배운 점 · PR 결정 · 후속 담당 */
@@ -136,7 +156,7 @@ interface OfficeState {
   // 성공하면 snapshot.requirementLinks와 요구사항 진행 수(linkedTaskCount · doneTaskCount)를 같은 규칙(rules/requirements)으로 바로 고친다.
   // 서버의 changed(requirements) 알림이 오면 Snapshot을 다시 읽어 서버 값으로 맞춘다.
   /** POST W/requirement-links — 새 연결이든 이미 있던 연결이든 그 연결을 돌려준다 */
-  linkRequirement: (requirementId: Id, taskId: Id) => Promise<RequirementLinkDto | null>
+  linkRequirement: (requirementId: Id, taskId: Id, onError?: OnDataError) => Promise<RequirementLinkDto | null>
   /** DELETE W/requirement-links/{linkId} */
   unlinkRequirement: (linkId: Id) => Promise<boolean>
 
@@ -162,7 +182,7 @@ interface OfficeState {
 
   // ---- 컨벤션 라이브러리 (#225 — 「17」). 서버 전체에 하나(사무실 경로 밖)지만 사무실 화면의 대화상자가 쓴다. 실패하면 알림 후 null ----
   /** GET /api/convention-library — target · name 순 */
-  loadConventionLibrary: () => Promise<ConventionLibraryItemDto[] | null>
+  loadConventionLibrary: (onError?: OnDataError) => Promise<ConventionLibraryItemDto[] | null>
   /** POST /api/convention-library — GitHub 계정 강사만 */
   createConventionLibraryItem: (request: ConventionLibraryItemRequest) => Promise<ConventionLibraryItemDto | null>
   /** PUT /api/convention-library/{itemId} — GitHub 계정 강사만 */
@@ -183,7 +203,7 @@ interface OfficeState {
   /** GET W/help-requests/{id} — 상세(코멘트 포함) */
   loadHelpRequest: (helpRequestId: Id) => Promise<HelpRequestDetail | null>
   /** POST W/help-requests — 팀원만 */
-  createHelpRequest: (request: HelpRequestCreateRequest) => Promise<HelpRequestSummary | null>
+  createHelpRequest: (request: HelpRequestCreateRequest, onError?: OnDataError) => Promise<HelpRequestSummary | null>
   /** POST W/help-requests/{id}/comments */
   addHelpComment: (helpRequestId: Id, content: string) => Promise<HelpCommentDto | null>
   /** POST W/help-requests/{id}/close — 요청자만. 도움이 된 코멘트(선택) · 배운 점 */
@@ -203,7 +223,7 @@ interface OfficeState {
 
   // ---- 학습 타임라인 · 회고 리포트 (#209 — 「15」). 개인 API라 Snapshot · SSE 밖 — 화면이 열 때 읽는다. 실패하면 알림 후 null ----
   /** GET W/members/{memberId}/timeline — 본인 · 지정된 강사 */
-  loadTimeline: (memberId: Id, page?: number, size?: number) => Promise<PageResponse<TimelineEntry> | null>
+  loadTimeline: (memberId: Id, page?: number, size?: number, onError?: OnDataError) => Promise<PageResponse<TimelineEntry> | null>
   /** GET W/members/{memberId}/reports — 본인 · 지정된 강사 */
   loadReports: (memberId: Id) => Promise<RetroReportSummary[] | null>
   /** POST W/members/{memberId}/reports — 본인만 */
@@ -275,7 +295,17 @@ const upsert = <T extends { id: Id }>(list: readonly T[], item: T): T[] => (list
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '요청을 처리하지 못했어요')
 
 export const useOffice = create<OfficeState>((set, get) => {
-  const fail = (e: unknown) => get().toast('bad', errText(e))
+  /**
+   * 실패를 알린다 — 화면이 직접 보이면(onError) 알림 없이 넘기고, 아니면 알림. 세션 만료는 진입 흐름에 알려 다시 로그인 화면으로
+   * (등록된 곳이 없으면 알림).
+   */
+  const fail = (e: unknown, onError?: OnDataError) => {
+    const err = toDataError(e)
+    const expired = err.code === 'unauthorized' && sessionExpiredHandler !== null
+    if (onError) onError(err)
+    else if (!expired) get().toast('bad', errText(err))
+    if (expired) sessionExpiredHandler?.()
+  }
 
   // ---- v1 사무실 ----
 
@@ -283,41 +313,45 @@ export const useOffice = create<OfficeState>((set, get) => {
     e instanceof DataError ? { code: e.code, message: e.message } : { code: 'unavailable', message: errText(e) }
 
   /** Snapshot을 (다시) 읽는다. 실패해도 마지막 snapshot은 지우지 않는다. */
-  const loadOffice = async (gen: number) => {
+  const loadOffice = async (gen: number): Promise<boolean> => {
     const src = officeSource
     const office = get().office
-    if (!src || !office || gen !== officeGen) return
+    if (!src || !office || gen !== officeGen) return false
     const seq = ++officeLoadSeq
     officeLoadPending = true
     syncDuringLoad = null
     const isLatest = () => gen === officeGen && seq === officeLoadSeq
     try {
       let snapshot = await src.load(office.workspaceId)
-      if (!isLatest()) return
+      if (!isLatest()) return false
       if (syncDuringLoad) snapshot = { ...snapshot, sync: syncDuringLoad }
       officeLoadPending = false
       syncDuringLoad = null
       const current = get().office
       // 고른 것이 새 Snapshot에서 사라졌으면(동기화로 삭제 · 팀원 제외 등) 상세를 닫는다
-      if (current) set({ office: { ...current, status: 'ready', snapshot, error: null }, officeSelection: aliveInOffice(snapshot, get().officeSelection) })
+      if (current) set({ office: { ...current, status: 'ready', snapshot, error: null, loadedAt: Date.now() }, officeSelection: aliveInOffice(snapshot, get().officeSelection) })
+      return true
     } catch (e) {
-      if (!isLatest()) return
+      if (!isLatest()) return false
       officeLoadPending = false
       syncDuringLoad = null
       const current = get().office
       if (current) set({ office: { ...current, status: current.snapshot ? 'ready' : 'error', error: toOfficeError(e) } })
+      // 세션이 끝났다 — 다시 로그인 화면으로 (#274)
+      if (e instanceof DataError && e.code === 'unauthorized') sessionExpiredHandler?.()
+      return false
     }
   }
 
   /** v1 사무실 읽기 한 번(Snapshot 밖의 데이터). 사무실이 없으면 보내지 않고 null, 실패하면 알림 후 null */
-  const officeRead = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>): Promise<T | null> => {
+  const officeRead = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>, onError?: OnDataError): Promise<T | null> => {
     const src = officeSource
     const office = get().office
     if (!src || !office) return null
     try {
       return await run(src, office.workspaceId)
     } catch (e) {
-      fail(e)
+      fail(e, onError)
       return null
     }
   }
@@ -326,7 +360,7 @@ export const useOffice = create<OfficeState>((set, get) => {
    * v1 사무실 쓰기 한 번. 사무실이 없으면 보내지 않고 null. 성공하면 patch로 snapshot을 바로 고친다(그 사이 사무실을
    * 닫거나 바꿨으면 버린다). 실패하면 알림 후 null — conflict면 지금 값을 다시 읽어 화면을 맞춘다.
    */
-  const officeWrite = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>, patch: (snapshot: WorkspaceSnapshot, result: T) => WorkspaceSnapshot): Promise<T | null> => {
+  const officeWrite = async <T>(run: (src: DataSource, workspaceId: Id) => Promise<T>, patch: (snapshot: WorkspaceSnapshot, result: T) => WorkspaceSnapshot, onError?: OnDataError): Promise<T | null> => {
     const src = officeSource
     const office = get().office
     if (!src || !office) return null
@@ -337,7 +371,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       if (gen === officeGen && current?.snapshot) set({ office: { ...current, snapshot: patch(current.snapshot, result) } })
       return result
     } catch (e) {
-      fail(e)
+      fail(e, onError)
       if (e instanceof DataError && e.code === 'conflict' && gen === officeGen) void loadOffice(gen)
       return null
     }
@@ -355,11 +389,16 @@ export const useOffice = create<OfficeState>((set, get) => {
     const office = get().office
     if (gen !== officeGen || !office) return
     switch (c.type) {
-      case 'sync':
+      case 'sync': {
         // 동기화 상태만 바꾸고 나머지는 마지막 데이터 그대로 (실패해도 화면 유지 — NFR-09)
+        const was = office.snapshot?.sync.state
         if (office.snapshot) set({ office: { ...office, snapshot: { ...office.snapshot, sync: c.status } } })
         if (officeLoadPending) syncDuringLoad = c.status
+        // 동기화가 끝났다 — 바뀐 것이 없으면 changed가 오지 않을 수 있어 한 번 다시 읽는다(changed와 함께 오면 한 번으로 모인다).
+        // 상단 배너는 이 읽기가 반영되면 닫힌다 (#274)
+        if (was === 'running' && c.status.state === 'idle') scheduleOfficeReload(gen)
         break
+      }
       case 'changed':
         scheduleOfficeReload(gen)
         break
@@ -396,6 +435,12 @@ export const useOffice = create<OfficeState>((set, get) => {
       syncDuringLoad = null
       if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null, requirementDeckOrder: null })
     },
+    reloadOffice: async () => {
+      if (!get().office) return false
+      if (officeReloadTimer) clearTimeout(officeReloadTimer)
+      officeReloadTimer = null
+      return loadOffice(officeGen)
+    },
     officeSelection: null,
     selectInOffice: (officeSelection) => set({ officeSelection }),
     updateOfficeSettings: async (settings) => {
@@ -423,7 +468,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       )
       return result !== null
     },
-    evaluateSubmission: async (submissionId, request) => {
+    evaluateSubmission: async (submissionId, request, onError) => {
       const src = officeSource
       const office = get().office
       if (!src || !office) return null
@@ -438,7 +483,7 @@ export const useOffice = create<OfficeState>((set, get) => {
         }
         return round
       } catch (e) {
-        fail(e)
+        fail(e, onError)
         // 그 사이 새 회차가 열렸거나 PR이 닫혔다 — 지금 값을 다시 읽어 화면을 맞춘다
         if (e instanceof DataError && e.code === 'conflict' && gen === officeGen) void loadOffice(gen)
         return null
@@ -467,10 +512,11 @@ export const useOffice = create<OfficeState>((set, get) => {
         (src, ws) => src.endMeeting(ws, meetingId, { notes }),
         (snap, meeting) => ({ ...snap, meetings: upsert(snap.meetings, meeting) }),
       ),
-    raiseAgendaItem: (request) =>
+    raiseAgendaItem: (request, onError) =>
       officeWrite(
         (src, ws) => src.createAgendaItem(ws, request),
         (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
+        onError,
       ),
     withdrawAgendaItem: (agendaItemId) =>
       officeWrite(
@@ -510,10 +556,11 @@ export const useOffice = create<OfficeState>((set, get) => {
         (snap) => ({ ...snap, tasks: snap.tasks.map((t) => (t.id === taskId ? { ...t, dueDate: null } : t)) }),
       )) !== null,
 
-    linkRequirement: (requirementId, taskId) =>
+    linkRequirement: (requirementId, taskId, onError) =>
       officeWrite(
         (src, ws) => src.linkRequirement(ws, { requirementId, taskId }),
         (snap, link) => withLinks(snap, upsert(snap.requirementLinks, link)),
+        onError,
       ),
     unlinkRequirement: async (linkId) =>
       (await officeWrite(
@@ -529,10 +576,11 @@ export const useOffice = create<OfficeState>((set, get) => {
 
     // ---- 도움 요청 (#183) — 응답을 바로 반영하고, 서버의 changed(help_requests) 알림으로 다시 읽는다 ----
     loadHelpRequest: (helpRequestId) => officeRead((src, ws) => src.getHelpRequest(ws, helpRequestId)),
-    createHelpRequest: (request) =>
+    createHelpRequest: (request, onError) =>
       officeWrite(
         (src, ws) => src.createHelpRequest(ws, request),
         (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
+        onError,
       ),
     addHelpComment: (helpRequestId, content) =>
       officeWrite(
@@ -569,7 +617,7 @@ export const useOffice = create<OfficeState>((set, get) => {
       ),
 
     // ---- 학습 타임라인 · 회고 리포트 (#209) — Snapshot에 없다. 화면이 열 때 읽고, 쓴 뒤 응답으로 바꾼다 ----
-    loadTimeline: (memberId, page, size) => officeRead((src, ws) => src.getTimeline(ws, memberId, page, size)),
+    loadTimeline: (memberId, page, size, onError) => officeRead((src, ws) => src.getTimeline(ws, memberId, page, size), onError),
     loadReports: (memberId) => officeRead((src, ws) => src.listReports(ws, memberId)),
     createReport: (memberId, request) =>
       officeWrite(
@@ -647,7 +695,7 @@ export const useOffice = create<OfficeState>((set, get) => {
     createActivity: (request) => officeRead((src, ws) => src.createActivity(ws, request)),
     confirmActivity: (activityId) => officeRead((src, ws) => src.confirmActivity(ws, activityId)),
 
-    loadConventionLibrary: () => officeRead((src) => src.listConventionLibrary()),
+    loadConventionLibrary: (onError) => officeRead((src) => src.listConventionLibrary(), onError),
     createConventionLibraryItem: (request) => officeRead((src) => src.createConventionLibraryItem(request)),
     updateConventionLibraryItem: (itemId, request) => officeRead((src) => src.updateConventionLibraryItem(itemId, request)),
 
