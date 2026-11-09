@@ -2,6 +2,8 @@
 // 계정마다 처음 사무실을 고를 때 한 번(session.landing): 탑승 수속 카드 → 행성으로 줌인 → 라벤더빛으로 덮였다가
 // 실제 사무실(3D · HUD — 고른 레포)이 드러나고 "○○ 정거장에 도착했어요" 알림. 디자인의 도착 화면(가짜 레포)은 쓰지 않는다.
 // 사무실이 아직 읽히는 중이면 덮인 채로 기다린다(최대 WAIT_MAX_MS). 움직임 줄이기 설정이면 장면 없이 알림만.
+// 덮개가 걷힐 때 3D가 이어받는다: 행성 근접 시점에서 궤도로 진입해 우주선을 따라 정거장에 도착하는 입장 연출
+// (scene/DockShip.tsx — 신호 ARRIVAL_EVENT).
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from '../../session'
 import { useOffice } from '../../store'
@@ -10,6 +12,8 @@ import './landing.css'
 
 /** 디자인 타임라인(ms) — 진행 막대 → 글 · 카드 사라짐 → 줌인 → 덮기. 그 뒤는 사무실이 준비되면 드러내기 */
 const AT = { fade: 1300, zoom: 1600, wash: 3600 }
+/** 덮개를 걷을 때 3D 입장 연출을 시작하라는 신호(3D 모듈을 여기서 읽지 않으려고 이름만 맞춘다 — scene/DockShip.tsx ARRIVAL_INTRO_EVENT) */
+const ARRIVAL_EVENT = 'gravit:arrival-intro'
 /** 덮인 뒤 사무실을 이만큼 더 기다리고, 넘으면 그냥 드러낸다(HUD가 읽는 중 · 오류를 보여 준다) */
 const WAIT_MAX_MS = 8000
 /** 드러내는 데 걸리는 시간 — 끝나면 장면을 걷어 낸다 */
@@ -97,6 +101,12 @@ export function Landing() {
     const t = setTimeout(() => setPhase(4), 600)
     return () => clearTimeout(t)
   }, [phase, ready])
+
+  // 드러내기 시작하면 3D가 입장 연출을 시작한다(움직임 줄이기면 3D 쪽이 하지 않는다)
+  useEffect(() => {
+    if (phase !== 4 || !ready || still) return
+    window.dispatchEvent(new Event(ARRIVAL_EVENT))
+  }, [phase, ready, still])
 
   // 드러냄이 끝나면 도착 알림을 남기고 장면을 걷는다
   useEffect(() => {
