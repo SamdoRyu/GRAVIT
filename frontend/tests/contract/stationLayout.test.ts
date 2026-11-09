@@ -5,7 +5,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import { deskSeats } from '../../src/scene/model/buildSceneModel'
 import type { PlaceRole, Vec3 } from '../../src/scene/model/types'
-import { ALWAYS_SHOWN_PODS, BRIDGE, POD, PODS, podConsole, WORLD_SCALE } from '../../src/theme/station/geometry'
+import { ALWAYS_SHOWN_PODS, BRIDGE, POD, PODS, podConsoleAt, WORLD_SCALE } from '../../src/theme/station/geometry'
 import { createStationLayout } from '../../src/theme/station/stationLayout'
 
 const load = (workspaceId: string) =>
@@ -123,7 +123,7 @@ describe('작업 포드 승무원은 자기 컴퓨터를 바라본다 (#302)', (
     const diff = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
     assert.equal(PODS.length, 8)
     for (const [i, pod] of PODS.entries()) {
-      const c = podConsole(pod)
+      const c = podConsoleAt(pod)
       const toConsole = Math.atan2(c.x - pod.crew.x, c.z - pod.crew.z)
       assert.ok(diff(pod.crew.facing, toConsole) < 1e-9, `포드 ${i}: 콘솔 쪽을 본다`)
       // 콘솔 앞면(로컬 +z를 ry만큼 돌린 방향)은 승무원 쪽 — 승무원이 화면 앞에 선다
@@ -133,7 +133,7 @@ describe('작업 포드 승무원은 자기 컴퓨터를 바라본다 (#302)', (
 
   it('시안 자리보다 콘솔 쪽으로 조금만 다가선다 — 책상과 작업 상자는 넉넉히 비운다', () => {
     for (const [i, pod] of PODS.entries()) {
-      const c = podConsole(pod)
+      const c = podConsoleAt(pod)
       const along = pod.axis === 'x' ? Math.abs(c.x - pod.crew.x) : Math.abs(c.z - pod.crew.z)
       // 시안 자리는 콘솔에서 2.9~3.1 — 0.5 다가서 2.4~2.6, 책상 앞(콘솔 깊이 0.8 + 상판 0.65)에는 닿지 않는다
       assert.ok(along > 2.3 && along < 2.7, `포드 ${i}: 콘솔까지 ${along.toFixed(2)}`)

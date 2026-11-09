@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { DoubleSide, IcosahedronGeometry, OctahedronGeometry, TorusGeometry } from 'three'
 import { noRaycast } from '../../scene/runtime'
-import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, podConsole, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
+import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, podConsoleAt, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
 import { AmbientGlow, ChaseLamp, PanelGlint, StationAmbient } from './ambient'
 import { Bx, COLORS, Console, CutawayModule, Glow, Rack, Thruster, Tube, basic, lam } from './parts'
 
@@ -55,7 +55,7 @@ function Bridge() {
 
 function PodUnit({ pod }: { pod: Pod }) {
   // 콘솔은 바깥쪽 끝에서 2.1 안쪽, 화면은 포드 안쪽(승무원 쪽)으로(시안 consoleAt — 승무원이 바라보는 자리, #302)
-  const c = podConsole(pod)
+  const c = podConsoleAt(pod)
   return (
     <>
       <CutawayModule x={pod.x} z={pod.z} axis={pod.axis} length={POD.length} radius={POD.radius} cut={160} />

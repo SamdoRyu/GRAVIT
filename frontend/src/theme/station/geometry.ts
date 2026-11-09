@@ -47,7 +47,7 @@ export const POD = {
  * 포드 콘솔(컴퓨터) 자리 — 시안 consoleAt: 바깥쪽 끝에서 2.1 안쪽. `ry`는 콘솔 그룹의 회전으로, 화면 앞면이 포드 안쪽(승무원 쪽)을 향한다.
  * StationEnvironment PodUnit이 그리는 자리이고, 승무원은 이 자리를 바라본다(#302).
  */
-export function podConsole(pod: Pick<Pod, 'x' | 'z' | 'axis' | 'outward'>): { x: number; z: number; ry: number } {
+export function podConsoleAt(pod: Pick<Pod, 'x' | 'z' | 'axis' | 'outward'>): { x: number; z: number; ry: number } {
   const x = pod.axis === 'x' ? pod.x + pod.outward * 2.1 : pod.x
   const z = pod.axis === 'z' ? pod.z + pod.outward * 2.1 : pod.z
   const ry = pod.axis === 'z' ? (pod.outward < 0 ? 0 : Math.PI) : pod.outward > 0 ? -Math.PI / 2 : Math.PI / 2
@@ -62,7 +62,7 @@ export const CREW_STEP_TO_CONSOLE = 0.5
  * 작업 상자 쪽은 비운 채), 그 자리에서 콘솔 쪽을 본다(라디안, 0 = +z).
  */
 function facingConsole(pod: Pod): Pod {
-  const c = podConsole(pod)
+  const c = podConsoleAt(pod)
   const x = pod.crew.x + (pod.axis === 'x' ? pod.outward * CREW_STEP_TO_CONSOLE : 0)
   const z = pod.crew.z + (pod.axis === 'z' ? pod.outward * CREW_STEP_TO_CONSOLE : 0)
   return { ...pod, crew: { x, z, facing: Math.atan2(c.x - x, c.z - z) } }
