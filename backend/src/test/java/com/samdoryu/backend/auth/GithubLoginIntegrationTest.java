@@ -15,6 +15,9 @@ import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.auth.service.AppPrincipal;
 import com.samdoryu.backend.common.contract.ContractShape;
+import com.samdoryu.backend.common.error.ApiException;
+import com.samdoryu.backend.common.error.ErrorCode;
+import com.samdoryu.backend.github.GithubUserToken;
 import com.samdoryu.backend.instructor.domain.InstructorAssignment;
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
 import com.samdoryu.backend.workspace.domain.Workspace;
@@ -188,6 +191,28 @@ class GithubLoginIntegrationTest {
             for (String name : Collections.list(session.getAttributeNames())) {
                 assertThat(String.valueOf(session.getAttribute(name))).doesNotContain("gho_fake");
             }
+        }
+
+        /**
+         * #250 — 로그아웃 없이 같은 브라우저 세션에서 다시 로그인하면 이전 사용자의 GitHub 토큰이 남지 않는다. 토큰을 두지 않는
+         * 로그인(허용 목록 강사)이든, 레포 권한을 읽지 못해 로그인되지 않은 경우든 같다.
+         */
+        @Test
+        void loginDropsTheGithubTokenOfAnEarlierLoginInTheSameSession() throws Exception {
+            githubReturns(INSTRUCTOR_ID, "teacher", "강사");
+            MockHttpSession instructor = new MockHttpSession();
+            GithubUserToken.store(instructor, "gho_previous");
+            assertThat(loginThroughGithub(instructor).getResponse().getStatus()).isEqualTo(302);
+            assertThat(GithubUserToken.from(instructor)).isEmpty();
+
+            githubReturns(1001L, "octo-kim", "김옥토");
+            given(githubUserClient.repositoryPermissions("gho_fake"))
+                    .willThrow(new ApiException(ErrorCode.GITHUB_RATE_LIMITED));
+            MockHttpSession failed = new MockHttpSession();
+            GithubUserToken.store(failed, "gho_previous");
+            assertThat(loginThroughGithub(failed).getResponse().getStatus()).isEqualTo(302);
+            mvc.perform(get("/api/me").session(failed)).andExpect(status().isUnauthorized());
+            assertThat(GithubUserToken.from(failed)).isEmpty();
         }
 
         @Test
