@@ -1,4 +1,4 @@
-// Top bar: wordmark, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 활동 기록 · 사무실 바꾸기 · 로그아웃). OWNER: D.
+// Top bar: wordmark · 지금 연 저장소 이름, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 관리 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 활동 기록 · 사무실 바꾸기 · 로그아웃). OWNER: D.
 // 사람별 업무량 표현(업무량 오버레이 · 업무 재배정 추천)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2).
 // 데모 화면(데모 지표 줄 · 오버레이 · 작업 만들기 · 데모 스위치 · 팀원 추가 · 초기화)도 뺐다 — v1은 GitHub가 원본이다.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -156,6 +156,9 @@ function MeetingControl() {
 
 function MoreMenu() {
   const me = useSession((s) => s.me)
+  // 기존 session 값으로 권한 분기: 강사만 '강사 요청함'을 본다.
+  // 별도 메뉴를 복제하지 않아 공통 기능과 권한 로직이 어긋나지 않는다.
+  const isInstructor = canUseInbox(me)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -178,103 +181,114 @@ function MoreMenu() {
   }, [open])
   return (
     <div className="menu-wrap" ref={ref}>
-      <button type="button" className="btn btn-icon btn-ghost" aria-haspopup="menu" aria-expanded={open} title="더보기" onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="btn btn-icon btn-ghost" aria-haspopup="menu" aria-expanded={open} aria-label="더보기" title="더보기" onClick={() => setOpen((o) => !o)}>
         <Icon name="more" />
       </button>
       {open && (
-        <div className="menu glass" role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              useUi.getState().setHistoryOpen(true)
-            }}
-          >
-            <Icon name="history" size={15} />
-            회의록
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              useOffice.getState().openDialog({ kind: 'instructors' })
-            }}
-          >
-            <Icon name="users" size={15} />
-            강사
-          </button>
-          {canUseInbox(me) && (
+        <div className="menu glass ivory-more-menu" role="menu" aria-label="더보기 메뉴">
+          <div className="menu-group" role="group" aria-label="기록 및 자료">
+            <span className="menu-heading" aria-hidden="true">기록 및 자료</span>
             <button
               type="button"
               role="menuitem"
               className="menu-item"
               onClick={() => {
                 setOpen(false)
-                useOffice.getState().openDialog({ kind: 'instructorInbox' })
+                useUi.getState().setHistoryOpen(true)
               }}
             >
-              <Icon name="inbox" size={15} />
-              강사 요청함
+              <Icon name="history" size={15} />
+              회의록
             </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              useOffice.getState().openDialog({ kind: 'conventionLibrary' })
-            }}
-          >
-            <Icon name="list" size={15} />
-            컨벤션 라이브러리
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              useOffice.getState().openDialog({ kind: 'activities' })
-            }}
-          >
-            <Icon name="edit" size={15} />
-            활동 기록
-          </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                useOffice.getState().openDialog({ kind: 'conventionLibrary' })
+              }}
+            >
+              <Icon name="list" size={15} />
+              컨벤션 라이브러리
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                useOffice.getState().openDialog({ kind: 'activities' })
+              }}
+            >
+              <Icon name="edit" size={15} />
+              활동 기록
+            </button>
+          </div>
           <hr className="menu-sep" />
-          {me && (
-            <div className="menu-me" title={me.user.githubLogin ? `@${me.user.githubLogin}` : '심사용 계정'}>
-              {me.user.displayName}
-            </div>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              useSession.getState().leaveWorkspace()
-            }}
-          >
-            <Icon name="board" size={15} />
-            사무실 바꾸기
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false)
-              void useSession.getState().logout()
-            }}
-          >
-            <Icon name="logout" size={15} />
-            로그아웃
-          </button>
+          <div className="menu-group" role="group" aria-label="강사 관련">
+            <span className="menu-heading" aria-hidden="true">강사 관련</span>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                useOffice.getState().openDialog({ kind: 'instructors' })
+              }}
+            >
+              <Icon name="users" size={15} />
+              강사 관리
+            </button>
+            {isInstructor && (
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                onClick={() => {
+                  setOpen(false)
+                  useOffice.getState().openDialog({ kind: 'instructorInbox' })
+                }}
+              >
+                <Icon name="inbox" size={15} />
+                강사 요청함
+                <span className="menu-role">강사 전용</span>
+              </button>
+            )}
+          </div>
+          <hr className="menu-sep" />
+          <div className="menu-group" role="group" aria-label="계정 및 사무실">
+            <span className="menu-heading" aria-hidden="true">계정 및 사무실</span>
+            {me && (
+              <div className="menu-me" title={me.user.githubLogin ? `@${me.user.githubLogin}` : '심사용 계정'}>
+                {me.user.displayName}
+              </div>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                useSession.getState().leaveWorkspace()
+              }}
+            >
+              <Icon name="board" size={15} />
+              사무실 바꾸기
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item menu-danger"
+              onClick={() => {
+                setOpen(false)
+                void useSession.getState().logout()
+              }}
+            >
+              <Icon name="logout" size={15} />
+              로그아웃
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -304,26 +318,47 @@ function TapTip() {
   )
 }
 
+/** 상단 바에 보일 저장소 이름 — GitHub 사무실은 저장소 이름(`gitvillage`), 시연 사무실은 표시 이름. full은 툴팁(`team-samdo/gitvillage`) */
+function repoLabel(ws: WorkspaceSnapshot['workspace']): { name: string; full: string } {
+  return { name: ws.githubRepo ?? ws.displayName, full: ws.displayName }
+}
+
 export function TopBar() {
+  const me = useSession((state) => state.me)
   // 사무실을 읽지 못했다(받은 Snapshot이 없음) — 데모 모델의 상태가 아니다
   const failed = useOffice((s) => s.office?.status === 'error')
   const connection = useOffice((s) => s.connection)
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
+  const repo = snapshot ? repoLabel(snapshot.workspace) : null
   return (
     <div className="hud-top">
       <div className="top-head">
       <header className="topbar glass">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Icon name="cube" size={14} />
+          {/* 로그인 화면 로고(SpaceShell Logo)와 같은 모양 — 행성 · 하이라이트 · 궤도 링 · 마름모. 색은 상단 바 보라 한 가지 */}
+          <span className="brand-orbit" aria-hidden="true">
+            <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="15" cy="15" r="7.5" fill="currentColor" />
+              <path d="M9 12 Q15 10 21 12" stroke="#fff" strokeOpacity="0.75" strokeWidth="1.4" fill="none" />
+              <ellipse cx="15" cy="15" rx="13.5" ry="5" stroke="currentColor" strokeWidth="1.6" transform="rotate(-20 15 15)" />
+              <rect x="23" y="6" width="4" height="4" fill="currentColor" transform="rotate(45 25 8)" />
+            </svg>
           </span>
-          <span className="brand-name">팀 오피스</span>
+          <span className="brand-logo">GRAVIT</span>
+          <span className="brand-divider" aria-hidden="true" />
+          {/* 지금 연 사무실의 GitHub 저장소 이름(owner 빼고) — 시연 사무실은 표시 이름. 사무실을 바꾸면 Snapshot과 함께 바뀐다 */}
+          {repo && (
+            <span className="brand-repo" title={repo.full}>
+              {repo.name}
+            </span>
+          )}
           {connection !== null && <span className="badge-server">서버</span>}
         </div>
         {/* 사무실을 읽는 중 · 실패 · 열지 않음이면 값 칸이 "—" */}
         <OfficeKpis snapshot={snapshot} />
         <SyncStatus />
         <MeetingControl />
+        {me && <span className="topbar-avatar" title={me.user.displayName} aria-label={`로그인 사용자: ${me.user.displayName}`}>{me.user.displayName.trim().charAt(0) || '?'}</span>}
         <MoreMenu />
       </header>
       {failed && (
