@@ -1,5 +1,5 @@
 // WorkspaceSnapshot → SceneEntity[] 순수 함수 (CONTRACTS.md 「8」). 테마를 모른다 — 좌표 · 가구 · three 없음.
-// 지금은 팀원 아바타(#10), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26 · #31),
+// 지금은 팀원 아바타(#10 — 회의 중이면 회의 공간), 이슈 · PR의 상태별 자리(#11), 막힘 강조(#23), PR 평가 결과 배지(#21), 회의실의 안건(#30 · #26 · #31),
 // 요구사항 구역(#16 · #17), 통신 허브 게시판(#205), 확인된 활동 메모지(#173)를 만든다.
 // 안건 · 요구사항 연결은 원본 이슈 · PR의 자리(placeRole)를 바꾸지 않는다(CONTRACTS.md 「3」 · 「8」).
 import type { ActivityNote, AgendaItemDto, AgendaKind, HelpRequestSummary, Id, MemberDto, RequirementDto, SubmissionDto, TaskDto, WorkspaceSnapshot } from '../../data/types'
@@ -53,9 +53,20 @@ export function deskSeats(members: readonly MemberDto[]): Map<string, number> {
  */
 const blockedHighlight = (blocked: boolean): Pick<SceneEntity, 'highlight'> => (blocked ? { highlight: 'blocked' } : {})
 
-/** 아바타는 강조만 한다 — 배지 없음(막힌 도형 쪽에 막힘 배지가 붙는다) */
-function avatarEntity(m: MemberDto, blockedMembers: ReadonlySet<string>): SceneEntity {
-  return { key: `member:${m.id}`, kind: 'avatar', refId: m.id, placeRole: deskRole(m.id), badges: [], ...blockedHighlight(blockedMembers.has(m.id)) }
+/**
+ * 아바타는 강조만 한다 — 배지 없음(막힌 도형 쪽에 막힘 배지가 붙는다).
+ * 자리: 진행 중인 회의의 참석자면 회의 공간(meeting), 아니면 자기 책상 — 아바타 이동은 회의 시작 · 종료 같은 앱 안 이벤트를
+ * 따른다(CONTRACTS.md 「10」 아바타 이동). 회의가 끝나면 책상으로 돌아간다.
+ */
+function avatarEntity(m: MemberDto, blockedMembers: ReadonlySet<string>, inMeeting: ReadonlySet<string>): SceneEntity {
+  return {
+    key: `member:${m.id}`,
+    kind: 'avatar',
+    refId: m.id,
+    placeRole: inMeeting.has(m.id) ? 'meeting' : deskRole(m.id),
+    badges: [],
+    ...blockedHighlight(blockedMembers.has(m.id)),
+  }
 }
 
 /**
@@ -187,8 +198,9 @@ export function buildSceneModel(snapshot: WorkspaceSnapshot, deckOrder: readonly
   const seatedMembers = snapshot.members.filter(isSeated)
   const seated = new Set(seatedMembers.map((m) => m.id))
   const blockedMembers = new Set(snapshot.flow.blockedMemberIds)
+  const inMeeting = new Set(snapshot.meetings.find((mt) => mt.status === 'ongoing')?.attendeeMemberIds ?? [])
   return [
-    ...seatedMembers.map((m) => avatarEntity(m, blockedMembers)),
+    ...seatedMembers.map((m) => avatarEntity(m, blockedMembers, inMeeting)),
     ...snapshot.tasks.map((t) => taskEntity(t, seated)),
     ...snapshot.submissions.map(submissionEntity),
     ...snapshot.agendaItems.filter((a) => a.status === 'confirmed').map(agendaEntity),

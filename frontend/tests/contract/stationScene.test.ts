@@ -178,3 +178,16 @@ describe('slots — 도움 요청 안건 구 (#205)', () => {
     assert.ok(![...slots.keys()].some((k) => k.includes(mine.id) && !k.startsWith('agenda:')), '도움 요청 자체는 3D에 자리가 없다(게시판 오브젝트는 #205 2단계)')
   })
 })
+
+describe('StationScene — 회의 자리 (CONTRACTS.md 「10」 아바타 이동)', () => {
+  it('진행 중 회의 참석자만 포드 번호 순으로 브리지 자리 0, 1, …을 받는다', async () => {
+    const snap = await load('ws_1')
+    const seated = [...stationSceneOf(snap).seats].sort((x, y) => x[1] - y[1]).map(([id]) => id)
+    assert.ok(seated.length >= 3, 'seed에 자리가 있는 팀원이 셋 이상 있어야 한다')
+    const attendees = [seated[2], seated[0]]
+    const meetings = [{ id: 'mt_t', status: 'ongoing' as const, startedAt: iso(0), endedAt: null, attendeeMemberIds: attendees, notes: null, discussedAgendaItemIds: [] }]
+    const scene = stationSceneOf({ ...snap, meetings })
+    assert.deepEqual([...scene.meetingSeats], [[seated[0], 0], [seated[2], 1]])
+    assert.equal(stationSceneOf({ ...snap, meetings: [{ ...meetings[0], status: 'ended', endedAt: iso(30) }] }).meetingSeats.size, 0)
+  })
+})
