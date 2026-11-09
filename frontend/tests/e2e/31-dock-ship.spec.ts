@@ -1,4 +1,4 @@
-// 31. 사무실 바꾸기 — 도킹 베이의 우주선 (팀 결정 2026-11-09, scene/DockShip.tsx): 누르면 갈 수 있는 다른 정거장 목록(지금 사무실은
+// 31. 사무실 바꾸기 — 도킹 베이의 우주선 (팀 결정 2026-11-09, scene/DockShip.tsx · 더보기 메뉴의 사무실 바꾸기도 그대로): 누르면 갈 수 있는 다른 정거장 목록(지금 사무실은
 // 빼고)이 뜨고, 고르면 우주선이 떠나 화면 밖으로 갔다가 새 정거장(같은 모델의 다른 사무실)에 들어와 붙는다. 처음 도착 장면은 없다.
 import type { Page } from '@playwright/test'
 import { expect, openApp, openShip, readStore, test } from './fixtures'
@@ -35,4 +35,16 @@ test('the docking ship lists the other stations and flies to the chosen one', as
   await expect.poll(() => shipFlight(page), { timeout: 8000 }).toBe(null)
   expect(await readStore(page, (s) => s.office.status)).toBe('ready')
   await expect(page.locator('.landing')).toHaveCount(0)
+})
+
+test('the docking ship can also take you to the office picker, and the more menu still has the switch', async ({ page, source }) => {
+  await openApp(page, source)
+  // 처음 쓰는 사람을 위한 안전책: 더보기에도 「사무실 바꾸기」가 그대로 있다
+  await page.getByRole('banner').getByRole('button', { name: '더보기' }).click()
+  await expect(page.getByRole('menuitem', { name: '사무실 바꾸기' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await (await openShip(page)).getByRole('button', { name: '정거장 목록 화면으로' }).click()
+  await expect(page.getByRole('region', { name: '사무실 고르기' })).toBeVisible()
+  expect(await readStore(page, (s) => s.office)).toBe(null)
 })

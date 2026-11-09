@@ -1,5 +1,4 @@
-// Top bar: wordmark · 지금 연 저장소 이름, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 관리 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 활동 기록 · 로그아웃). OWNER: D.
-// 사무실 바꾸기는 3D 도킹 베이의 우주선으로 옮겼다(scene/DockShip.tsx — 팀 결정 2026-11-09, #267).
+// Top bar: wordmark · 지금 연 저장소 이름, v1 팀 지표, 동기화 상태, 회의, 더보기(회의록 · 강사 관리 · 강사 요청함(강사만) · 컨벤션 라이브러리 · 활동 기록 · 사무실 바꾸기 · 로그아웃). OWNER: D.
 // 사람별 업무량 표현(업무량 오버레이 · 업무 재배정 추천)은 v1에서 뺐다 — FR-FLOW-06 (#102 T5-c-2).
 // 데모 화면(데모 지표 줄 · 오버레이 · 작업 만들기 · 데모 스위치 · 팀원 추가 · 초기화)도 뺐다 — v1은 GitHub가 원본이다.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -258,13 +257,25 @@ function MoreMenu() {
             )}
           </div>
           <hr className="menu-sep" />
-          <div className="menu-group" role="group" aria-label="계정">
-            <span className="menu-heading" aria-hidden="true">계정</span>
+          <div className="menu-group" role="group" aria-label="계정 및 사무실">
+            <span className="menu-heading" aria-hidden="true">계정 및 사무실</span>
             {me && (
               <div className="menu-me" title={me.user.githubLogin ? `@${me.user.githubLogin}` : '심사용 계정'}>
                 {me.user.displayName}
               </div>
             )}
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                setOpen(false)
+                useSession.getState().leaveWorkspace()
+              }}
+            >
+              <Icon name="board" size={15} />
+              사무실 바꾸기
+            </button>
             <button
               type="button"
               role="menuitem"
