@@ -3,6 +3,7 @@
 import { useMemo, useRef, type ReactElement } from 'react'
 import { useOffice, type OfficeSelection } from '../store'
 import { withdrawRefusal } from './cargoDrop'
+import { MergeBurst } from './MergeBurst'
 import { TaskBox, type AgendaSource } from './TaskBox'
 import { useToday } from './signals'
 import { computeSlots, type Slot } from './slots'
@@ -78,5 +79,11 @@ export function TaskBoxes() {
       />,
     )
   }
-  return <>{items}</>
+  // 머지 축하 입자(#300) — 상자들이 알리는 빛 꼬리 · 반짝이를 한곳에서 그린다
+  return (
+    <>
+      {items}
+      <MergeBurst />
+    </>
+  )
 }

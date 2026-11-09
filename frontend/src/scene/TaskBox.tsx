@@ -19,9 +19,11 @@ import { useOffice, type OfficeSelection } from '../store'
 import { useUi } from '../ui/uiState'
 import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
+import { bridgeMood } from '../theme/station/bridgeMood'
 import { CargoBadges } from './CargoBadges'
+import { celebrateArrival, mergeFx } from './mergeFx'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
-import { BRIDGE_TRASH, bridgeTrashCenter, WORLD_SCALE } from '../theme/station/geometry'
+import { BRIDGE, BRIDGE_TRASH, bridgeTrashCenter, WORLD_SCALE } from '../theme/station/geometry'
 import { agendaDropTarget, cargoDropTarget, isWaitingTarget, requirementOf, TRASH_TARGET, withdrawRefusal, withinTrash, type CargoSource, type DragSource } from './cargoDrop'
 import type { SceneEntity, ThemeLayout } from './model/types'
 import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, DROP_ZONE_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
@@ -77,6 +79,12 @@ const PAD_LINES = [0, 1, 2].map((i) => ({ w: (i === 2 ? 0.45 : 0.75) * NOTE_S, x
 const easeInOut = (u: number) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2)
 const easeOutBack = (u: number) => 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2)
 
+const REDUCED_MOTION = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+
+/** 회의 중 안건 도형이 도는 중심(브리지 가운데, 월드 단위 — #299) */
+const BRIDGE_CX = BRIDGE.x * WORLD_SCALE
+const BRIDGE_CZ = BRIDGE.z * WORLD_SCALE
+
 function lerpAngle(a: number, b: number, k: number) {
   let d = (b - a) % (Math.PI * 2)
   if (d > Math.PI) d -= Math.PI * 2
@@ -103,10 +111,14 @@ interface Anim {
   lift: number
   pop: number
   scale: number
+  /** 지난 프레임의 구역 — 스캐너 → 아카이브로 바뀌는 순간을 잡는다(#300) */
+  home: string
+  /** 머지 축하 중(날아가는 동안 빛 꼬리, 닿으면 반짝이) */
+  cele: boolean
 }
 
 function newAnim(): Anim {
-  return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1 }
+  return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1, home: '', cele: false }
 }
 
 /** The original issue / PR a shape stands for: raised as an agenda item on the bridge, linked to a requirement on a plate */
@@ -169,6 +181,20 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
   /** The help sphere's pulsing halo */
   const halo = useRef<Group>(null)
   const anim = useRef<Anim>(newAnim())
+  // PR이면 지금 상태 — 머지돼 아카이브로 갈 때만 축하한다(닫힌 PR은 조용히, #300)
+  const prMerged = useOffice((s) => {
+    if (!key.startsWith('submission:')) return false
+    const id = key.slice('submission:'.length)
+    return s.office?.snapshot?.submissions.find((p) => p.id === id)?.state === 'merged'
+  })
+  const mergedRef = useRef(prMerged)
+  mergedRef.current = prMerged
+  useEffect(
+    () => () => {
+      mergeFx.trails.delete(key)
+    },
+    [key],
+  )
   const live = useRef<BoxLive>({ x: 0, y: 0, z: 0 })
   const phase = useMemo(() => (key.length * 1.7 + key.charCodeAt(key.length - 1)) % 6.283, [key])
 
@@ -202,6 +228,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
       a.ry = slot.rot
       a.pop = pop ? 0 : 1
       a.scale = slot.scale
+      a.home = slot.home
       body.color.copy(main)
       band.color.copy(strip)
     }
@@ -215,6 +242,12 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
       a.ry = slot.rot
       a.lift = 0
       a.scale = slot.scale
+    }
+
+    // ---- 머지 축하(#300): 보고 있는 중에 스캐너(검토) → 아카이브(완료)로 옮겨지는 머지된 PR ----
+    if (slot.home !== a.home) {
+      if (a.home === 'review' && slot.home === 'done' && mergedRef.current && !REDUCED_MOTION()) a.cele = true
+      a.home = slot.home
     }
 
     // ---- position: follow the pointer while dragged to the bridge, otherwise fly to the slot ----
@@ -248,6 +281,15 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
       a.py = a.fy + (a.ty - a.fy) * e + Math.sin(Math.PI * u) * a.arc
       if (u >= 1) a.flying = false
     }
+    if (a.cele) {
+      if (a.flying) mergeFx.trails.add(key)
+      else {
+        // 아카이브에 닿았다 — 반짝이(여러 개면 시차를 두고)
+        mergeFx.trails.delete(key)
+        celebrateArrival(a.px, a.py, a.pz)
+        a.cele = false
+      }
+    }
 
     // ---- hover lift, pop-in ----
     a.lift += ((hovered && !dragged ? 0.1 : 0) - a.lift) * (1 - Math.exp(-14 * dt))
@@ -257,11 +299,24 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
     g.scale.setScalar(Math.max(0.0001, a.scale * popScale))
 
     a.ry = lerpAngle(a.ry, slot.rot, 1 - Math.exp(-8 * dt))
-    g.position.set(a.px, a.py + a.lift, a.pz)
+    // 회의 중이면 탁자 위 안건 도형이 브리지 가운데를 천천히 돈다(#299) — 자리(슬롯)는 그대로, 그리는 자리만 돌린다
+    let px = a.px
+    let pz = a.pz
+    let py = a.py + a.lift
+    if (slot.home === 'agenda' && !dragged && (bridgeMood.spin > 0.001 || Math.abs(bridgeMood.angle) > 0.001)) {
+      const c = Math.cos(bridgeMood.angle)
+      const s = Math.sin(bridgeMood.angle)
+      const ox = a.px - BRIDGE_CX
+      const oz = a.pz - BRIDGE_CZ
+      px = BRIDGE_CX + ox * c - oz * s
+      pz = BRIDGE_CZ + ox * s + oz * c
+      py += 0.06 * bridgeMood.spin * Math.sin(t * 1.4 + phase)
+    }
+    g.position.set(px, py, pz)
     g.rotation.set(0, a.ry, 0)
-    live.current.x = a.px
-    live.current.y = a.py + a.lift
-    live.current.z = a.pz
+    live.current.x = px
+    live.current.y = py
+    live.current.z = pz
 
     // ---- look ----
     const k = 1 - Math.exp(-9 * dt)

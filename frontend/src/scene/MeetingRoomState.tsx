@@ -1,10 +1,14 @@
 // Command-bridge (meeting room) status layer of the v1 office: calm "in session" glow + sign while a meeting runs,
 // "안건 N" (confirmed agenda items) when idle, and the drop highlight while an issue / PR is dragged over it (#30 · #26).
+// While a meeting runs, a teal hologram beam rises from the table with light rings drifting up it, the agenda shapes circle
+// the table slowly and the rest of the station's lights dim a little (#299 — theme/station/ambient.tsx bridgeMood).
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MeshBasicMaterial, type Group } from 'three'
+import { AdditiveBlending, Color, DoubleSide, MeshBasicMaterial, ShaderMaterial, SpriteMaterial, TorusGeometry, type Group, type Mesh } from 'three'
 import { useOffice } from '../store'
 import { PALETTE } from '../theme'
+import { bridgeMood } from '../theme/station/bridgeMood'
+import { glowTex } from '../theme/station/parts'
 import { BRIDGE, WORLD_SCALE } from '../theme/station/geometry'
 import { cargoDrag, noRaycast } from './runtime'
 import { SceneHtml } from './shared'
@@ -105,6 +109,123 @@ function SessionGlow({ on }: { on: boolean }) {
   )
 }
 
+const TABLE_Y = BRIDGE.tableTopY * WORLD_SCALE
+/** Hologram size (world): beam radius at the base / top, height; rings drifting up it */
+const HOLO = { r0: 2.1 * WORLD_SCALE, r1: 0.9 * WORLD_SCALE, h: 9 * WORLD_SCALE, rings: 4, ringS: 3.2 }
+/** How fast the agenda shapes circle the table (rad/s at full meeting) */
+const AGENDA_SPIN = 0.22
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+
+/** Beam: bright at the table, fading upward, with faint scan lines; additive teal. */
+function beamMaterial(): ShaderMaterial {
+  return new ShaderMaterial({
+    uniforms: { color: { value: new Color(0x8ff0e0) }, k: { value: 0 }, t: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 color; uniform float k; uniform float t;
+      varying vec2 vUv;
+      void main() {
+        float fade = pow(1.0 - vUv.y, 1.3);
+        float scan = 0.78 + 0.22 * sin(vUv.y * 70.0 - t * 3.0);
+        float a = k * fade * scan * 0.85;
+        gl_FragColor = vec4(color * a, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+    blending: AdditiveBlending,
+  })
+}
+
+/**
+ * Meeting in session (#299): hologram beam over the table with rings drifting up, and the shared bridge mood (dim the rest of
+ * the station's lights, circle the agenda shapes). Eases in and out with the session; with reduced motion the beam stays still.
+ */
+function SessionHologram({ on }: { on: boolean }) {
+  const group = useRef<Group>(null)
+  const rings = useRef<(Mesh | null)[]>([])
+  const k = useRef(0)
+  const still = useMemo(() => reducedMotion(), [])
+  const res = useMemo(
+    () => ({
+      beam: beamMaterial(),
+      ringGeo: new TorusGeometry(1, 0.05, 6, 48).rotateX(Math.PI / 2),
+      glow: new SpriteMaterial({ map: glowTex(), color: 0x8ff0e0, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }),
+      ringMats: Array.from({ length: HOLO.rings }, () => new MeshBasicMaterial({ color: 0xbffcf2, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false })),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      res.beam.dispose()
+      res.ringGeo.dispose()
+      res.ringMats.forEach((m) => m.dispose())
+      res.glow.dispose()
+      bridgeMood.focus = bridgeMood.spin = 0
+    },
+    [res],
+  )
+
+  useFrame((state, delta) => {
+    const g = group.current
+    if (!g) return
+    const dt = Math.min(delta, 0.05)
+    const goal = on ? 1 : 0
+    k.current += (goal - k.current) * (1 - Math.exp(-2.2 * dt))
+    if (Math.abs(goal - k.current) < 0.002) k.current = goal
+    const kk = k.current
+    bridgeMood.focus = kk
+    bridgeMood.spin = still ? 0 : kk
+    if (!still) {
+      bridgeMood.angle += dt * AGENDA_SPIN * kk
+      if (bridgeMood.angle > Math.PI) bridgeMood.angle -= Math.PI * 2
+    }
+    // when the meeting ends the shapes unwind toward their places (at most half a turn)
+    if (!on) bridgeMood.angle *= 1 - (1 - Math.exp(-2.2 * dt))
+    const vis = kk > 0.005
+    if (g.visible !== vis) g.visible = vis
+    if (!vis) return
+    const t = state.clock.elapsedTime
+    res.beam.uniforms.k.value = kk
+    res.beam.uniforms.t.value = still ? 0 : t
+    g.scale.set(1, 0.15 + 0.85 * kk, 1)
+    for (let i = 0; i < HOLO.rings; i++) {
+      const m = rings.current[i]
+      if (!m) continue
+      const u = still ? (i + 0.5) / HOLO.rings : (t / HOLO.ringS + i / HOLO.rings) % 1
+      const r = HOLO.r0 + (HOLO.r1 - HOLO.r0) * u
+      m.position.y = u * HOLO.h
+      m.scale.setScalar(r)
+      res.ringMats[i].opacity = kk * 0.95 * Math.sin(u * Math.PI)
+    }
+    res.glow.opacity = kk * (0.55 + (still ? 0 : 0.12 * Math.sin(t * 1.6)))
+  })
+
+  return (
+    <group ref={group} position={[CX, TABLE_Y, CZ]} visible={false}>
+      <mesh position={[0, HOLO.h / 2, 0]} material={res.beam} renderOrder={2} raycast={noRaycast}>
+        <cylinderGeometry args={[HOLO.r1, HOLO.r0, HOLO.h, 40, 1, true]} />
+      </mesh>
+      {/* 탁자 위 빛 번짐 */}
+      <sprite material={res.glow} position={[0, 0.25, 0]} scale={[HOLO.r0 * 4, HOLO.r0 * 4, 1]} raycast={noRaycast} />
+      {res.ringMats.map((m, i) => (
+        <mesh
+          key={i}
+          ref={(el) => {
+            rings.current[i] = el
+          }}
+          geometry={res.ringGeo}
+          material={m}
+          renderOrder={2}
+          raycast={noRaycast}
+        />
+      ))}
+    </group>
+  )
+}
+
 /**
  * Drop highlight while an issue / PR dragged over the bridge would be raised as an agenda item (#30 · #26). Reads the drag
  * state every frame — nothing re-renders while dragging.
@@ -138,6 +259,7 @@ export function MeetingRoomState() {
   return (
     <>
       <SessionGlow on={startedAt !== null} />
+      <SessionHologram on={startedAt !== null} />
       <RoomLabel live={startedAt !== null} startedAt={startedAt ?? ''} agendaCount={agendaCount} />
       <AgendaDropGlow />
     </>

@@ -6,6 +6,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AdditiveBlending, Color, MeshBasicMaterial, SpriteMaterial, type Mesh } from 'three'
 import { noRaycast } from '../../scene/runtime'
+import { bridgeMood } from './bridgeMood'
 import { glowTex } from './parts'
 
 type V3 = [number, number, number]
@@ -13,6 +14,10 @@ type V3 = [number, number, number]
 type Animate = (t: number, still: boolean) => void
 
 const animations = new Set<Animate>()
+
+/** 회의 중(#299 — bridgeMood.focus) 나머지 불빛이 어두워지는 정도(0 ~ 1) */
+const FOCUS_DIM = 0.55
+const dimmed = () => 1 - FOCUS_DIM * bridgeMood.focus
 function useAnimate(fn: Animate) {
   useEffect(() => {
     animations.add(fn)
@@ -62,7 +67,7 @@ export function ConsoleScreen({ color, at, position, rotation, size }: { color: 
       let level = 0.86 + 0.14 * Math.sin(t * (0.6 + ph * 0.5) + ph * 6.28)
       const tick = Math.floor(t * 8 + ph * 97)
       if (hash1(tick) < 0.012) level *= 0.45
-      mat.color.copy(base).multiplyScalar(level)
+      mat.color.copy(base).multiplyScalar(level * dimmed())
     },
     [mat, base, ph],
   )
@@ -90,6 +95,7 @@ export function AmbientGlow({
   mode,
   index = 0,
   count = 1,
+  keepLit = false,
 }: {
   color: number
   size: number
@@ -98,6 +104,8 @@ export function AmbientGlow({
   mode: 'breathe' | 'blink' | 'chase'
   index?: number
   count?: number
+  /** 회의 중에도 어두워지지 않는다(브리지 자기 불빛) */
+  keepLit?: boolean
 }) {
   const mat = useMemo(() => new SpriteMaterial({ map: glowTex(), color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false }), [color, opacity])
   useEffect(() => () => mat.dispose(), [mat])
@@ -114,9 +122,9 @@ export function AmbientGlow({
         const c = (((t * 0.9 - index / count) % 1) + 1) % 1
         k = still ? 0.6 : 0.3 + 0.7 * Math.max(0, 1 - c * 4)
       }
-      mat.opacity = opacity * k
+      mat.opacity = opacity * k * (keepLit ? 1 : dimmed())
     },
-    [mat, mode, ph, index, count, opacity],
+    [mat, mode, ph, index, count, opacity, keepLit],
   )
   useAnimate(animate)
   return <sprite material={mat} position={p} scale={[size, size, 1]} raycast={noRaycast} />
@@ -146,7 +154,7 @@ export function PanelGlint({ center, size, delay }: { center: V3; size: [number,
         return
       }
       m.position.x = center[0] - size[0] / 2 + band / 2 + k * (size[0] - band)
-      mat.opacity = 0.5 * Math.sin(k * Math.PI)
+      mat.opacity = 0.5 * Math.sin(k * Math.PI) * dimmed()
     },
     [mat, center, size, delay, band],
   )
@@ -191,8 +199,9 @@ export function ChaseLamp({ p, index, count }: { p: V3; index: number; count: nu
     () => (t, still) => {
       const c = (((t * 0.9 - index / count) % 1) + 1) % 1
       const k = still ? 0.6 : Math.max(0, 1 - c * 4)
-      res.lamp.color.lerpColors(res.dim, res.lit, k)
-      res.halo.opacity = 0.75 * k
+      const d = dimmed()
+      res.lamp.color.lerpColors(res.dim, res.lit, k * d)
+      res.halo.opacity = 0.75 * k * d
     },
     [res, index, count],
   )
