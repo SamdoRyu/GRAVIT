@@ -112,6 +112,18 @@ export const LAUNCH_RACK = { x: 47, z: 17.6, y: 2.0 } as const
 /** 지휘 브리지 회의 좌석: 탁자 둘레 각도(도), 반지름 — 시안 bridge 모드 승무원 자리에서 넓힘 */
 export const BRIDGE_SEATS = { radius: 5.6, angles: [70, 20, 200, 250, 120, 330, 160, 290, 45, 225] } as const
 
+/**
+ * 지휘 브리지 쓰레기통(#291 — 올린 안건을 끌어다 놓아 철회): 탁자 가장자리(3.3)와 좌석(5.6) 사이, 좌석 70° · 120° 사이 빈자리
+ * (각도 · 반지름은 BRIDGE_SEATS와 같은 규칙). 크기는 탁자 윗면(tableTopY)보다 낮아 안건을 가리지 않는다. catchRadius = 놓을 수 있는 범위
+ */
+export const BRIDGE_TRASH = { angle: 95, radius: 4.3, height: 0.95, catchRadius: 1.3 } as const
+
+/** 쓰레기통 중심(시안 단위, 바닥 높이) */
+export function bridgeTrashCenter(): { x: number; y: number; z: number } {
+  const a = (BRIDGE_TRASH.angle * Math.PI) / 180
+  return { x: BRIDGE.x + Math.cos(a) * BRIDGE_TRASH.radius, y: BRIDGE.floorY, z: BRIDGE.z + Math.sin(a) * BRIDGE_TRASH.radius }
+}
+
 /** 연결 통로: 축, 시작 · 끝(축 좌표), 다른 축의 위치 — 시안 tube() 목록 + 추가 포드 4~7을 옆 포드에 잇는 짧은 통로 */
 export const TUBES: readonly { axis: Axis; from: number; to: number; at: number }[] = [
   { axis: 'x', from: 18.4, to: 25.0, at: 7.5 },

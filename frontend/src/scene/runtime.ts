@@ -46,17 +46,21 @@ export const DRAG_Y = 1.2
 export const DROP_ZONE_Y = 0.6
 
 /**
- * The original issue / PR being dragged (#30 · #26 · #15) — at most one. `x · y · z` is where it should be drawn, `target` the
- * drop zone that would act if let go now (cargoDropTarget: 'meeting' or 'requirement:<id>', else null), `overMeeting` whether
- * that is the bridge. Only the dragging TaskBox writes it; the bridge and the requirement plates read it every frame for their glow.
+ * The shape being dragged (#30 · #26 · #15 · #291) — at most one. `x · y · z` is where it should be drawn, `target` the drop
+ * zone that would act if let go now (cargoDropTarget: 'meeting' or 'requirement:<id>'; for an agenda shape agendaDropTarget:
+ * 'trash'; else null), `overMeeting` whether that is the bridge, `agenda` whether the shape is an agenda item the viewer may
+ * withdraw (the bridge trash can lights up softly), `overTrash` whether letting go now would withdraw it. Only the dragging
+ * TaskBox writes it; the bridge, the trash can and the requirement plates read it every frame for their glow.
  */
-export const cargoDrag: { key: string | null; x: number; y: number; z: number; target: string | null; overMeeting: boolean } = {
+export const cargoDrag: { key: string | null; x: number; y: number; z: number; target: string | null; overMeeting: boolean; agenda: boolean; overTrash: boolean } = {
   key: null,
   x: 0,
   y: DRAG_Y,
   z: 0,
   target: null,
   overMeeting: false,
+  agenda: false,
+  overTrash: false,
 }
 
 /** Where the pointer (client px) meets the horizontal plane y = `planeY`, with the live camera. Null off the canvas or above the horizon. */
