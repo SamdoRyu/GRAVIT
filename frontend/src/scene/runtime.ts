@@ -17,6 +17,15 @@ export interface AvatarLive {
 }
 export const avatarLive = new Map<Id, AvatarLive>()
 
+/** Live light dot of a crew member moving between rooms (CONTRACTS.md 「10」 아바타 이동 연출), keyed by member id. */
+export interface TrailLive {
+  x: number
+  y: number
+  z: number
+  visible: boolean
+}
+export const trailLive = new Map<Id, TrailLive>()
+
 /** Live issue / PR box world position (updated every frame by each TaskBox), keyed by SceneEntity key. */
 export interface BoxLive {
   x: number
