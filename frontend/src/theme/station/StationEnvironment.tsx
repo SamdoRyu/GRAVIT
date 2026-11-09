@@ -22,7 +22,7 @@ function Bridge() {
       <mesh geometry={saucer} position={[0, -0.1, 0]} material={lam(COLORS.band, { side: DoubleSide })} raycast={noRaycast} />
       {Array.from({ length: 8 }, (_, i) => {
         const a = (i / 8) * PI * 2
-        return <AmbientGlow key={i} mode="breathe" color={i % 2 ? 0xff8f7a : COLORS.teal} size={1.0} p={[Math.cos(a) * 7.9, -0.1, Math.sin(a) * 7.9]} opacity={0.85} />
+        return <AmbientGlow key={i} mode="breathe" keepLit color={i % 2 ? 0xff8f7a : COLORS.teal} size={1.0} p={[Math.cos(a) * 7.9, -0.1, Math.sin(a) * 7.9]} opacity={0.85} />
       })}
       <mesh position={[0, 0.15, 0]} material={lam(COLORS.floor)} receiveShadow raycast={noRaycast}>
         <cylinderGeometry args={[7.0, 7.0, 0.1, 32]} />
