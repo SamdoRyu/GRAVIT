@@ -113,10 +113,11 @@ export const LAUNCH_RACK = { x: 47, z: 17.6, y: 2.0 } as const
 export const BRIDGE_SEATS = { radius: 5.6, angles: [70, 20, 200, 250, 120, 330, 160, 290, 45, 225] } as const
 
 /**
- * 지휘 브리지 쓰레기통(#291 — 올린 안건을 끌어다 놓아 철회): 탁자 가장자리(3.3)와 좌석(5.6) 사이, 좌석 70° · 120° 사이 빈자리
+ * 지휘 브리지 쓰레기통(#291 — 올린 안건을 끌어다 놓아 철회): 기본 시점에서 탁자 정면(약 45°) 바로 앞 약간 오른쪽, 탁자 받침(3.3)과
+ * 좌석(5.6) 사이이고 좌석 20° · 45° 사이
  * (각도 · 반지름은 BRIDGE_SEATS와 같은 규칙). 크기는 탁자 윗면(tableTopY)보다 낮아 안건을 가리지 않는다. catchRadius = 놓을 수 있는 범위
  */
-export const BRIDGE_TRASH = { angle: 95, radius: 4.5, height: 1.3, catchRadius: 1.5 } as const
+export const BRIDGE_TRASH = { angle: 28, radius: 4.0, height: 1.3, catchRadius: 1.5 } as const
 
 /** 쓰레기통 중심(시안 단위, 바닥 높이) */
 export function bridgeTrashCenter(): { x: number; y: number; z: number } {
