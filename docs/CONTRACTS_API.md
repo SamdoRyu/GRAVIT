@@ -7,7 +7,7 @@
 
 # API 계약 — 오피스 v1
 
-> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-06
+> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-09
 > [CONTRACTS.md](CONTRACTS.md)의 상세편이다. 공통 규칙(ID · 시각 · 상태 코드 · 페이지 · 에러 · 검사 순서 · 익명성 · Snapshot 경계)은 CONTRACTS.md에 있고 여기서 다시 적지 않는다. 엔드포인트 · DTO는 **이 문서 한 곳**이 기준이다. 바꿀 때는 CONTRACTS.md 「9. 계약 변경 절차」(문서 담당자가 고치고 커밋을 공유).
 > 근거: 2026-11-03 결정(Q1~Q6), 03 · 05 · 06 · 07. 이 문서는 새 기능 · 새 정책을 만들지 않는다 — 정책에서 바로 나오지 않는 인터페이스 선택에는 `[구현 기본값]`을 붙였다.
 
@@ -583,7 +583,7 @@ interface MeetingDto {
 | `POST W/help-requests/{helpRequestId}/comments` | `{ content: string }` (1~2000자) | `201 HelpCommentDto`. 요청자가 아닌 팀원의 첫 코멘트면 `open` → `discussing`. 강사 답변(`isInstructorAnswer: true`)은 상태를 바꾸지 않는다 | 팀원, 또는 R4 — "강사에게 요청"이 켜진 글 | 요청 안 된 글에 강사 `403`, `resolved` · `ended` `409` |
 | `POST W/help-requests/{helpRequestId}/close` | `{ helpfulCommentId: Id \| null; learning: string }` (배운 점 1~200자) | `200 HelpRequestDetail`(`resolved`) | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 도움이 된 코멘트가 이 글의 것이 아님 · 강사 답변 · 요청자 본인 코멘트 `400`, 그 밖의 상태 `409` |
 | `POST W/help-requests/{helpRequestId}/to-agenda` | `{ title: string }` (1~100자) | `201 AgendaItemDto`(`help_request` 종류, `confirmed`). 도움 요청은 `on_agenda`. 직접 전환과 48시간 후보 확정이 같은 API다 | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 그 밖의 상태 `409` |
-| `POST W/help-requests/{helpRequestId}/instructor-request` | — | `200 HelpRequestSummary`(`instructorRequested: true`). 이미 켜져 있으면 그대로 | 팀원 — 요청자 | 요청자가 아님 `403` |
+| `POST W/help-requests/{helpRequestId}/instructor-request` | — | `200 HelpRequestSummary`(`instructorRequested: true`). 이미 켜져 있으면 그대로(처음 시각 유지, 변경 알림 없음) | 팀원 — 요청자. 상태 `open` · `discussing` · `on_agenda` | 요청자가 아님 `403`, `resolved` · `ended` `409`(이미 켜져 있어도), 새로 켤 때 사무실에 지정된 강사가 없음 `409` — 시연 사무실은 심사용 강사 계정이 강사라 이 검사를 하지 않는다. 검사 순서는 대상 → 요청자 → 상태 → (이미 켜져 있으면 그대로) → 지정된 강사 (2026-11-09 결정) |
 
 ```ts
 type HelpRequestStatus = 'open' | 'discussing' | 'resolved' | 'on_agenda' | 'ended';
@@ -777,6 +777,7 @@ interface FollowUpQuestionDto { id: Id; instructor: UserRef; body: string; creat
 
 - 역할: `MeResponse.isInstructor`가 `true`인 사람. 아니면 `403 forbidden_role`.
 - 범위: 요청한 순간 **지금 지정된 사무실**의 요청만(요청마다 DB 확인). 해제된 사무실 것은 나오지 않는다. 심사용 강사 계정은 시연 사무실 것만.
+- 답 없이 `resolved` · `ended`가 된 도움 요청은 나오지 않는다 — 강사가 더 답할 수 없다(「11」 코멘트 `409`). 답이 하나라도 있었으면 `answered=true` · 전부에 그대로 남는다(전부 = `true` ∪ `false`). 원본의 "강사에게 요청" 기록은 지우지 않는다 (2026-11-09 결정)
 
 ```ts
 interface InboxItem {
