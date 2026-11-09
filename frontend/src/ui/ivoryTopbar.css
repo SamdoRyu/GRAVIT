@@ -45,21 +45,23 @@
   min-width: 0;
 }
 .hud.ivory-hud .topbar .brand-orbit {
-  width: 33px;
-  height: 33px;
+  width: 34px;
+  height: 34px;
   flex: none;
   display: grid;
   place-items: center;
   color: var(--cream-purple);
 }
 .hud.ivory-hud .topbar .brand-orbit svg {
-  width: 31px;
-  height: 31px;
+  width: 34px;
+  height: 34px;
 }
+/* 로그인 화면 워드마크(.login-wordmark)와 같은 글꼴 — Fredoka 600 · 21px. 자간은 상단 바에서 조금 좁게(1.6px), 색은 상단 바 글자색 */
 .hud.ivory-hud .topbar .brand-logo {
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.035em;
+  font-family: Fredoka, 'IBM Plex Sans KR', sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
   white-space: nowrap;
   color: var(--cream-ink);
 }

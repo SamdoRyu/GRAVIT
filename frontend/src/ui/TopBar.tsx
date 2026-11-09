@@ -335,11 +335,13 @@ export function TopBar() {
       <div className="top-head">
       <header className="topbar glass">
         <div className="brand">
+          {/* 로그인 화면 로고(SpaceShell Logo)와 같은 모양 — 행성 · 하이라이트 · 궤도 링 · 마름모. 색은 상단 바 보라 한 가지 */}
           <span className="brand-orbit" aria-hidden="true">
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="16" cy="16" r="6.6" stroke="currentColor" strokeWidth="1.9" />
-              <ellipse cx="16" cy="16" rx="14.3" ry="6.2" transform="rotate(-35 16 16)" stroke="currentColor" strokeWidth="1.8" />
-              <circle cx="27" cy="8.5" r="2.1" fill="currentColor" />
+            <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="15" cy="15" r="7.5" fill="currentColor" />
+              <path d="M9 12 Q15 10 21 12" stroke="#fff" strokeOpacity="0.75" strokeWidth="1.4" fill="none" />
+              <ellipse cx="15" cy="15" rx="13.5" ry="5" stroke="currentColor" strokeWidth="1.6" transform="rotate(-20 15 15)" />
+              <rect x="23" y="6" width="4" height="4" fill="currentColor" transform="rotate(45 25 8)" />
             </svg>
           </span>
           <span className="brand-logo">GRAVIT</span>
