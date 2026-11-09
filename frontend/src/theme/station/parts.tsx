@@ -18,6 +18,7 @@ import {
   type Mesh,
 } from 'three'
 import { noRaycast } from '../../scene/runtime'
+import { ConsoleScreen } from './ambient'
 import { HULL_Y, type Axis } from './geometry'
 
 export const COLORS = {
@@ -101,9 +102,8 @@ export function Console({ p, ry }: { p: V3; ry: number }) {
       <Bx s={[2.0, 1.0, 0.8]} p={[0, 0.5, 0]} c={lam(COLORS.console)} />
       <Bx s={[2.2, 0.12, 1.1]} p={[0, 1.05, 0.1]} c={lam(COLORS.consoleTop)} />
       <Bx s={[1.8, 0.95, 0.1]} p={[0, 1.7, -0.25]} c={lam(COLORS.screen)} rot={[-0.2, 0, 0]} />
-      <mesh position={[0, 1.71, -0.19]} rotation={[-0.2, 0, 0]} material={basic(COLORS.screenGlow)} raycast={noRaycast}>
-        <planeGeometry args={[1.6, 0.75]} />
-      </mesh>
+      {/* 화면 빛 — 콘솔마다 박자가 다르게 은은히 바뀐다(#285) */}
+      <ConsoleScreen color={COLORS.screenGlow} at={p} position={[0, 1.71, -0.19]} rotation={[-0.2, 0, 0]} size={[1.6, 0.75]} />
     </group>
   )
 }

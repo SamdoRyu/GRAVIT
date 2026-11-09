@@ -1,9 +1,11 @@
 // 우주정거장 본체 — 확정 시안(public/station)의 모듈 · 통로 · 트러스를 R3F로 다시 만든 것. 소유: C.
 // 시안 단위로 그리고 WORLD_SCALE로 줄인다. 데이터 화물(이슈 · PR 등)은 여기 없다 — 장면이 ThemeLayout 자리에 그린다.
+// 불빛의 깜빡임 · 흐름 · 숨쉬기는 ambient.tsx(#285).
 import { useMemo } from 'react'
 import { DoubleSide, IcosahedronGeometry, OctahedronGeometry, TorusGeometry } from 'three'
 import { noRaycast } from '../../scene/runtime'
 import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
+import { AmbientGlow, ChaseLamp, PanelGlint, StationAmbient } from './ambient'
 import { Bx, COLORS, Console, CutawayModule, Glow, Rack, Thruster, Tube, basic, lam } from './parts'
 
 const PI = Math.PI
@@ -20,7 +22,7 @@ function Bridge() {
       <mesh geometry={saucer} position={[0, -0.1, 0]} material={lam(COLORS.band, { side: DoubleSide })} raycast={noRaycast} />
       {Array.from({ length: 8 }, (_, i) => {
         const a = (i / 8) * PI * 2
-        return <Glow key={i} color={i % 2 ? 0xff8f7a : COLORS.teal} size={1.0} p={[Math.cos(a) * 7.9, -0.1, Math.sin(a) * 7.9]} opacity={0.85} />
+        return <AmbientGlow key={i} mode="breathe" color={i % 2 ? 0xff8f7a : COLORS.teal} size={1.0} p={[Math.cos(a) * 7.9, -0.1, Math.sin(a) * 7.9]} opacity={0.85} />
       })}
       <mesh position={[0, 0.15, 0]} material={lam(COLORS.floor)} receiveShadow raycast={noRaycast}>
         <cylinderGeometry args={[7.0, 7.0, 0.1, 32]} />
@@ -45,7 +47,8 @@ function Bridge() {
       <mesh position={[0, 8.8, 0]} material={lam(COLORS.frame)} raycast={noRaycast}>
         <cylinderGeometry args={[0.1, 0.14, 3.2, 8]} />
       </mesh>
-      <Glow color={0xff8f7a} size={1.3} p={[0, 10.5, 0]} opacity={0.9} />
+      {/* 안테나 경고등 — 점멸 */}
+      <AmbientGlow mode="blink" color={0xff6f5a} size={1.6} p={[0, 10.5, 0]} opacity={1} />
     </group>
   )
 }
@@ -73,7 +76,7 @@ function Hub() {
       <mesh geometry={band} material={lam(COLORS.band, { side: DoubleSide })} raycast={noRaycast} />
       {[0, 1, 2, 3].map((i) => {
         const a = (i * PI) / 2 + PI / 4
-        return <Glow key={i} color={COLORS.lamp} size={0.9} p={[Math.cos(a) * 2.95, 0.9, Math.sin(a) * 2.95]} opacity={0.9} />
+        return <AmbientGlow key={i} mode="breathe" color={COLORS.lamp} size={0.9} p={[Math.cos(a) * 2.95, 0.9, Math.sin(a) * 2.95]} opacity={0.9} />
       })}
     </group>
   )
@@ -126,10 +129,12 @@ function CommHub() {
       <mesh position={[39.4, HULL_Y + 5.6, COMM_HUB.z]} rotation={[PI + 0.9, 0.7, 0]} material={lam(0xf3ecdd, { side: DoubleSide })} raycast={noRaycast}>
         <sphereGeometry args={[1.5, 16, 6, 0, PI * 2, 0, 1.0]} />
       </mesh>
-      <Glow color={0xff9d4d} size={1.6} p={[39.4, HULL_Y + 5.4, COMM_HUB.z]} opacity={0.9} />
+      <AmbientGlow mode="breathe" color={0xff9d4d} size={1.6} p={[39.4, HULL_Y + 5.4, COMM_HUB.z]} opacity={0.9} />
     </>
   )
 }
+
+const DOCK_LIGHTS = 10
 
 function Dock() {
   const dockRing = useMemo(() => new TorusGeometry(2.4, 0.45, 8, 28), [])
@@ -142,6 +147,11 @@ function Dock() {
       <mesh position={[DOCK.x, HULL_Y, 41.8]} rotation={[PI / 2, 0, 0]} material={lam(0x2a2f63)} raycast={noRaycast}>
         <cylinderGeometry args={[2.0, 2.0, 0.3, 28]} />
       </mesh>
+      {/* 도킹 유도등 — 링 둘레를 차례로 켜졌다 꺼진다(#285) */}
+      {Array.from({ length: DOCK_LIGHTS }, (_, i) => {
+        const a = PI / 2 - (i / DOCK_LIGHTS) * PI * 2
+        return <ChaseLamp key={i} index={i} count={DOCK_LIGHTS} p={[DOCK.x + Math.cos(a) * 2.45, HULL_Y + Math.sin(a) * 2.45, 42.3]} />
+      })}
     </>
   )
 }
@@ -220,10 +230,12 @@ function RequirementDeckModule() {
 function Truss() {
   const TZ = 20
   const TY = 8.6
-  const panel = (px: number, pz: number) => (
+  const panel = (px: number, pz: number, glintDelay: number) => (
     <group key={`${px}:${pz}`}>
       <Bx s={[12.4, 0.14, 5.0]} p={[px, TY - 0.12, pz]} c={lam(0xece2cf)} />
       <Bx s={[12, 0.12, 4.6]} p={[px, TY, pz]} c={lam(0x2c4a7c, { emissive: 0x0a1630 })} />
+      {/* 빛 띠가 판 위를 쓸고 지나간다(#285) */}
+      <PanelGlint center={[px, TY + 0.08, pz]} size={[12, 4.6]} delay={glintDelay} />
     </group>
   )
   return (
@@ -234,8 +246,8 @@ function Truss() {
       {[-4.5, 62.5].map((px, i) => (
         <group key={px}>
           <Bx s={[Math.abs(px - (i ? 54 : 4)) + 1, 0.2, 0.2]} p={[(px + (i ? 54 : 4)) / 2, TY, TZ]} c={lam(COLORS.frame)} />
-          {panel(px, TZ - 3.2)}
-          {panel(px, TZ + 3.2)}
+          {panel(px, TZ - 3.2, i * 3.6)}
+          {panel(px, TZ + 3.2, i * 3.6 + 0.35)}
         </group>
       ))}
       {[28, 47, 9.5, 30.5].map((px) => (
@@ -249,6 +261,7 @@ function Truss() {
 export function StationEnvironment({ podsShown }: { podsShown: ReadonlySet<number> }) {
   return (
     <group scale={WORLD_SCALE}>
+      <StationAmbient />
       <Bridge />
       <Hub />
       {PODS.map((pod, i) => (podsShown.has(i) ? <PodUnit key={i} pod={pod} /> : null))}
