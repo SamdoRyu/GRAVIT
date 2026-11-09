@@ -83,6 +83,57 @@ export function toHelpSummary(detail: HelpRequestDetail): HelpRequestSummary {
   return summary
 }
 
+/**
+ * 강사 답변 확인 결과(#290) — 도움 요청 상세의 `comments[].isInstructorAnswer`를 그 글의 `commentCount` 시점에 본 값.
+ * 요약(Snapshot)에는 강사 답변 여부가 없어 화면이 상세를 읽어 채운다. 코멘트 수가 바뀌면 다시 읽는다.
+ * `lastAnswerId` = 가장 최근 강사 답변(코멘트 ID) — 새 강사 답변 알림(빨간 점)이 "어디까지 봤나"와 견준다.
+ */
+export interface InstructorAnswerCheck {
+  commentCount: number
+  answered: boolean
+  lastAnswerId: string | null
+}
+export type InstructorAnswerChecks = Readonly<Record<string, InstructorAnswerCheck>>
+/** 도움 요청마다 이 사람이 마지막으로 본 강사 답변(코멘트 ID) — 이 브라우저에만 둔다(#290) */
+export type SeenInstructorAnswers = Readonly<Record<string, string>>
+
+/** 강사가 답할 수 있는 글 — "강사에게 요청"이 켜졌고 코멘트를 받는다(open · discussing · on_agenda — 「11」) */
+const instructorMayAnswer = (h: Pick<HelpRequestSummary, 'status' | 'instructorRequested'>): boolean => h.instructorRequested && acceptsComments(h.status)
+/** 강사가 답할 차례인 글 — 그중 아직 열려 있다(open · discussing). 강사 우주선이 이 글을 보고 온다 */
+const waitsForInstructor = (h: Pick<HelpRequestSummary, 'status' | 'instructorRequested'>): boolean => h.instructorRequested && isOpenForDiscussion(h.status)
+
+/** 상세를 (다시) 읽어 강사 답변을 확인해야 하는 글 — 강사가 답할 수 있는데 확인 전이거나 그 뒤로 코멘트 수가 바뀌었다 */
+export function needsInstructorCheck(h: HelpRequestSummary, checks: InstructorAnswerChecks): boolean {
+  return instructorMayAnswer(h) && checks[h.id]?.commentCount !== h.commentCount
+}
+
+/** 상세 → 확인 결과(코멘트는 createdAt 오름차순 — 마지막 강사 답변이 가장 최근) */
+export function instructorAnswerCheck(detail: HelpRequestDetail): InstructorAnswerCheck {
+  const answers = detail.comments.filter((c) => c.isInstructorAnswer)
+  return { commentCount: detail.commentCount, answered: answers.length > 0, lastAnswerId: answers.at(-1)?.id ?? null }
+}
+
+/**
+ * 새 강사 답변이 있는 도움 요청 ID(#290) — 도움 요청 탭 · 글 · 3D 게시판의 빨간 점. 강사가 답할 수 있는 글이고, 지금 코멘트 수로
+ * 확인한 마지막 강사 답변을 이 사람이 아직 보지 않았다(그 글 상세를 열면 본 것). 확인 전인 글은 넣지 않는다.
+ */
+export function unreadInstructorAnswers(helpRequests: readonly HelpRequestSummary[], checks: InstructorAnswerChecks, seen: SeenInstructorAnswers): string[] {
+  return helpRequests
+    .filter((h) => {
+      const c = checks[h.id]
+      return instructorMayAnswer(h) && c?.commentCount === h.commentCount && c.lastAnswerId !== null && seen[h.id] !== c.lastAnswerId
+    })
+    .map((h) => h.id)
+}
+
+/**
+ * 강사 답변을 기다리는 도움 요청 ID(#290) — 강사가 답할 차례(open · discussing)이고, 지금 코멘트 수로 확인했는데 강사 답변이
+ * 없다. 확인 전인 글은 넣지 않는다(읽는 동안 우주선이 깜빡이지 않게). 3D 강사 우주선이 이 값을 보고 오고 간다.
+ */
+export function awaitingInstructor(helpRequests: readonly HelpRequestSummary[], checks: InstructorAnswerChecks): string[] {
+  return helpRequests.filter((h) => waitsForInstructor(h) && checks[h.id]?.commentCount === h.commentCount && !checks[h.id].answered).map((h) => h.id)
+}
+
 /** 코멘트를 단 뒤의 요약 — 요청자가 아닌 팀원의 첫 코멘트면 open → discussing, 강사 답변은 상태를 바꾸지 않는다(「11」) */
 export function afterComment(help: HelpRequestSummary, comment: HelpCommentDto): HelpRequestSummary {
   const opensDiscussion = help.status === 'open' && comment.authorMemberId !== null && comment.authorMemberId !== help.requesterMemberId

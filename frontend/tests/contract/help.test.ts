@@ -11,13 +11,17 @@ import {
   HELP_LEARNING_MAX,
   HELP_MSG,
   afterComment,
+  awaitingInstructor,
   helpCloseError,
   helpCommentError,
   helpCreateError,
   helpToAgendaError,
+  instructorAnswerCheck,
   instructorRequestError,
   isAgendaCandidate,
+  needsInstructorCheck,
   toHelpSummary,
+  unreadInstructorAnswers,
 } from '../../src/data/rules/help'
 import type { Change, HelpCommentDto, HelpRequestStatus } from '../../src/data/types'
 import { helpRequestDetailExample, helpRequestSummaryExample } from './examples'
@@ -91,6 +95,7 @@ describe('mock v1 — 도움 요청', () => {
         ['hr_1', 'discussing', true],
         ['hr_3', 'resolved', false],
         ['hr_2', 'open', false],
+        ['hr_4', 'open', false],
       ],
     )
     const resolved = await source.getHelpRequest(TEAM_WS, 'hr_3')
@@ -233,5 +238,54 @@ describe('강사에게 요청 규칙 (#272 — 「11」, 서버 HelpRequestInstr
   it('지정된 강사가 없으면 새로 켤 수 없고, 이미 켜진 글은 그대로', () => {
     assert.equal(instructorRequestError(at('open'), false), HELP_MSG.noInstructor)
     assert.equal(instructorRequestError(at('discussing', true), false), null)
+  })
+})
+
+describe('강사 답변 대기 · 새 강사 답변 (#290 — 3D 강사 우주선 · 도움 요청 탭 점)', () => {
+  const help = (id: string, status: HelpRequestStatus, instructorRequested: boolean, commentCount: number) => ({ ...helpRequestSummaryExample, id, status, instructorRequested, commentCount })
+  const comment = (id: string, isInstructorAnswer: boolean): HelpCommentDto => ({ ...helpRequestDetailExample.comments[0], id, isInstructorAnswer })
+  const check = (commentCount: number, lastAnswerId: string | null) => ({ commentCount, answered: lastAnswerId !== null, lastAnswerId })
+
+  it('확인 대상은 강사가 답할 수 있는 글(강사에게 요청 · open · discussing · on_agenda)이고, 확인 전이거나 코멘트 수가 바뀌면 다시 읽는다', () => {
+    assert.equal(needsInstructorCheck(help('a', 'open', true, 0), {}), true)
+    assert.equal(needsInstructorCheck(help('a', 'open', true, 0), { a: check(0, null) }), false)
+    assert.equal(needsInstructorCheck(help('a', 'discussing', true, 2), { a: check(1, null) }), true)
+    assert.equal(needsInstructorCheck(help('a', 'on_agenda', true, 0), {}), true) // 안건이 된 뒤에도 강사가 답할 수 있다
+    assert.equal(needsInstructorCheck(help('a', 'open', false, 0), {}), false) // 강사에게 요청 안 함 — 강사가 답할 수 없다
+    assert.equal(needsInstructorCheck(help('a', 'resolved', true, 0), {}), false)
+  })
+
+  it('확인 결과는 상세의 강사 답변 여부 · 가장 최근 강사 답변 · 그때 코멘트 수', () => {
+    const detail = { ...helpRequestDetailExample, commentCount: 3, comments: [comment('c1', true), comment('c2', false), comment('c3', true)] }
+    assert.deepEqual(instructorAnswerCheck(detail), check(3, 'c3'))
+    assert.deepEqual(instructorAnswerCheck({ ...detail, comments: [comment('c2', false)] }), check(3, null))
+  })
+
+  it('대기(우주선) = 강사가 답할 차례(open · discussing)인데 지금 코멘트 수로 확인한 강사 답변이 없다 — 확인 전 · 답변 있음 · 안건 · 닫힌 글은 빠진다', () => {
+    const list = [help('wait', 'open', true, 0), help('stale', 'discussing', true, 3), help('done', 'discussing', true, 1), help('unchecked', 'open', true, 0), help('agenda', 'on_agenda', true, 0), help('closed', 'resolved', true, 0)]
+    const checks = { wait: check(0, null), stale: check(2, null), done: check(1, 'c1'), agenda: check(0, null), closed: check(0, null) }
+    assert.deepEqual(awaitingInstructor(list, checks), ['wait'])
+    assert.deepEqual(awaitingInstructor(list, {}), [])
+  })
+
+  it('새 강사 답변(빨간 점) = 확인한 가장 최근 강사 답변을 이 사람이 아직 안 봤다 — 열어 보면(본 답변 ID) 꺼지고, 더 새 답변이 오면 다시 켜진다', () => {
+    const list = [help('new', 'open', true, 1), help('seen', 'discussing', true, 2), help('newer', 'on_agenda', true, 3), help('none', 'open', true, 0), help('stale', 'open', true, 2), help('closed', 'resolved', true, 1)]
+    const checks = { new: check(1, 'a1'), seen: check(2, 'b1'), newer: check(3, 'c2'), none: check(0, null), stale: check(1, 'd1'), closed: check(1, 'e1') }
+    const seen = { seen: 'b1', newer: 'c1' }
+    assert.deepEqual(unreadInstructorAnswers(list, checks, seen), ['new', 'newer'])
+    assert.deepEqual(unreadInstructorAnswers(list, checks, { ...seen, new: 'a1', newer: 'c2' }), [])
+    assert.deepEqual(unreadInstructorAnswers(list, {}, {}), [])
+  })
+
+  it('mock seed — hr_2는 강사 답변을 기다리고, hr_4에는 강사 답변(hc_3)이 있다', async () => {
+    const source = make()
+    const snap = await source.load(TEAM_WS)
+    const hr2 = snap.helpRequests.find((h) => h.id === 'hr_2')!
+    const hr4 = snap.helpRequests.find((h) => h.id === 'hr_4')!
+    assert.equal(hr2.instructorRequested, true)
+    assert.equal(needsInstructorCheck(hr2, {}), true)
+    assert.deepEqual(instructorAnswerCheck(await source.getHelpRequest(TEAM_WS, 'hr_2')), check(0, null))
+    assert.deepEqual(instructorAnswerCheck(await source.getHelpRequest(TEAM_WS, 'hr_4')), check(1, 'hc_3'))
+    assert.equal(hr4.status, 'open') // 강사 답변은 상태를 바꾸지 않는다(「11」)
   })
 })

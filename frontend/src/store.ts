@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { DataError, type DataErrorCode, type DataSource } from './data/DataSource'
 import type { AgendaItemCreateRequest, AgendaItemDto, Change, DecisionCardCreateRequest, DecisionCardDto, DecisionCardUpdateRequest, DecisionRequest, FollowUpQuestionCreateRequest, FollowUpQuestionDto, ConnectionStatus, EvaluateRequest, EvaluationRoundDto, HelpCommentDto, HelpRequestCloseRequest, HelpRequestCreateRequest, HelpRequestDetail, HelpRequestSummary, Id, LocalDate, MeetingDto, PageResponse, ReportCreateRequest, ReportLearningRequest, RetroReportDto, RetroReportSummary, StandupDto, StandupPrefill, StandupSaveRequest, SyncStatus, TimelineEntry, TeamSettings, WorkspaceSnapshot, InstructorFeedbackDto } from './data/types'
 import { toDataError } from './data/rules/errors'
-import { afterComment, toHelpSummary } from './data/rules/help'
+import { afterComment, instructorAnswerCheck, needsInstructorCheck, toHelpSummary, type InstructorAnswerChecks, type SeenInstructorAnswers } from './data/rules/help'
 import { deckOrderKey, keepDeckOrder, parseDeckOrder, sameDeckOrder, withProgress } from './data/rules/requirements'
 import type { ActivityCreateRequest, ActivityRecordDto, ConventionLibraryItemDto, ConventionLibraryItemRequest, InstructorAssignmentDto, InstructorCandidateDto, RequirementLinkDto } from './data/types'
 
@@ -84,6 +84,25 @@ function writeDeckOrder(workspaceId: Id, ids: Id[] | null) {
     else localStorage.setItem(deckOrderKey(workspaceId), JSON.stringify(ids))
   } catch {
     // 저장소를 못 쓰면 이번 화면에서만 바뀐다
+  }
+}
+
+/** 본 강사 답변(#290) — 사무실 · 사용자별로 이 브라우저에만 둔다. 서버 저장 · 계약 없음(다른 기기에서는 다시 보인다) */
+const seenAnswersKey = (workspaceId: Id, userId: Id) => `gravit:help-seen:${workspaceId}:${userId}`
+function readSeenAnswers(key: string): SeenInstructorAnswers {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(key) ?? '{}')
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+    return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string'))
+  } catch {
+    return {} // 읽지 못하면 아무것도 안 본 것으로 — 점이 다시 보인다
+  }
+}
+function writeSeenAnswers(key: string, seen: SeenInstructorAnswers) {
+  try {
+    localStorage.setItem(key, JSON.stringify(seen))
+  } catch {
+    // 저장소를 못 쓰면 이번 화면에서만 꺼진다
   }
 }
 
@@ -212,6 +231,21 @@ interface OfficeState {
   convertHelpRequestToAgenda: (helpRequestId: Id, title: string) => Promise<AgendaItemDto | null>
   /** POST W/help-requests/{id}/instructor-request — 요청자만 */
   requestInstructorHelp: (helpRequestId: Id) => Promise<HelpRequestSummary | null>
+  /**
+   * 강사 답변 확인 결과(#290 — rules/help `awaitingInstructor`가 읽는다). Snapshot 요약에는 강사 답변 여부가 없어, "강사에게
+   * 요청"이 켜진 열린 글의 상세를 읽어 채운다. 사무실을 열고 닫을 때 비운다.
+   */
+  instructorAnswers: InstructorAnswerChecks
+  /**
+   * 확인이 필요한 글(rules/help `needsInstructorCheck` — 확인 전 · 코멘트 수가 바뀜)만 상세를 읽어 instructorAnswers를 고친다.
+   * 화면 뒤에서 도는 읽기라 실패해도 알림을 띄우지 않고 그 글을 확인 전으로 둔다(다음 변경 때 다시 읽는다).
+   * 이 사무실 · 사용자의 "본 강사 답변"도 이때 이 브라우저에서 읽어 둔다.
+   */
+  checkInstructorAnswers: () => Promise<void>
+  /** 이 사람이 도움 요청마다 마지막으로 본 강사 답변(#290 — rules/help `unreadInstructorAnswers`가 읽는다) */
+  seenInstructorAnswers: SeenInstructorAnswers
+  /** 도움 요청 상세를 열어 강사 답변을 봤다 — 그 글의 빨간 점이 꺼진다(이 브라우저에 남긴다) */
+  markInstructorAnswerSeen: (helpRequestId: Id, answerId: Id) => void
 
   // ---- 스탠드업 (#190 — 「12」). Snapshot 밖 — 화면이 날짜로 읽는다. 실패하면 알림 후 null ----
   /** GET W/standups?date= — 그날 쓴 팀원 것 */
@@ -289,6 +323,8 @@ let officeLoadSeq = 0
 let officeLoadPending = false
 /** 마지막 읽기 중에 온 sync 알림 — 응답 위에 다시 얹는다(알림이 그 응답보다 새 값이라고 본다) */
 let syncDuringLoad: SyncStatus | null = null
+/** seenInstructorAnswers를 어느 저장 키(사무실 · 사용자)에서 읽었나 — 사무실을 열고 닫을 때 비운다(#290) */
+let seenAnswersFor: string | null = null
 
 /** id가 같은 것을 바꾸고, 없으면 뒤에 붙인다 */
 const upsert = <T extends { id: Id }>(list: readonly T[], item: T): T[] => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item])
@@ -299,6 +335,14 @@ export const useOffice = create<OfficeState>((set, get) => {
    * 실패를 알린다 — 화면이 직접 보이면(onError) 알림 없이 넘기고, 아니면 알림. 세션 만료는 진입 흐름에 알려 다시 로그인 화면으로
    * (등록된 곳이 없으면 알림).
    */
+  /** 도움 요청 상세로 강사 답변 확인 결과를 맞춘다(#290) — 같은 값이면 그대로 둔다 */
+  const noteInstructorAnswer = (detail: HelpRequestDetail) => {
+    const next = instructorAnswerCheck(detail)
+    const prev = get().instructorAnswers[detail.id]
+    if (prev?.commentCount === next.commentCount && prev.answered === next.answered) return
+    set({ instructorAnswers: { ...get().instructorAnswers, [detail.id]: next } })
+  }
+
   const fail = (e: unknown, onError?: OnDataError) => {
     const err = toDataError(e)
     const expired = err.code === 'unauthorized' && sessionExpiredHandler !== null
@@ -419,7 +463,8 @@ export const useOffice = create<OfficeState>((set, get) => {
       get().closeOffice()
       const gen = officeGen
       officeSource = src
-      set({ office: { workspaceId, status: 'loading', snapshot: null, error: null }, requirementDeckOrder: readDeckOrder(workspaceId) })
+      set({ office: { workspaceId, status: 'loading', snapshot: null, error: null }, requirementDeckOrder: readDeckOrder(workspaceId), instructorAnswers: {}, seenInstructorAnswers: {} })
+      seenAnswersFor = null
       // 읽기 전에 구독한다 — 읽는 사이에 온 알림을 놓치지 않게
       officeUnsubscribe = src.subscribe(workspaceId, (c) => applyOfficeChange(gen, c))
       await loadOffice(gen)
@@ -433,7 +478,8 @@ export const useOffice = create<OfficeState>((set, get) => {
       officeSource = null
       officeLoadPending = false
       syncDuringLoad = null
-      if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null, requirementDeckOrder: null })
+      seenAnswersFor = null
+      if (get().office || get().officeSelection) set({ office: null, officeSelection: null, connection: null, requirementDeckOrder: null, instructorAnswers: {}, seenInstructorAnswers: {} })
     },
     reloadOffice: async () => {
       if (!get().office) return false
@@ -575,18 +621,27 @@ export const useOffice = create<OfficeState>((set, get) => {
       )) !== null,
 
     // ---- 도움 요청 (#183) — 응답을 바로 반영하고, 서버의 changed(help_requests) 알림으로 다시 읽는다 ----
-    loadHelpRequest: (helpRequestId) => officeRead((src, ws) => src.getHelpRequest(ws, helpRequestId)),
+    loadHelpRequest: async (helpRequestId) => {
+      const detail = await officeRead((src, ws) => src.getHelpRequest(ws, helpRequestId))
+      if (detail) noteInstructorAnswer(detail) // 상세를 읽은 김에 강사 답변 확인도 맞춘다(#290)
+      return detail
+    },
     createHelpRequest: (request, onError) =>
       officeWrite(
         (src, ws) => src.createHelpRequest(ws, request),
         (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
         onError,
       ),
-    addHelpComment: (helpRequestId, content) =>
-      officeWrite(
+    addHelpComment: async (helpRequestId, content) => {
+      const comment = await officeWrite(
         (src, ws) => src.addHelpComment(ws, helpRequestId, { content }),
         (snap, comment) => ({ ...snap, helpRequests: snap.helpRequests.map((h) => (h.id === helpRequestId ? afterComment(h, comment) : h)) }),
-      ),
+      )
+      // 강사 답변이면 다시 읽지 않고 바로 "답변 있음"(#290) — 우주선이 떠나고, 학생들에게 새 강사 답변 점이 켜진다
+      const help = comment?.isInstructorAnswer ? get().office?.snapshot?.helpRequests.find((h) => h.id === helpRequestId) : undefined
+      if (comment && help) set({ instructorAnswers: { ...get().instructorAnswers, [helpRequestId]: { commentCount: help.commentCount, answered: true, lastAnswerId: comment.id } } })
+      return comment
+    },
     closeHelpRequest: (helpRequestId, request) =>
       officeWrite(
         (src, ws) => src.closeHelpRequest(ws, helpRequestId, request),
@@ -606,6 +661,39 @@ export const useOffice = create<OfficeState>((set, get) => {
         (src, ws) => src.requestInstructorHelp(ws, helpRequestId),
         (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
       ),
+    instructorAnswers: {},
+    seenInstructorAnswers: {},
+    markInstructorAnswerSeen: (helpRequestId, answerId) => {
+      const office = get().office
+      if (!office?.snapshot || get().seenInstructorAnswers[helpRequestId] === answerId) return
+      const seen = { ...get().seenInstructorAnswers, [helpRequestId]: answerId }
+      set({ seenInstructorAnswers: seen })
+      writeSeenAnswers(seenAnswersKey(office.workspaceId, office.snapshot.viewer.userId), seen)
+    },
+    checkInstructorAnswers: async () => {
+      const src = officeSource
+      const office = get().office
+      if (!src || !office?.snapshot) return
+      // 이 사무실 · 사용자의 본 강사 답변을 처음 한 번 읽는다
+      const key = seenAnswersKey(office.workspaceId, office.snapshot.viewer.userId)
+      if (seenAnswersFor !== key) {
+        seenAnswersFor = key
+        set({ seenInstructorAnswers: readSeenAnswers(key) })
+      }
+      const gen = officeGen
+      const targets = office.snapshot.helpRequests.filter((h) => needsInstructorCheck(h, get().instructorAnswers))
+      await Promise.all(
+        targets.map(async (h) => {
+          try {
+            const detail = await src.getHelpRequest(office.workspaceId, h.id)
+            if (gen === officeGen) noteInstructorAnswer(detail)
+          } catch (e) {
+            // 알림 없이 확인 전으로 둔다 — 점 · 우주선은 확인된 글만 본다. 다음 변경(Snapshot 다시 읽기) 때 다시 읽는다
+            console.warn('강사 답변 확인을 못 했어요', h.id, toDataError(e).code)
+          }
+        }),
+      )
+    },
 
     // ---- 스탠드업 (#190) — Snapshot에 없다. 화면이 날짜로 읽고, 저장 뒤 다시 읽는다 ----
     loadStandups: (date) => officeRead((src, ws) => src.listStandups(ws, date)),

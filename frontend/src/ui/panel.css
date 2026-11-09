@@ -24,6 +24,8 @@
 .tabs button.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tabs button > svg { display: none; }
 .tab-count { font-size: var(--fs-s); font-weight: 400; opacity: 0.7; }
+/* 강사 답변을 기다리는 도움 요청이 있으면 「도움 요청」 탭에 빨간 점 (#290 — 상단 바 .error-dot과 같은 빨강) */
+.tab-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px rgba(229, 72, 77, 0.18); }
 
 .panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 8px 16px 16px; scrollbar-width: thin; }
 .panel-body.is-wide-kanban { display: flex; flex-direction: column; overflow: hidden; padding: 8px 12px 12px; }

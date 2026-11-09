@@ -24,6 +24,8 @@
 .help-status-discussing { background: var(--warn-soft); color: var(--ink-warn); }
 .help-status-resolved { background: var(--good-soft); color: var(--ink-good); }
 .help-tag-candidate { background: var(--warn-soft); color: var(--ink-warn); }
+/* 강사 답변 대기 — "강사 요청" 태그 안의 빨간 점 (#290). 강사 답변이 달리면 사라진다 */
+.help-dot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--bad); vertical-align: 1px; }
 .help-tag-good { background: var(--good-soft); color: var(--ink-good); }
 
 .help-back { justify-self: start; }
