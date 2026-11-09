@@ -2,6 +2,8 @@
 // locks it through runtime cameraLock (TaskBox) — the store's old drag / focus state is gone (#102 ④).
 // Selecting a crew member / issue / PR (3D click or a HUD panel) eases the camera toward it, keeping the viewing angle; clearing
 // the selection eases back to where it was — unless the user moved the camera meanwhile, then it stays theirs (#286).
+// While the arrival intro runs (runtime cameraLock.intro — DockShip drives the camera) this rig stands still and only reports the
+// framed home view through cameraLock.home(), which the intro eases into at its end.
 import { OrbitControls } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
@@ -114,6 +116,10 @@ export function CameraRig() {
   const gesture = useRef({ active: false, until: 0, angle: 0, dist: 0, target: 0 })
   const snap = useRef({ pos: new Vector3(), tgt: new Vector3(), moved: false })
   const mountedAt = useRef(performance.now())
+  /** Viewing direction of the framed home view (target → camera), kept so the arrival intro can end on it. */
+  const homeDir = useRef<Vector3 | null>(null)
+  /** The camera as the canvas created it, before any frame — the home direction comes from it if the intro already moved the camera. */
+  const initialPos = useRef(camera.position.clone())
   const selection = useOffice((s) => s.officeSelection)
   // Focus on the selection (#286): the view before the first focus (to come back to), a running ease, and whether the user
   // took the camera over while focused (then we never come back).
@@ -125,8 +131,15 @@ export function CameraRig() {
 
   useEffect(() => {
     cameraLock.controls = ref.current
+    cameraLock.home = () => {
+      if (!homeDir.current || !goal.current.has) return null
+      const t = new Vector3(TARGET0[0], TARGET0[1], TARGET0[2])
+      const p = t.clone().addScaledVector(homeDir.current, goal.current.dist)
+      return { position: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }
+    }
     return () => {
       cameraLock.controls = null
+      cameraLock.home = () => null
     }
   }, [])
 
@@ -221,9 +234,14 @@ export function CameraRig() {
     const c = ref.current
     const tgt = c ? c.target : new Vector3(TARGET0[0], TARGET0[1], TARGET0[2])
     if (!userMoved.current) {
-      dir.copy(camera.position).sub(tgt)
-      if (dir.lengthSq() < 1e-6) dir.set(0, 22, 21)
-      dir.normalize()
+      // during the arrival intro the camera is elsewhere: keep framing along the home direction
+      if (cameraLock.intro && homeDir.current) dir.copy(homeDir.current)
+      else {
+        dir.copy(cameraLock.intro ? initialPos.current : camera.position).sub(tgt)
+        if (dir.lengthSq() < 1e-6) dir.set(0, 22, 21)
+        dir.normalize()
+        homeDir.current = dir.clone()
+      }
       const f = fitDistance(dir, tgt, W, H, availW, availH)
       goal.current.dist = Math.max(MIN_DIST, f.dist)
       goal.current.has = true
@@ -238,7 +256,7 @@ export function CameraRig() {
     const instant = !framed.current || performance.now() - mountedAt.current < 1200
     if (instant) {
       framed.current = true
-      if (!userMoved.current && goal.current.has) {
+      if (!userMoved.current && goal.current.has && !cameraLock.intro) {
         offset.copy(camera.position).sub(tgt)
         if (offset.lengthSq() < 1e-6) offset.set(0, 22, 21)
         offset.setLength(goal.current.dist)
@@ -257,6 +275,12 @@ export function CameraRig() {
     const c = ref.current
     if (!c) return
     const dt = Math.min(delta, 0.1)
+    // the arrival intro drives the camera — stand still, but keep the last pose current for the gesture check afterwards
+    if (cameraLock.intro) {
+      lastPos.copy(camera.position)
+      lastTarget.copy(c.target)
+      return
+    }
 
     // Focus ease (#286). Our own writes are recorded as the "last" pose so the gesture check below doesn't count them.
     const f = focus.current

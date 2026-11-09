@@ -6,17 +6,38 @@
 // 화면(새 레포의 사무실 열기도 거기 있다)으로 간다. 움직임 줄이기 설정이면 비행 없이 바로 옮긴다.
 // 우주선은 시안 팔레트의 기본 도형으로 만든다(새 glTF 없음).
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useRef, useState } from 'react'
-import { AdditiveBlending, MeshBasicMaterial, type Group } from 'three'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { AdditiveBlending, MeshBasicMaterial, Vector3, type Group } from 'three'
 import type { Id, WorkspaceListItem } from '../data/types'
 import { useSession } from '../session'
 import { useOffice } from '../store'
 import { COLORS, lam } from '../theme/station/parts'
-import { DOCK, HULL_Y, WORLD_SCALE } from '../theme/station/geometry'
+import { DOCK, HULL_Y, STATION_BOUNDS, WORLD_SCALE } from '../theme/station/geometry'
 import { skyPaletteFor } from '../theme/station/skyPalette'
-import { clickSlop, noRaycast, setCursor, shipLive } from './runtime'
+import { cameraLock, clickSlop, noRaycast, setCursor, shipLive } from './runtime'
 import { SceneHtml } from './shared'
-import { shipPose, type ShipFlight } from './shipFlight'
+import { INTRO_IN_S, SHIP_INTRO_S, shipPose, warpLevel, type ShipFlight } from './shipFlight'
+import { easeInOut } from './cameraFocus'
+
+/** 궤도 진입 입장 연출을 시작하라는 신호 — 도착 장면(ui/entry/Landing)이 덮개를 걷을 때 보낸다. 주소에 ?intro=1이면 장면이 뜰 때도 */
+export const ARRIVAL_INTRO_EVENT = 'gravit:arrival-intro'
+/** 궤도 진입 동안 카메라가 우주선을 따라가는 자리(시안 단위, 우주선 기준): 뒤 · 위 · 남쪽(기본 카메라 쪽) · 바라볼 점은 기수 앞 */
+const CHASE = { back: 30, up: 10, south: 26, ahead: 12 }
+/** 궤도 진입 동안의 화각(도) — 장면 화각(23°, 망원)으로 가까이 따라가면 답답해서 넓혔다가, 원래 시점으로 빠지며 돌아간다 */
+const INTRO_FOV = 42
+/**
+ * 궤도 진입 카메라의 앞부분: 행성 근접 시점(앞의 2D 행성 줌인이 끝난 자리 — 행성이 화면을 채운다)에서 궤도로 진입해 우주선 뒤에
+ * 붙는 시간(초). 시작 자리는 원래 시점의 방향으로 행성 중심에서 PLANET_VIEW.dist(행성 반지름 배)만큼, 바라보는 점은 행성 윗부분
+ */
+const INTRO_PRE_S = 2.2
+const PLANET = { y: -236, r: 200 } // StationSky 행성(시안 단위, 정거장 바닥 아래 중심)
+const PLANET_VIEW = { dist: 2.15, rise: 0.35, look: 0.85 }
+/** 원래 시점을 아직 모를 때(장면이 막 붙은 첫 프레임들) 쓰는 바라보는 방향 — 처음 카메라(app/SceneCanvas)가 정거장을 보는 방향 */
+const DEFAULT_VIEW_DIR: [number, number] = [38.8 - 12.6, 34.6 - 8.4]
+/** 원래 시점과 섞기 시작하는 때(다 올라오기 0.8초 전) · 카메라가 목표 자리를 쫓는 빠르기(클수록 바짝) */
+const INTRO_BLEND_FROM = INTRO_IN_S - 0.8
+const INTRO_FOLLOW = 4.5
+const introV = { nose: new Vector3(), pos: new Vector3(), tgt: new Vector3(), home: new Vector3(), homeT: new Vector3(), pp: new Vector3(), pt: new Vector3() }
 
 /** 동체 옆 해치(우주선 좌표 — 꼬리에서 기수 쪽 거리)와 동체 반지름 */
 const HATCH_Z = 4.1
@@ -194,6 +215,10 @@ export function DockShip() {
   const spin = useRef<Group>(null)
   const rollG = useRef<Group>(null)
   const flight = useRef<{ kind: ShipFlight; t: number; dest: Destination | null } | null>(null)
+  // 궤도 진입 카메라: 진행 중인지 · 첫 프레임을 지났는지 · 지금(감쇠된) 자리 · 화각 · 마무리 시한
+  const introCam = useRef({ active: false, init: false, pos: new Vector3(), tgt: new Vector3(), fov: 0, settleUntil: Infinity })
+  /** 입장 연출 전 화각(돌려놓을 값) */
+  const introFov = useRef<number | null>(null)
   const [open, setOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
 
@@ -202,6 +227,30 @@ export function DockShip() {
     return () => {
       shipLive.flight = null
       setCursor('')
+    }
+  }, [])
+
+  // 궤도 진입 입장: 우주선이 행성 지평선 아래에서 궤도를 따라 떠올라 정거장에 붙고, 카메라는 그 뒤를 따라가다 원래 시점으로 빠진다.
+  // 움직임 줄이기면 하지 않는다. 그동안 사용자 카메라 조작은 잠근다(CameraRig는 cameraLock.intro 동안 멈춘다).
+  // 장면이 그려지기 전에 시작하도록 레이아웃 단계에서 건다 — 주소의 ?intro=1이면 첫 프레임부터 행성 시점(자리 잡은 정거장이 먼저 보이지 않게)
+  useLayoutEffect(() => {
+    const start = () => {
+      if (reducedMotion()) return
+      setOpen(false)
+      setHovered(false)
+      introCam.current = { active: true, init: false, pos: new Vector3(), tgt: new Vector3(), fov: 0, settleUntil: Infinity }
+      flight.current = { kind: 'intro', t: 0, dest: null }
+      cameraLock.intro = true
+      if (cameraLock.controls) cameraLock.controls.enabled = false
+    }
+    window.addEventListener(ARRIVAL_INTRO_EVENT, start)
+    if (new URLSearchParams(window.location.search).get('intro') === '1') start()
+    return () => {
+      window.removeEventListener(ARRIVAL_INTRO_EVENT, start)
+      if (cameraLock.intro) {
+        cameraLock.intro = false
+        if (cameraLock.controls) cameraLock.controls.enabled = true
+      }
     }
   }, [])
 
@@ -216,7 +265,7 @@ export function DockShip() {
     flight.current = { kind: 'depart', t: 0, dest }
   }
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const g = root.current
     if (!g) return
     const f = flight.current
@@ -238,6 +287,83 @@ export function DockShip() {
     shipLive.y = g.position.y
     shipLive.z = g.position.z
     shipLive.flight = f?.kind ?? null
+    // 워프 세기 — 배경(WarpStreaks)이 별빛 줄기 · 섬광을 그린다
+    shipLive.warp = f ? warpLevel(f.kind, f.t) : 0
+
+    // 궤도 진입 카메라: 목표 자리 = 우주선을 따라가는 자리와 원래 시점을 섞은 것(다 올라오기 조금 전부터 끝까지 부드럽게 원래 시점 쪽으로).
+    // 카메라는 그 자리를 감쇠로 쫓아가 끊기는 곳이 없다. 우주선이 붙은 뒤에도 카메라가 원래 시점에 거의 닿을 때까지 조금 더 이어 간다.
+    const c = cameraLock.controls
+    shipLive.fovKick = f?.kind !== 'intro'
+    const ic = introCam.current
+    if (ic.active) {
+      // 궤도 조작은 붙는 대로 잠근다(장면 첫 프레임엔 아직 없을 수 있다)
+      if (c) c.enabled = false
+      const S = WORLD_SCALE
+      const cam = camera as import('three').PerspectiveCamera
+      if (introFov.current === null) introFov.current = cam.fov
+      const home = cameraLock.home()
+      let b = 1
+      if (f?.kind === 'intro') {
+        // 올라오는 동안은 기수(진행) 방향 기준, 다 올라온 뒤(도는 동안)는 동쪽 기준 — 도는 우주선을 따라 흔들리지 않게
+        const climbing = f.t < INTRO_IN_S
+        introV.nose.set(climbing ? Math.cos(pose.pitch) : 1, climbing ? Math.sin(pose.pitch) : 0, 0)
+        introV.pos.copy(g.position).addScaledVector(introV.nose, -CHASE.back * S)
+        introV.pos.y += CHASE.up * S
+        introV.pos.z += CHASE.south * S
+        introV.tgt.copy(g.position).addScaledVector(introV.nose, CHASE.ahead * S)
+        // 앞부분: 행성 근접 시점에서 궤도로 진입해 우주선 뒤 자리로(앞의 2D 행성 줌인에서 이어진다)
+        if (f.t < INTRO_PRE_S) {
+          const cx = (STATION_BOUNDS.minX + STATION_BOUNDS.maxX) / 2
+          const cz = (STATION_BOUNDS.minZ + STATION_BOUNDS.maxZ) / 2
+          if (home) introV.pp.set(home.position[0] - home.target[0], 0, home.position[2] - home.target[2]).normalize()
+          else introV.pp.set(DEFAULT_VIEW_DIR[0], 0, DEFAULT_VIEW_DIR[1]).normalize()
+          introV.pt.set(cx, PLANET.y + PLANET.r * PLANET_VIEW.look, cz).multiplyScalar(S)
+          introV.pp
+            .multiplyScalar(PLANET.r * PLANET_VIEW.dist * S)
+            .add(new Vector3(cx * S, (PLANET.y + PLANET.r * (PLANET_VIEW.dist * 0.5 + PLANET_VIEW.rise)) * S, cz * S))
+          const e = easeInOut(f.t / INTRO_PRE_S)
+          introV.pos.lerpVectors(introV.pp, introV.pos, e)
+          introV.tgt.lerpVectors(introV.pt, introV.tgt, e)
+        }
+        b = easeInOut((f.t - INTRO_BLEND_FROM) / (SHIP_INTRO_S - INTRO_BLEND_FROM))
+      }
+      if (home) {
+        introV.home.set(...home.position)
+        introV.homeT.set(...home.target)
+        introV.pos.lerp(introV.home, b)
+        introV.tgt.lerp(introV.homeT, b)
+      }
+      const fovGoal = INTRO_FOV + (introFov.current - INTRO_FOV) * b
+      // 첫 프레임은 덮개 뒤라 바로 그 자리로, 그다음은 감쇠로 쫓는다
+      const k = ic.init ? 1 - Math.exp(-INTRO_FOLLOW * Math.min(delta, 0.1)) : 1
+      if (!ic.init) {
+        ic.fov = fovGoal
+        ic.init = true
+      }
+      ic.pos.lerp(introV.pos, k)
+      ic.tgt.lerp(introV.tgt, k)
+      ic.fov += (fovGoal - ic.fov) * k
+      cam.fov = ic.fov
+      cam.updateProjectionMatrix()
+      camera.position.copy(ic.pos)
+      c?.target.copy(ic.tgt)
+      camera.lookAt(ic.tgt)
+      // 우주선이 붙었고 카메라가 원래 시점에 거의 닿았으면(또는 너무 오래면) 끝 — 정확히 원래 시점에 맞추고 조작을 돌려준다
+      const settled = f?.kind !== 'intro' && (ic.pos.distanceTo(introV.pos) < 0.02 || performance.now() > ic.settleUntil)
+      if (f?.kind === 'intro' && pose.done) ic.settleUntil = performance.now() + 900
+      if (settled && c) {
+        camera.position.copy(introV.pos)
+        c.target.copy(introV.tgt)
+        cam.fov = introFov.current
+        cam.updateProjectionMatrix()
+        introFov.current = null
+        ic.active = false
+        cameraLock.intro = false
+        c.enabled = true
+        c.update()
+      }
+    }
+
     if (f && pose.done) {
       flight.current = null
       if (f.kind === 'depart' && f.dest) {

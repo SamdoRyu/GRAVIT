@@ -18,7 +18,7 @@ export interface AvatarLive {
 export const avatarLive = new Map<Id, AvatarLive>()
 
 /** Live position of the docking-bay ship (사무실 바꾸기) and its flight, if any (e2e · DockShip). */
-export const shipLive: { x: number; y: number; z: number; flight: 'depart' | 'arrive' | null } = { x: 0, y: 0, z: 0, flight: null }
+export const shipLive: { x: number; y: number; z: number; flight: 'depart' | 'arrive' | 'intro' | null; warp: number; fovKick: boolean } = { x: 0, y: 0, z: 0, flight: null, warp: 0, fovKick: true }
 
 /** Live light dot of a crew member moving between rooms (CONTRACTS.md 「10」 아바타 이동 연출), keyed by member id. */
 export interface TrailLive {
@@ -77,7 +77,15 @@ export function pointerOnPlane(clientX: number, clientY: number, planeY: number)
 }
 
 /** The orbit controls, for code that has to reach them outside CameraRig. */
-export const cameraLock: { controls: ControlsImpl | null } = { controls: null }
+/**
+ * controls: the orbit controls (TaskBox locks it while dragging). intro: the arrival intro (DockShip) drives the camera — CameraRig
+ * stands still. home(): the framed home view CameraRig would settle on (null before the first framing).
+ */
+export const cameraLock: {
+  controls: ControlsImpl | null
+  intro: boolean
+  home: () => { position: [number, number, number]; target: [number, number, number] } | null
+} = { controls: null, intro: false, home: () => null }
 
 /** Pixels the pointer may move between pointerdown and click for it to still count as a click (not an orbit). */
 export const CLICK_SLOP_PX = 4
