@@ -61,7 +61,10 @@
       "reviews": [
         { "reviewer": { "id": null, "login": "seed-choi", "avatarUrl": null }, "state": "COMMENTED", "submittedAt": "2026-11-04T05:30:00Z" }
       ],
-      "lastCommitAt": "2026-11-04T05:50:00Z",
+      "commits": [
+        { "sha": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b", "author": { "id": null, "login": "seed-kim", "avatarUrl": null },
+          "title": "로그인 화면 오류 문구", "authoredAt": "2026-11-04T05:50:00Z", "committedAt": "2026-11-04T05:50:00Z" }
+      ],
       "linkedIssueNumbers": [1]
     },
     {
@@ -73,7 +76,10 @@
         "createdAt": "2026-11-04T03:30:00Z", "updatedAt": "2026-11-04T03:30:00Z", "mergedAt": null, "closedAt": null
       },
       "reviews": [],
-      "lastCommitAt": "2026-11-04T03:20:00Z",
+      "commits": [
+        { "sha": "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c", "author": { "id": null, "login": "seed-lee", "avatarUrl": null },
+          "title": "책상 자리 계산", "authoredAt": "2026-11-04T03:20:00Z", "committedAt": "2026-11-04T03:20:00Z" }
+      ],
       "linkedIssueNumbers": [2]
     },
     {
@@ -89,7 +95,10 @@
         { "reviewer": { "id": null, "login": "seed-kim", "avatarUrl": null }, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-03T10:00:00Z" },
         { "reviewer": { "id": null, "login": "seed-kim", "avatarUrl": null }, "state": "APPROVED", "submittedAt": "2026-11-04T04:30:00Z" }
       ],
-      "lastCommitAt": "2026-11-04T04:00:00Z",
+      "commits": [
+        { "sha": "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d", "author": { "id": null, "login": "seed-choi", "avatarUrl": null },
+          "title": "에러 응답 code를 소문자 snake로", "authoredAt": "2026-11-04T04:00:00Z", "committedAt": "2026-11-04T04:00:00Z" }
+      ],
       "linkedIssueNumbers": [4]
     },
     {
@@ -102,7 +111,10 @@
         "closedAt": "2026-11-03T07:00:00Z"
       },
       "reviews": [],
-      "lastCommitAt": "2026-11-03T06:10:00Z"
+      "commits": [
+        { "sha": "4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e", "author": { "id": null, "login": "seed-park", "avatarUrl": null },
+          "title": "실험 설정 추가", "authoredAt": "2026-11-03T06:10:00Z", "committedAt": "2026-11-03T06:10:00Z" }
+      ]
     }
   ]
 }

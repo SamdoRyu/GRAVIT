@@ -16,6 +16,7 @@ import com.samdoryu.backend.common.error.ApiException;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.github.GithubHttp;
 import com.samdoryu.backend.github.dto.GithubCollaborator;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -191,14 +192,39 @@ class GithubAppReaderTest {
                 .containsExactly(GithubReview.State.CHANGES_REQUESTED, GithubReview.State.APPROVED);
     }
 
+    /**
+     * #261 — PR 커밋을 GitHub 순서대로: SHA · 작성자(이메일과 이어진 GitHub 계정, 없으면 null) · 메시지 첫 줄 · 작성 시각 · 커밋 시각.
+     * 마지막 커밋의 커밋 시각이 PR의 마지막 커밋 시각이다. SHA나 시각이 없는 항목은 뺀다.
+     */
     @Test
-    void lastCommitAtIsTheLastCommitsTime() {
+    void pullRequestCommitsCarryShaAuthorFirstLineAndBothTimes() {
         expectInstallationToken();
         expectGet("/repos/team-samdo/gitvillage/pulls/9/commits").andRespond(withSuccess("["
-                + "{\"commit\":{\"committer\":{\"date\":\"2026-11-03T09:00:00Z\"}}},"
-                + "{\"commit\":{\"committer\":{\"date\":\"2026-11-04T04:00:00Z\"}}}]", MediaType.APPLICATION_JSON));
+                + "{\"sha\":\"aaa1\",\"author\":" + user(1002, "lee") + ",\"commit\":{\"message\":\"  세션 만료 처리 \\n\\n본문\","
+                + "\"author\":{\"date\":\"2026-11-03T08:30:00Z\"},\"committer\":{\"date\":\"2026-11-03T09:00:00Z\"}}},"
+                + "{\"sha\":\"bbb2\",\"author\":null,\"commit\":{\"message\":\"rebase로 다시 쓴 커밋\","
+                + "\"author\":{\"date\":\"2026-11-03T20:00:00Z\"},\"committer\":{\"date\":\"2026-11-04T04:00:00Z\"}}},"
+                + "{\"sha\":null,\"commit\":{\"message\":\"깨진 항목\",\"committer\":{\"date\":\"2026-11-04T05:00:00Z\"}}},"
+                + "{\"sha\":\"ccc3\",\"commit\":{\"committer\":{\"date\":\"2026-11-04T06:00:00Z\"}}}]",
+                MediaType.APPLICATION_JSON));
 
-        assertThat(reader.lastCommitAt(REPO, 9)).contains(Instant.parse("2026-11-04T04:00:00Z"));
+        List<GithubCommit> commits = reader.pullRequestCommits(REPO, 9);
+
+        assertThat(commits).extracting(GithubCommit::sha).containsExactly("aaa1", "bbb2", "ccc3");
+        assertThat(commits.get(0)).isEqualTo(new GithubCommit("aaa1", new GithubUser(1002L, "lee", "https://avatars/1002"),
+                "세션 만료 처리", Instant.parse("2026-11-03T08:30:00Z"), Instant.parse("2026-11-03T09:00:00Z")));
+        assertThat(commits.get(1).author()).isNull();
+        assertThat(commits.get(1).authoredAt()).isEqualTo(Instant.parse("2026-11-03T20:00:00Z"));
+        // 메시지 · 작성 시각이 없으면 빈 제목 · 커밋 시각
+        assertThat(commits.get(2).title()).isEmpty();
+        assertThat(commits.get(2).authoredAt()).isEqualTo(Instant.parse("2026-11-04T06:00:00Z"));
+    }
+
+    @Test
+    void firstLineOfACommitMessage() {
+        assertThat(GithubAppReader.firstLine("fix: 로그인\r\n\r\n본문")).isEqualTo("fix: 로그인");
+        assertThat(GithubAppReader.firstLine("한 줄")).isEqualTo("한 줄");
+        assertThat(GithubAppReader.firstLine(null)).isEmpty();
     }
 
     @Test

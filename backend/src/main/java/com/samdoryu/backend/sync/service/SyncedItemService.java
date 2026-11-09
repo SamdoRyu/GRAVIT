@@ -11,8 +11,10 @@ import com.samdoryu.backend.sync.domain.Submission;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskAssignee;
 import com.samdoryu.backend.sync.dto.GithubReviewDto;
+import com.samdoryu.backend.sync.dto.MemberCommit;
 import com.samdoryu.backend.sync.dto.SubmissionDto;
 import com.samdoryu.backend.sync.dto.TaskDto;
+import com.samdoryu.backend.sync.repository.SubmissionCommitRepository;
 import com.samdoryu.backend.sync.repository.SubmissionIssueLinkRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
@@ -21,6 +23,7 @@ import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.dto.WorkspaceSummary;
 import com.samdoryu.backend.workspace.service.WorkspaceService;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -51,16 +54,19 @@ public class SyncedItemService {
     private final SubmissionRepository submissionRepository;
     private final TaskAssigneeRepository taskAssigneeRepository;
     private final SubmissionIssueLinkRepository submissionIssueLinkRepository;
+    private final SubmissionCommitRepository submissionCommitRepository;
     private final WorkspaceService workspaceService;
     private final TaskDueDateService taskDueDateService;
 
     public SyncedItemService(TaskRepository taskRepository, SubmissionRepository submissionRepository,
             TaskAssigneeRepository taskAssigneeRepository, SubmissionIssueLinkRepository submissionIssueLinkRepository,
-            WorkspaceService workspaceService, TaskDueDateService taskDueDateService) {
+            SubmissionCommitRepository submissionCommitRepository, WorkspaceService workspaceService,
+            TaskDueDateService taskDueDateService) {
         this.taskRepository = taskRepository;
         this.submissionRepository = submissionRepository;
         this.taskAssigneeRepository = taskAssigneeRepository;
         this.submissionIssueLinkRepository = submissionIssueLinkRepository;
+        this.submissionCommitRepository = submissionCommitRepository;
         this.workspaceService = workspaceService;
         this.taskDueDateService = taskDueDateService;
     }
@@ -134,6 +140,18 @@ public class SyncedItemService {
                         read(submission.getLabelsJson(), LABELS),
                         sorted(linkedTasks.get(submission.getId())),
                         repoUrl))
+                .toList();
+    }
+
+    /**
+     * 사용자별 커밋(CONTRACTS.md 「7」 — 스탠드업 미리 채우기 FR-MTG-01 · #261) — 그 팀원이 {@code [from, to)}에 <b>작성한</b>
+     * 커밋(git author date), 작성 시각 순. 동기화로 저장된 PR 커밋만 본다 — PR에 올라가지 않은 커밋은 없다.
+     * 사무실 조건으로 찾으므로 다른 사무실 팀원 ID면 빈 목록이다.
+     */
+    @Transactional(readOnly = true)
+    public List<MemberCommit> listCommits(Long workspaceId, Long memberId, Instant from, Instant to) {
+        return submissionCommitRepository.findAuthoredBetween(workspaceId, memberId, from, to).stream()
+                .map(commit -> new MemberCommit(commit.getSha(), commit.getTitle(), commit.getAuthoredAt()))
                 .toList();
     }
 

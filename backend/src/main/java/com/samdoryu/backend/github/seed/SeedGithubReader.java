@@ -2,6 +2,7 @@ package com.samdoryu.backend.github.seed;
 
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.dto.GithubCollaborator;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -38,11 +39,15 @@ public class SeedGithubReader implements GithubReader {
     /** 시연 사무실 팀 설정의 명세 문서 경로 — 계약 예시와 같은 값. */
     public static final String SPEC_PATH = "docs/requirements.md";
 
-    /** @param linkedIssueNumbers GitHub 공식 연결을 흉내 낸 이슈 번호(PR 본문은 Seed에 없다) */
-    record SeedPullRequest(GithubPullRequest pullRequest, List<GithubReview> reviews, Instant lastCommitAt,
+    /**
+     * @param commits PR 커밋(오래된 것부터) — 마지막 커밋이 PR의 마지막 커밋 시각이다
+     * @param linkedIssueNumbers GitHub 공식 연결을 흉내 낸 이슈 번호(PR 본문은 Seed에 없다)
+     */
+    record SeedPullRequest(GithubPullRequest pullRequest, List<GithubReview> reviews, List<GithubCommit> commits,
             List<Integer> linkedIssueNumbers) {
         SeedPullRequest {
             reviews = reviews == null ? List.of() : List.copyOf(reviews);
+            commits = commits == null ? List.of() : List.copyOf(commits);
             linkedIssueNumbers = linkedIssueNumbers == null ? List.of() : List.copyOf(linkedIssueNumbers);
         }
     }
@@ -122,8 +127,9 @@ public class SeedGithubReader implements GithubReader {
     }
 
     @Override
-    public Optional<Instant> lastCommitAt(GithubRepoRef repo, int pullRequestNumber) {
-        return Optional.ofNullable(pullRequests.get(pullRequestNumber)).map(SeedPullRequest::lastCommitAt);
+    public List<GithubCommit> pullRequestCommits(GithubRepoRef repo, int pullRequestNumber) {
+        SeedPullRequest pr = pullRequests.get(pullRequestNumber);
+        return pr == null ? List.of() : pr.commits();
     }
 
     @Override

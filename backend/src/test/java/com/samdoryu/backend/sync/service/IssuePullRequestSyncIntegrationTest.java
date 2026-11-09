@@ -12,6 +12,7 @@ import com.samdoryu.backend.evaluation.domain.Verdict;
 import com.samdoryu.backend.evaluation.repository.EvaluationRepository;
 import com.samdoryu.backend.evaluation.repository.EvaluationRoundRepository;
 import com.samdoryu.backend.github.GithubReaderSelector;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
 import com.samdoryu.backend.github.dto.GithubRepoRef;
@@ -25,6 +26,8 @@ import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskClosedReason;
 import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.dto.MemberCommit;
+import com.samdoryu.backend.sync.repository.SubmissionCommitRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
 import com.samdoryu.backend.sync.repository.TaskRepository;
@@ -67,6 +70,8 @@ class IssuePullRequestSyncIntegrationTest {
     @Autowired TaskDueDateRepository dueDates;
     @Autowired EvaluationRoundRepository rounds;
     @Autowired EvaluationRepository evaluations;
+    @Autowired SubmissionCommitRepository commits;
+    @Autowired SyncedItemService syncedItems;
 
     @MockitoBean GithubReaderSelector readerSelector;
 
@@ -118,6 +123,10 @@ class IssuePullRequestSyncIntegrationTest {
             assertThat(merged.getAuthorMember().getGithubLogin()).isEqualTo("seed-choi");
             assertThat(merged.getMergedAt()).isEqualTo(Instant.parse("2026-11-04T05:00:00Z"));
             assertThat(merged.getLastCommitAt()).isEqualTo(Instant.parse("2026-11-04T04:00:00Z"));
+            // PR 커밋(#261) — Seed PR마다 하나, 작성자는 Seed 로그인 이름으로 짝지은 팀원
+            assertThat(commits.count()).isEqualTo(4);
+            assertThat(commits.findByWorkspaceIdAndShaIn(demo.getId(), List.of(merged.getHeadSha())))
+                    .singleElement().satisfies(c -> assertThat(c.getAuthorMember().getGithubLogin()).isEqualTo("seed-choi"));
             assertThat(merged.getReviewsJson()).contains("\"changes_requested\"", "\"approved\"", "seed-kim");
         }
 
@@ -192,6 +201,8 @@ class IssuePullRequestSyncIntegrationTest {
 
         private final FakeGithubReader fake = new FakeGithubReader();
         private Workspace ws;
+        private Member aliceMember;
+        private Member bobMember;
 
         @BeforeEach
         void setUp() {
@@ -200,8 +211,8 @@ class IssuePullRequestSyncIntegrationTest {
             AppUser alice = users.saveAndFlush(AppUser.github(2002L, "alice", "앨리스", null));
             AppUser bob = users.saveAndFlush(AppUser.github(1001L, "bob", "밥", null));
             ws = workspaces.saveAndFlush(Workspace.github(5001L, "samdoryu", "repo", 77L, alice, T0));
-            members.saveAndFlush(Member.collaborator(ws, alice, 0, true, T0));
-            members.saveAndFlush(Member.collaborator(ws, bob, 1, false, T0));
+            aliceMember = members.saveAndFlush(Member.collaborator(ws, alice, 0, true, T0));
+            bobMember = members.saveAndFlush(Member.collaborator(ws, bob, 1, false, T0));
         }
 
         private static GithubIssue issue(int number, boolean closed, Instant updatedAt, GithubUser... assignees) {
@@ -280,6 +291,49 @@ class IssuePullRequestSyncIntegrationTest {
             assertThat(read.getAuthorMember()).isNull();
             assertThat(read.getReviewRequestsJson()).contains("1001");
             assertThat(submissions.count()).isEqualTo(1);
+        }
+
+        /**
+         * #261 — PR 커밋을 저장하고 팀원별로 읽는다. 작성자는 GitHub 사용자 ID로 짝짓고(이메일이 계정과 이어지지 않은 커밋 ·
+         * 팀원이 아닌 사람은 누구의 커밋도 아님), 기간은 작성 시각 {@code [from, to)}. PR의 마지막 커밋 시각은 마지막 커밋의 커밋
+         * 시각이다. 다시 동기화하거나 같은 커밋이 다른 PR에 있어도 행이 늘지 않는다.
+         */
+        @Test
+        void pullRequestCommitsAreStoredAndReadPerAuthorMemberWithinTheAuthoredWindow() {
+            GithubUser alice = new GithubUser(2002L, "alice", null);
+            GithubUser bob = new GithubUser(1001L, "bob", null);
+            Instant from = Instant.parse("2026-11-04T15:00:00Z"); // 11-05 00:00 KST
+            Instant to = from.plusSeconds(86400);
+            GithubCommit early = new GithubCommit("c".repeat(40), alice, "세션 만료 처리", from.minusSeconds(1),
+                    from.minusSeconds(1));
+            GithubCommit first = new GithubCommit("d".repeat(40), alice, "로그인 오류 문구", from, from.plusSeconds(60));
+            GithubCommit unlinked = new GithubCommit("e".repeat(40), null, "이메일이 이어지지 않은 커밋",
+                    from.plusSeconds(100), from.plusSeconds(100));
+            GithubCommit bobs = new GithubCommit("f".repeat(40), bob, "리뷰 반영", from.plusSeconds(200),
+                    from.plusSeconds(200));
+            GithubCommit last = new GithubCommit("1".repeat(40), alice, "테스트 추가", from.plusSeconds(300),
+                    to.plusSeconds(10));
+            fake.pullRequests = List.of(pr(3, alice, "1".repeat(40)));
+            fake.commits.put(3, List.of(early, first, unlinked, bobs, last));
+            syncService.sync(ws.getId(), null, T0);
+
+            // 같은 PR을 다시 읽고, 같은 커밋이 든 다른 PR도 들어온다
+            fake.pullRequests = List.of(pr(3, alice, "1".repeat(40)), pr(4, bob, "f".repeat(40)));
+            fake.commits.put(4, List.of(bobs));
+            syncService.sync(ws.getId(), T0, T1);
+            em.flush();
+            em.clear();
+
+            assertThat(commits.count()).isEqualTo(5);
+            assertThat(submissions.findByWorkspaceIdAndGithubPrNumber(ws.getId(), 3).orElseThrow().getLastCommitAt())
+                    .isEqualTo(to.plusSeconds(10));
+            assertThat(syncedItems.listCommits(ws.getId(), aliceMember.getId(), from, to))
+                    .containsExactly(new MemberCommit("d".repeat(40), "로그인 오류 문구", from),
+                            new MemberCommit("1".repeat(40), "테스트 추가", from.plusSeconds(300)));
+            assertThat(syncedItems.listCommits(ws.getId(), bobMember.getId(), from, to))
+                    .extracting(MemberCommit::sha).containsExactly("f".repeat(40));
+            // 다른 사무실 조건으로는 보이지 않는다
+            assertThat(syncedItems.listCommits(ws.getId() + 1000, aliceMember.getId(), from, to)).isEmpty();
         }
 
         private GithubPullRequest pr(int number, GithubUser author, String sha) {

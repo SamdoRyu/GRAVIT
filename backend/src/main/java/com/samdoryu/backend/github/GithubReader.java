@@ -1,6 +1,7 @@
 package com.samdoryu.backend.github;
 
 import com.samdoryu.backend.github.dto.GithubCollaborator;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -42,8 +43,11 @@ public interface GithubReader {
     /** PR에 제출된 리뷰 — 제출 시각 순. */
     List<GithubReview> reviews(GithubRepoRef repo, int pullRequestNumber);
 
-    /** PR의 마지막 커밋 시각. 커밋이 없으면 빈 값. */
-    Optional<Instant> lastCommitAt(GithubRepoRef repo, int pullRequestNumber);
+    /**
+     * PR의 커밋 — GitHub 순서(오래된 것부터). 마지막 원소의 {@code committedAt}이 PR의 마지막 커밋 시각이고(막힘 "커밋 없음"),
+     * 작성자별로 모으면 사용자별 커밋이다(스탠드업 미리 채우기 — #261).
+     */
+    List<GithubCommit> pullRequestCommits(GithubRepoRef repo, int pullRequestNumber);
 
     /** 레포 콜라보레이터 전원 — 변경분이 아니라 늘 전체 목록(#71). */
     List<GithubCollaborator> collaborators(GithubRepoRef repo);
