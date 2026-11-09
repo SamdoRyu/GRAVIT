@@ -561,6 +561,64 @@ class HelpRequestIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("not_found"));
     }
 
+    /** #272 — 강사가 답할 수 없는 글(resolved · ended)은 이미 켜져 있어도 409. on_agenda는 켤 수 있다(계약 「11」). */
+    @Test
+    void instructorRequestNeedsAStatusTheInstructorCanAnswer() throws Exception {
+        HelpRequest resolved = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "해결된 글", null, T0));
+        HelpRequest ended = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "회의에서 끝난 글", null, T0));
+        HelpRequest onAgenda = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "안건으로 간 글", null, T0));
+        setColumn(resolved, "status = 'RESOLVED'");
+        setColumn(ended, "status = 'ENDED', instructor_requested_at = '2026-11-05 02:00:00'");
+        setColumn(onAgenda, "status = 'ON_AGENDA'");
+
+        requestInstructor(ws, resolved, bobSession).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        requestInstructor(ws, resolved, aliceSession).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        requestInstructor(ws, ended, aliceSession).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        requestInstructor(ws, onAgenda, aliceSession).andExpect(status().isOk())
+                .andExpect(jsonPath("$.instructorRequested").value(true))
+                .andExpect(jsonPath("$.status").value("on_agenda"));
+
+        flushAndClear();
+        assertThat(helpRequests.findById(resolved.getId()).orElseThrow().isInstructorRequested()).isFalse();
+    }
+
+    /** #272 — 지정된 강사가 없으면 새로 켤 수 없다(409). 이미 켜진 글은 해제 뒤에도 그대로 200 — 처음 시각 유지. */
+    @Test
+    void withoutAnAssignedInstructorOnlyANewRequestIsAConflict() throws Exception {
+        instructorAssignments.findByWorkspaceIdAndUnassignedAtIsNullOrderByAssignedAtAscIdAsc(ws.getId())
+                .forEach(assignment -> {
+                    assignment.unassign(T0.plusSeconds(60));
+                    instructorAssignments.saveAndFlush(assignment);
+                });
+        HelpRequest fresh = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "새 질문", null, T0));
+        HelpRequest already = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "켜 둔 질문", null, T0));
+        setColumn(already, "instructor_requested_at = '2026-11-05 02:00:00'");
+
+        requestInstructor(ws, fresh, aliceSession).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        requestInstructor(ws, already, aliceSession).andExpect(status().isOk())
+                .andExpect(jsonPath("$.instructorRequestedAt").value("2026-11-05T02:00:00Z"));
+
+        flushAndClear();
+        assertThat(helpRequests.findById(fresh.getId()).orElseThrow().isInstructorRequested()).isFalse();
+    }
+
+    /** #272 — 시연 사무실은 심사용 강사 계정이 강사라 지정 행이 없어도 켤 수 있다. */
+    @Test
+    void demoWorkspaceCanRequestWithoutAnAssignmentRow() throws Exception {
+        Workspace demo = workspaces.saveAndFlush(Workspace.demo("시연 사무실", T0));
+        Member kim = members.saveAndFlush(Member.demoSeed(demo, "seed-kim", "김", null, 0));
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(demo, kim, "질문", null, T0));
+        MockHttpSession kimSession = TestLogin.githubUser(aliceUser.getId(), 1001L)
+                .member(demo.getId(), kim.getId(), WorkspaceRole.PARTICIPANT).session();
+
+        requestInstructor(demo, helpRequest, kimSession).andExpect(status().isOk())
+                .andExpect(jsonPath("$.instructorRequested").value(true));
+    }
+
     // ---- #51 안건으로 전환 ------------------------------------------------------------------------
 
     private ResultActions toAgenda(Workspace workspace, HelpRequest helpRequest, MockHttpSession session, String title)

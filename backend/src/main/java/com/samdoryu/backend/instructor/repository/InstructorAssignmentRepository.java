@@ -11,6 +11,9 @@ public interface InstructorAssignmentRepository extends JpaRepository<Instructor
     boolean existsByWorkspaceIdAndInstructorGithubUserIdAndUnassignedAtIsNull(Long workspaceId,
             Long instructorGithubUserId);
 
+    /** 그 사무실에 현재 지정된 강사가 한 명이라도 있는가 — {@code GET W/instructors}와 같은 기준. */
+    boolean existsByWorkspaceIdAndUnassignedAtIsNull(Long workspaceId);
+
     /** 어느 사무실이든 현재 지정이 있는가. */
     boolean existsByInstructorGithubUserIdAndUnassignedAtIsNull(Long instructorGithubUserId);
 

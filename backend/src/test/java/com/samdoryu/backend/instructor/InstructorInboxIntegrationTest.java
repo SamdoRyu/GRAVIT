@@ -257,6 +257,35 @@ class InstructorInboxIntegrationTest {
         assertThat(inbox("?answered=true").get(1).get("answeredAt").asString()).isEqualTo("2026-11-06T09:00:00Z");
     }
 
+    /**
+     * #272 — 답 없이 닫힌(resolved · ended) 도움 요청은 빠진다. 답이 있었던 글은 닫혀도 답한 것 · 전부에 남고,
+     * on_agenda는 아직 답할 수 있어 답할 요청에 있다(계약 「16」).
+     */
+    @Test
+    void helpRequestsClosedWithoutAnAnswerLeaveTheInbox() throws Exception {
+        otherWorkspaceHelp.close(null, "스스로 해결", at(9));
+        helpRequests.saveAndFlush(otherWorkspaceHelp);
+        HelpRequest endedHelp = help(a, bob, "회의에서 끝난 글", at(9));
+        endedHelp.moveToAgenda();
+        endedHelp.endByAgendaDecision(at(10));
+        helpRequests.saveAndFlush(endedHelp);
+        HelpRequest onAgendaHelp = help(a, bob, "안건으로 간 글", at(11));
+        onAgendaHelp.moveToAgenda();
+        helpRequests.saveAndFlush(onAgendaHelp);
+        answeredHelp.close(null, "답 덕분에 해결", at(12));
+        helpRequests.saveAndFlush(answeredHelp);
+
+        assertThat(targets(inbox("?answered=false"))).containsExactly(
+                target("help_request", onAgendaHelp.getId()),
+                target("follow_up_question", card.getId()));
+        assertThat(targets(inbox("?answered=true"))).containsExactly(
+                target("decision_feedback", feedbackItem.getId()),
+                target("help_request", answeredHelp.getId()));
+        assertThat(targets(inbox(""))).hasSize(4)
+                .doesNotContain(target("help_request", otherWorkspaceHelp.getId()),
+                        target("help_request", endedHelp.getId()));
+    }
+
     /** 해제 직후 같은 세션의 다음 요청부터 그 사무실 것이 빠지고, 지정이 하나도 없으면 강사 요청함을 쓸 수 없다. */
     @Test
     void releasingAWorkspaceDropsItsRequestsAndTheLastReleaseForbidsTheInbox() throws Exception {

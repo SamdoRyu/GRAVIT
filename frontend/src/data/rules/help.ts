@@ -28,6 +28,8 @@ export const HELP_MSG = {
   notOwnStandup: '내 스탠드업에서만 도움 요청을 만들 수 있어요',
   standupNotFound: '스탠드업을 찾을 수 없어요',
   closedForComments: '해결됐거나 끝난 도움 요청에는 코멘트를 달 수 없어요',
+  closedForInstructor: '해결됐거나 끝난 도움 요청은 강사에게 요청할 수 없어요',
+  noInstructor: '이 사무실에 지정된 강사가 없어요',
   notOpen: '열려 있거나 논의 중인 도움 요청만 할 수 있어요',
   helpfulNotHere: '도움이 된 코멘트는 이 도움 요청의 코멘트여야 해요',
   helpfulNotAllowed: '강사 답변이나 내 코멘트는 도움이 된 코멘트로 고를 수 없어요',
@@ -57,6 +59,18 @@ export const isOpenForDiscussion = (status: HelpRequestStatus): boolean => statu
 
 /** 코멘트는 해결(resolved) · 종료(ended) 전까지 — 안건으로 올라간 뒤에도 단다 */
 export const acceptsComments = (status: HelpRequestStatus): boolean => status !== 'resolved' && status !== 'ended'
+
+/**
+ * 「11」 강사에게 요청 (#272) — 강사가 답할 수 있는 상태(코멘트를 받는 open · discussing · on_agenda)에서만, 이미 켜져
+ * 있어도 닫힌 글은 안 된다. 이미 켜진 글은 그대로라 지정된 강사를 보지 않고, 새로 켤 때만 지정된 강사가 있어야 한다.
+ * 시연 사무실은 심사용 강사 계정이 강사라 부르는 쪽이 hasInstructor = true를 넘긴다. null이면 켤 수 있다(이미 켜졌으면 그대로).
+ * 오류는 둘 다 conflict(409)다.
+ */
+export function instructorRequestError(help: Pick<HelpRequestSummary, 'status' | 'instructorRequested'>, hasInstructor: boolean): string | null {
+  if (!acceptsComments(help.status)) return HELP_MSG.closedForInstructor
+  if (help.instructorRequested) return null
+  return hasInstructor ? null : HELP_MSG.noInstructor
+}
 
 /** 48시간 안건 후보 (FR-LRN-18) — open · discussing이고 만든 지 48시간이 지났다 */
 export function isAgendaCandidate(status: HelpRequestStatus, createdAt: string, now: Date): boolean {

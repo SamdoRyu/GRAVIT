@@ -2,8 +2,8 @@
 // 목록은 Snapshot의 helpRequests, 상세(코멘트)는 열 때 읽는다. 권한은 서버가 다시 검사한다 — 화면은 할 수 있는 버튼만 보인다.
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { AGENDA_TITLE_MAX } from '../data/rules/meeting'
-import { HELP_CONTENT_MAX, HELP_LEARNING_MAX, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, isOpenForDiscussion } from '../data/rules/help'
-import type { HelpCommentDto, HelpRequestDetail, HelpRequestStatus, HelpRequestSummary, Id, MemberDto, Viewer } from '../data/types'
+import { HELP_CONTENT_MAX, HELP_LEARNING_MAX, HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isOpenForDiscussion } from '../data/rules/help'
+import type { HelpCommentDto, HelpRequestDetail, HelpRequestStatus, HelpRequestSummary, Id, MemberDto, Viewer, WorkspaceKind } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
 import { relativeTime } from './format'
@@ -24,10 +24,13 @@ const DONE: readonly HelpRequestStatus[] = ['resolved', 'ended']
 
 type Members = ReadonlyMap<Id, MemberDto>
 
-function useHelpData(): { helpRequests: HelpRequestSummary[]; members: Members; viewer: Viewer } | null {
+function useHelpData(): { helpRequests: HelpRequestSummary[]; members: Members; viewer: Viewer; workspaceKind: WorkspaceKind } | null {
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   return useMemo(
-    () => (snapshot ? { helpRequests: snapshot.helpRequests, members: new Map(snapshot.members.map((m) => [m.id, m])), viewer: snapshot.viewer } : null),
+    () =>
+      snapshot
+        ? { helpRequests: snapshot.helpRequests, members: new Map(snapshot.members.map((m) => [m.id, m])), viewer: snapshot.viewer, workspaceKind: snapshot.workspace.kind }
+        : null,
     [snapshot],
   )
 }
@@ -40,7 +43,11 @@ export function HelpPanel() {
   const selectedId = useUi((s) => s.helpRequestId)
   const selected = data?.helpRequests.find((h) => h.id === selectedId) ?? null
   if (!data) return <Empty icon="refresh" title="사무실을 불러오는 중…" />
-  return selected ? <HelpDetailView key={selected.id} summary={selected} members={data.members} viewer={data.viewer} /> : <HelpList data={data} />
+  return selected ? (
+    <HelpDetailView key={selected.id} summary={selected} members={data.members} viewer={data.viewer} workspaceKind={data.workspaceKind} />
+  ) : (
+    <HelpList data={data} />
+  )
 }
 
 function StatusChip({ help }: { help: HelpRequestSummary }) {
@@ -154,7 +161,7 @@ function HelpCompose({ draft }: { draft: HelpDraft | null }) {
 
 // ---- 상세 ----------------------------------------------------------------------
 
-function HelpDetailView({ summary, members, viewer }: { summary: HelpRequestSummary; members: Members; viewer: Viewer }) {
+function HelpDetailView({ summary, members, viewer, workspaceKind }: { summary: HelpRequestSummary; members: Members; viewer: Viewer; workspaceKind: WorkspaceKind }) {
   const now = useNow(60_000)
   const [detail, setDetail] = useState<HelpRequestDetail | null>(null)
   const [failed, setFailed] = useState(false)
@@ -201,13 +208,7 @@ function HelpDetailView({ summary, members, viewer }: { summary: HelpRequestSumm
 
       {isRequester && (
         <div className="help-owner">
-          {summary.instructorRequested ? (
-            <p className="dim small dnote">강사에게 요청했어요{summary.instructorRequestedAt ? ` · ${relativeTime(summary.instructorRequestedAt, now)}` : ''}</p>
-          ) : (
-            <button type="button" className="btn btn-sm" onClick={() => void useOffice.getState().requestInstructorHelp(summary.id)}>
-              강사에게 요청
-            </button>
-          )}
+          <InstructorRequest summary={summary} demo={workspaceKind === 'demo'} now={now} />
           {canAct && (
             <>
               <button type="button" className={`btn btn-sm${mode === 'agenda' ? ' is-on' : ''}`} aria-pressed={mode === 'agenda'} onClick={() => setMode(mode === 'agenda' ? 'none' : 'agenda')}>
@@ -243,6 +244,53 @@ function HelpDetailView({ summary, members, viewer }: { summary: HelpRequestSumm
       )}
       {canComment && <CommentForm helpRequestId={summary.id} instructor={isInstructor} onAdded={(c) => setDetail((d) => (d ? { ...d, comments: [...d.comments, c] } : d))} />}
     </section>
+  )
+}
+
+type InstructorAvailability = 'loading' | 'none' | 'some' | 'failed'
+
+/**
+ * 「11」 강사에게 요청 (#272) — 강사가 답할 수 있는 글(open · discussing · on_agenda)에서만 보인다. 새로 켤 때는 지정된 강사가
+ * 있어야 해서 목록을 읽어 로딩 · 0명 · 1명 이상 · 조회 실패를 나눈다. 시연 사무실은 심사용 강사가 강사라 읽지 않는다.
+ * 버튼은 UX용이고 최종 판정은 서버다 — 목록을 못 읽었으면 눌러 보게 두고 서버 답(409)을 알림으로 보인다.
+ */
+function InstructorRequest({ summary, demo, now }: { summary: HelpRequestSummary; demo: boolean; now: number }) {
+  const [availability, setAvailability] = useState<InstructorAvailability>('loading')
+  const needsList = !demo && !summary.instructorRequested && acceptsComments(summary.status)
+  useEffect(() => {
+    if (!needsList) return
+    let alive = true
+    void useOffice
+      .getState()
+      .loadInstructors()
+      .then((list) => {
+        if (alive) setAvailability(list === null ? 'failed' : list.length > 0 ? 'some' : 'none')
+      })
+    return () => {
+      alive = false
+    }
+  }, [needsList])
+
+  if (summary.instructorRequested) {
+    return <p className="dim small dnote">강사에게 요청했어요{summary.instructorRequestedAt ? ` · ${relativeTime(summary.instructorRequestedAt, now)}` : ''}</p>
+  }
+  if (!acceptsComments(summary.status)) return null
+  const state: InstructorAvailability = demo ? 'some' : availability
+  const blocked = instructorRequestError(summary, state !== 'none') !== null
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-sm"
+        disabled={state === 'loading' || blocked}
+        aria-busy={state === 'loading'}
+        onClick={() => void useOffice.getState().requestInstructorHelp(summary.id)}
+      >
+        강사에게 요청
+      </button>
+      {state === 'none' && <p className="dim small dnote">{HELP_MSG.noInstructor} — 레포 관리자가 강사를 지정하면 요청할 수 있어요</p>}
+      {state === 'failed' && <p className="dim small dnote">강사 목록을 불러오지 못했어요 — 요청하면 서버가 확인해요</p>}
+    </>
   )
 }
 

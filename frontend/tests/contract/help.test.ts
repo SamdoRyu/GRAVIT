@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { DataError, type DataErrorCode } from '../../src/data/DataSource'
 import { createMemoryStorage } from '../../src/data/mock'
-import { createV1MockDataSource } from '../../src/data/mock/v1'
+import { V1_STORAGE_KEY, createV1MockDataSource } from '../../src/data/mock/v1'
+import { createSeed } from '../../src/data/mock/v1/seed'
 import {
   HELP_CONTENT_MAX,
   HELP_LEARNING_MAX,
@@ -14,13 +15,15 @@ import {
   helpCommentError,
   helpCreateError,
   helpToAgendaError,
+  instructorRequestError,
   isAgendaCandidate,
   toHelpSummary,
 } from '../../src/data/rules/help'
-import type { Change, HelpCommentDto } from '../../src/data/types'
+import type { Change, HelpCommentDto, HelpRequestStatus } from '../../src/data/types'
 import { helpRequestDetailExample, helpRequestSummaryExample } from './examples'
 
 const TEAM_WS = 'ws_1'
+const DEMO_WS = 'ws_2'
 /**
  * seed 팀 사무실 — 나(김옥토)는 m_1. hr_1 = 내 요청(discussing, 50시간 전 — 안건 후보, 이삼도 코멘트 hc_1),
  * hr_2 = 박데브(m_3)의 open 요청(6시간 전), hr_3 = 최하나(m_4)의 resolved 요청(내 코멘트 hc_2가 도움이 됨)
@@ -177,5 +180,58 @@ describe('mock v1 — 도움 요청', () => {
     assert.deepEqual(again, on)
     assert.equal((await source.load(TEAM_WS)).helpRequests.find((h) => h.id === 'hr_1')!.instructorRequested, true)
     await rejectsCode(source.requestInstructorHelp(TEAM_WS, 'hr_2'), 'forbidden_role', HELP_MSG.notRequester)
+  })
+
+  it('강사에게 요청 (#272) — 닫힌 글은 이미 켜져 있어도 conflict, 요청자 검사가 먼저', async () => {
+    const source = make()
+    await source.requestInstructorHelp(TEAM_WS, 'hr_1')
+    await source.closeHelpRequest(TEAM_WS, 'hr_1', { helpfulCommentId: null, learning: '스스로 해결' })
+    await rejectsCode(source.requestInstructorHelp(TEAM_WS, 'hr_1'), 'conflict', HELP_MSG.closedForInstructor)
+    // hr_3은 최하나의 resolved 요청 — 상태보다 요청자 검사가 먼저다
+    await rejectsCode(source.requestInstructorHelp(TEAM_WS, 'hr_3'), 'forbidden_role', HELP_MSG.notRequester)
+  })
+
+  it('강사에게 요청 (#272) — 지정된 강사가 없으면 새로 켤 수 없고, 이미 켜진 글은 그대로(알림 없음)', async () => {
+    const storage = createMemoryStorage()
+    const seed = createSeed(NOW, 'github')
+    const team = seed.workspaces.find((w) => w.snapshot.workspace.id === TEAM_WS)!
+    team.instructors = []
+    const mine = team.snapshot.helpRequests.find((h) => h.id === 'hr_1')!
+    Object.assign(mine, { instructorRequested: true, instructorRequestedAt: '2026-11-05T01:00:00Z' })
+    team.snapshot.helpRequests.push({ ...mine, id: 'hr_new', instructorRequested: false, instructorRequestedAt: null })
+    storage.setItem(V1_STORAGE_KEY, JSON.stringify(seed))
+    const source = createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], now: () => NOW })
+    const { changes } = listen(source)
+
+    await rejectsCode(source.requestInstructorHelp(TEAM_WS, 'hr_new'), 'conflict', HELP_MSG.noInstructor)
+    const kept = await source.requestInstructorHelp(TEAM_WS, 'hr_1')
+    assert.deepEqual([kept.instructorRequested, kept.instructorRequestedAt], [true, '2026-11-05T01:00:00Z'])
+    assert.deepEqual(changes, [])
+  })
+
+  it('강사에게 요청 (#272) — 시연 사무실은 지정 행 없이도 켠다(심사용 강사가 강사)', async () => {
+    const source = make()
+    const created = await source.createHelpRequest(DEMO_WS, { content: '시연 질문', fromStandupId: null })
+    assert.equal((await source.requestInstructorHelp(DEMO_WS, created.id)).instructorRequested, true)
+  })
+})
+
+describe('강사에게 요청 규칙 (#272 — 「11」, 서버 HelpRequestInstructorRequestTest와 같은 순서)', () => {
+  const at = (status: HelpRequestStatus, instructorRequested = false) => ({ status, instructorRequested })
+
+  it('강사가 답할 수 있는 open · discussing · on_agenda만 — 지정된 강사가 있으면 켤 수 있다', () => {
+    for (const status of ['open', 'discussing', 'on_agenda'] as const) assert.equal(instructorRequestError(at(status), true), null)
+  })
+
+  it('resolved · ended는 이미 켜져 있어도 안 된다 — 강사 유무보다 먼저', () => {
+    for (const status of ['resolved', 'ended'] as const) {
+      assert.equal(instructorRequestError(at(status), true), HELP_MSG.closedForInstructor)
+      assert.equal(instructorRequestError(at(status, true), false), HELP_MSG.closedForInstructor)
+    }
+  })
+
+  it('지정된 강사가 없으면 새로 켤 수 없고, 이미 켜진 글은 그대로', () => {
+    assert.equal(instructorRequestError(at('open'), false), HELP_MSG.noInstructor)
+    assert.equal(instructorRequestError(at('discussing', true), false), null)
   })
 })

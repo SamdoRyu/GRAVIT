@@ -56,9 +56,12 @@ public class InstructorInboxService {
 
         List<HelpRequest> helpRequests = helpRequestService.listInstructorRequested(workspaceIds);
         Map<Long, Instant> helpAnswers = helpRequestService.firstInstructorAnswerAt(ids(helpRequests, HelpRequest::getId));
-        helpRequests.forEach(help -> items.add(InboxItem.of(Kind.HELP_REQUEST, help.getWorkspace(), help.getId(),
-                help.getRequester().getId(), helpRequestTitle(help.getContent()), help.getInstructorRequestedAt(),
-                helpAnswers.get(help.getId()))));
+        // 답 없이 닫힌(resolved · ended) 도움 요청은 강사가 더 답할 수 없어 빼고, 답한 기록은 남긴다(계약 「16」)
+        helpRequests.stream()
+                .filter(help -> help.getStatus().acceptsComments() || helpAnswers.containsKey(help.getId()))
+                .forEach(help -> items.add(InboxItem.of(Kind.HELP_REQUEST, help.getWorkspace(), help.getId(),
+                        help.getRequester().getId(), helpRequestTitle(help.getContent()),
+                        help.getInstructorRequestedAt(), helpAnswers.get(help.getId()))));
 
         List<AgendaItem> agendaItems = agendaItemService.listFeedbackRequested(workspaceIds);
         Map<Long, Instant> feedbacks = agendaItemService.firstInstructorFeedbackAt(ids(agendaItems, AgendaItem::getId));
