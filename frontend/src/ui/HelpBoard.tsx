@@ -10,6 +10,7 @@ import { FormAlert } from './ErrorStates'
 import { useWriteProblem } from './useWriteProblem'
 import { relativeTime } from './format'
 import { useNow } from './hooks'
+import { useUnreadInstructorAnswers } from './useAwaitingInstructor'
 import { Icon } from './icons'
 import { MemberAvatar } from './officeParts'
 import { useUi, type HelpDraft } from './uiState'
@@ -52,7 +53,7 @@ export function HelpPanel() {
   )
 }
 
-function StatusChip({ help }: { help: HelpRequestSummary }) {
+function StatusChip({ help, unread = false }: { help: HelpRequestSummary; unread?: boolean }) {
   return (
     <span className="help-chips">
       <span className={`help-status help-status-${help.status}`}>{STATUS_LABEL[help.status]}</span>
@@ -61,7 +62,12 @@ function StatusChip({ help }: { help: HelpRequestSummary }) {
           안건 후보
         </span>
       )}
-      {help.instructorRequested && <span className="help-tag">강사 요청</span>}
+      {help.instructorRequested && (
+        <span className="help-tag">
+          강사 요청
+          {unread && <i className="help-dot" title="새 강사 답변이 있어요" />}
+        </span>
+      )}
     </span>
   )
 }
@@ -78,6 +84,7 @@ function HelpList({ data }: { data: { helpRequests: HelpRequestSummary[]; member
   )
   // 스탠드업 "막힌 것"에서 넘어온 초안(#190)이 있으면 그 내용으로 쓰기 폼을 새로 연다
   const draft = useUi((s) => s.helpDraft)
+  const unread = useUnreadInstructorAnswers()
   return (
     <div className="help">
       {canWrite && <HelpCompose key={draft ? `draft:${draft.fromStandupId}:${draft.content}` : 'new'} draft={draft} />}
@@ -90,10 +97,10 @@ function HelpList({ data }: { data: { helpRequests: HelpRequestSummary[]; member
               <button
                 type="button"
                 className={`help-item${h.isAgendaCandidate ? ' is-candidate' : ''}${DONE.includes(h.status) ? ' is-done' : ''}`}
-                aria-label={`도움 요청: ${h.content}`}
+                aria-label={`도움 요청: ${h.content}${unread.has(h.id) ? ' (새 강사 답변)' : ''}`}
                 onClick={() => useUi.getState().openHelpRequest(h.id)}
               >
-                <StatusChip help={h} />
+                <StatusChip help={h} unread={unread.has(h.id)} />
                 <span className="help-item-text">{h.content}</span>
                 <span className="help-item-foot">
                   <MemberAvatar member={data.members.get(h.requesterMemberId)} size={18} />
@@ -190,6 +197,11 @@ function HelpDetailView({ summary, members, viewer, workspaceKind }: { summary: 
       alive = false
     }
   }, [summary.id, version])
+  // 상세를 열어 강사 답변을 봤다 — 이 사람의 빨간 점이 꺼진다(#290). 강사 본인은 점이 없다
+  const lastAnswerId = detail?.comments.filter((c) => c.isInstructorAnswer).at(-1)?.id ?? null
+  useEffect(() => {
+    if (lastAnswerId && viewer.role !== 'instructor') useOffice.getState().markInstructorAnswerSeen(summary.id, lastAnswerId)
+  }, [summary.id, lastAnswerId, viewer.role])
 
   const isRequester = viewer.memberId !== null && viewer.memberId === summary.requesterMemberId
   const isInstructor = viewer.role === 'instructor'

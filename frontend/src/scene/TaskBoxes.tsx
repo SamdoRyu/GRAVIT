@@ -2,6 +2,7 @@
 // plus an agenda shape on the bridge table for each item on the agenda: issue · PR (#30 · #26), learning · other (#31), help (#205).
 import { useMemo, useRef, type ReactElement } from 'react'
 import { useOffice, type OfficeSelection } from '../store'
+import { withdrawRefusal } from './cargoDrop'
 import { MergeBurst } from './MergeBurst'
 import { TaskBox, type AgendaSource } from './TaskBox'
 import { useToday } from './signals'
@@ -34,17 +35,19 @@ export function TaskBoxes() {
 
   /**
    * key → what a click opens and what a drop on the bridge raises. An original issue / PR opens and raises itself; an agenda
-   * shape opens its source and is not dragged.
+   * shape opens its source and is dragged to the bridge trash can only when the viewer may withdraw it (#291 — FR-LRN-14: raised
+   * by them, not decided yet; others' items are not picked up at all).
    */
   const targets = useMemo(() => {
-    const m = new Map<string, { select: OfficeSelection | null; raise: AgendaSource | null; helpRequestId?: string }>()
+    const m = new Map<string, { select: OfficeSelection | null; raise: AgendaSource | null; withdraw?: string; helpRequestId?: string }>()
     for (const t of snapshot?.tasks ?? []) m.set(`task:${t.id}`, { select: { kind: 'task', id: t.id }, raise: { type: 'task', id: t.id } })
     for (const p of snapshot?.submissions ?? []) m.set(`submission:${p.id}`, { select: { kind: 'submission', id: p.id }, raise: { type: 'submission', id: p.id } })
     for (const a of snapshot?.agendaItems ?? []) {
       const src = a.source
       const select: OfficeSelection | null = src?.type === 'task' ? { kind: 'task', id: src.id } : src?.type === 'submission' ? { kind: 'submission', id: src.id } : null
       // a help-request item opens its help request in the panel (the v1 detail drawer shows issues · PRs · members only)
-      m.set(`agenda:${a.id}`, { select, raise: null, ...(src?.type === 'help_request' ? { helpRequestId: src.id } : {}) })
+      const withdraw = snapshot && withdrawRefusal(snapshot.viewer, a) === null ? { withdraw: a.id } : {}
+      m.set(`agenda:${a.id}`, { select, raise: null, ...withdraw, ...(src?.type === 'help_request' ? { helpRequestId: src.id } : {}) })
     }
     return m
   }, [snapshot])
@@ -68,6 +71,7 @@ export function TaskBoxes() {
         slot={slot}
         select={target?.select ?? null}
         raise={target?.raise ?? null}
+        withdraw={target?.withdraw ?? null}
         helpRequestId={target?.helpRequestId ?? null}
         dropZoneAt={scene.layout.dropZoneAt}
         overdue={overdue.has(e.key)}

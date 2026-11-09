@@ -5,18 +5,21 @@ import { useThree } from '@react-three/fiber'
 import { Suspense, useEffect } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
+import { WarpStreaks } from '../theme/station/WarpStreaks'
 import { ActivityNotes } from './ActivityNotes'
+import { AgendaTrash } from './AgendaTrash'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
 import { CommBoard } from './CommBoard'
 import { DockShip } from './DockShip'
+import { InstructorShip } from './InstructorShip'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
 import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
 import { TaskTooltip } from './TaskTooltip'
-import { clickSlop, sceneApi } from './runtime'
+import { clickSlop, sceneApi, shipLive } from './runtime'
 import { NoPick } from './shared'
 import { useStationScene } from './useStationScene'
 import { useSkyPalette } from './useSkyPalette'
@@ -43,6 +46,7 @@ export function OfficeScene() {
     <>
       <SceneApiBridge />
       <StationSky palette={skyPalette} />
+      <WarpStreaks source={shipLive} />
       <CameraRig />
       {/* Anything that doesn't stop propagation lands here: a click on empty space / the hull clears the selection. */}
       <group
@@ -66,8 +70,13 @@ export function OfficeScene() {
         </Suspense>
         <TaskBoxes />
         <MeetingRoomState />
+        <AgendaTrash />
         <RequirementDeck />
         <CommBoard />
+        {/* 강사 우주선(#290) — 라코 glTF를 기다리는 동안에도 나머지 장면은 그대로 */}
+        <Suspense fallback={null}>
+          <InstructorShip />
+        </Suspense>
         <ActivityNotes />
         <ArchiveTag />
         <DockShip />

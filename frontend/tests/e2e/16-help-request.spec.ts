@@ -25,7 +25,8 @@ const helpStatus = (page: Page, match: string) =>
 
 test('write a help request: blank is rejected, then it is listed as open', async ({ page }) => {
   const panel = await openHelpTab(page)
-  await expect(panel.getByRole('list', { name: '도움 요청 목록' }).getByRole('listitem')).toHaveCount(3)
+  // seed 4건 — hr_4(강사 답변 있음)는 #290에서 더했다
+  await expect(panel.getByRole('list', { name: '도움 요청 목록' }).getByRole('listitem')).toHaveCount(4)
   // 48시간이 지난 내 글은 안건 후보로 보인다
   await expect(panel.getByRole('button', { name: MINE })).toHaveClass(/is-candidate/)
 

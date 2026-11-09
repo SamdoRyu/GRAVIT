@@ -4,7 +4,9 @@
 // position and flies along an arc when its slot changes.
 // An original issue / PR can be dragged (CONTRACTS.md 「8」 드롭 결과 — cargoDrop.ts): onto the bridge to raise it as an agenda
 // item (#30 · #26 — the agenda dialog opens), or an issue onto a requirement plate to link that requirement (#15 —
-// linkRequirement) or onto the waiting plate to pick the requirement from the waiting list first (#197). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. Agenda shapes on the bridge table are not dragged; a click opens their source. A click on an
+// linkRequirement) or onto the waiting plate to pick the requirement from the waiting list first (#197). Either way the shape flies back to its own place (neither moves the original). Anywhere else nothing happens. An agenda shape on the bridge table is dragged only when the viewer
+// may withdraw it (raised by them, not decided yet — #291 · FR-LRN-14): let go over the bridge trash can it is withdrawn
+// (withdrawAgendaItem — the original stays), anywhere else it flies back. A click on an agenda shape opens its source. A click on an
 // original opens the v1 detail drawer (the GitHub originals are never changed from the app — CON-02).
 // A learning · other agenda item has no source (#31): it sits on the bridge table as the design's octahedron (floating,
 // turning, a lilac glow) or memo pad, shows its title on hover and opens nothing. A help-request item (#205) is the design's
@@ -18,11 +20,11 @@ import { useUi } from '../ui/uiState'
 import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
 import { bridgeMood } from '../theme/station/bridgeMood'
-import { BRIDGE, WORLD_SCALE } from '../theme/station/geometry'
 import { CargoBadges } from './CargoBadges'
 import { celebrateArrival, mergeFx } from './mergeFx'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
-import { cargoDropTarget, isWaitingTarget, requirementOf, type CargoSource } from './cargoDrop'
+import { BRIDGE, BRIDGE_TRASH, bridgeTrashCenter, WORLD_SCALE } from '../theme/station/geometry'
+import { agendaDropTarget, cargoDropTarget, isWaitingTarget, requirementOf, TRASH_TARGET, withdrawRefusal, withinTrash, type CargoSource, type DragSource } from './cargoDrop'
 import type { SceneEntity, ThemeLayout } from './model/types'
 import { boxLive, cameraGesture, cameraLock, cargoDrag, CLICK_SLOP_PX, clickSlop, DRAG_Y, DROP_ZONE_Y, LONG_PRESS_MS, noRaycast, pointerOnPlane, setCursor, type BoxLive } from './runtime'
 import { clamp, UNIT_BOX, useDynamicLayer } from './shared'
@@ -132,6 +134,8 @@ interface Props {
   select: OfficeSelection | null
   /** Draggable onto the bridge (agenda) or, for an issue, a requirement plate (link); null = not draggable (agenda shapes) */
   raise: AgendaSource | null
+  /** An agenda shape the viewer may withdraw (#291): its agenda item id — draggable onto the bridge trash can; null = not draggable */
+  withdraw: string | null
   /** A help-request agenda item: the help request a click opens in the panel (#205) */
   helpRequestId: string | null
   dropZoneAt: ThemeLayout['dropZoneAt']
@@ -141,12 +145,14 @@ interface Props {
   pop: boolean
 }
 
-export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, helpRequestId, dropZoneAt, overdue, pop }: Props) {
+export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, withdraw, helpRequestId, dropZoneAt, overdue, pop }: Props) {
   const { key } = entity
   const blocked = entity.highlight === 'blocked'
   const badges = useMemo(() => cargoBadgeView(entity.badges), [entity.badges])
   const kind = entity.kind === 'pr' || entity.kind === 'learning' || entity.kind === 'other' || entity.kind === 'help' ? entity.kind : 'issue'
   const opens = select !== null || helpRequestId !== null
+  /** What pressing and moving picks this shape up as: an original to raise / link, an agenda item to withdraw, or nothing */
+  const drag = useMemo<DragSource | null>(() => raise ?? (withdraw !== null ? { type: 'agenda', id: withdraw } : null), [raise, withdraw])
   const selected = useOffice((s) => select !== null && s.officeSelection?.kind === select.kind && s.officeSelection.id === select.id)
   const hovered = useOffice((s) => s.hover === key)
 
@@ -345,7 +351,7 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
         if (cargoDrag.key !== null) return
         e.stopPropagation()
         useOffice.getState().setHover(key)
-        setCursor(raise ? 'grab' : opens ? 'pointer' : '')
+        setCursor(drag ? 'grab' : opens ? 'pointer' : '')
       }}
       onPointerOut={() => {
         const s = useOffice.getState()
@@ -353,9 +359,9 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
         if (cargoDrag.key === null) setCursor('')
       }}
       onPointerDown={(e) => {
-        if (e.button !== 0 || !raise || cargoDrag.key !== null) return
+        if (e.button !== 0 || !drag || cargoDrag.key !== null) return
         e.stopPropagation()
-        startCargoDrag(key, raise, dropZoneAt, e.nativeEvent)
+        startCargoDrag(key, drag, dropZoneAt, e.nativeEvent)
       }}
       onClick={(e) => {
         e.stopPropagation()
@@ -423,13 +429,20 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, help
   )
 })
 
+/** The bridge trash can (#291) in world units: centre, the height its catch range is judged at (its rim) and that range */
+const TRASH = (() => {
+  const c = bridgeTrashCenter()
+  return { x: c.x * WORLD_SCALE, z: c.z * WORLD_SCALE, rimY: (c.y + BRIDGE_TRASH.height) * WORLD_SCALE, catch: BRIDGE_TRASH.catchRadius * WORLD_SCALE }
+})()
+
 /**
- * Press on an original issue / PR: a mouse or pen picks it up once it moves a few pixels; a finger has to rest on it for a
- * moment first (otherwise it orbits the camera). While held the shape follows the pointer on the y = DRAG_Y plane and the
- * bridge or the requirement plate under it lights up when letting go would act there. Releasing over the bridge opens the agenda
- * dialog, over a requirement plate links the issue to it; Escape cancels.
+ * Press on an original issue / PR, or on an agenda shape the viewer may withdraw: a mouse or pen picks it up once it moves a
+ * few pixels; a finger has to rest on it for a moment first (otherwise it orbits the camera). While held the shape follows the
+ * pointer on the y = DRAG_Y plane and the bridge, the requirement plate or (for an agenda shape) the trash can under it lights
+ * up when letting go would act there. Releasing an original over the bridge opens the agenda dialog, over a requirement plate
+ * links the issue to it; an agenda shape over the trash can is withdrawn. Escape cancels.
  */
-function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayout['dropZoneAt'], down: PointerEvent) {
+function startCargoDrag(key: string, source: DragSource, dropZoneAt: ThemeLayout['dropZoneAt'], down: PointerEvent) {
   const pointerId = down.pointerId
   const touch = down.pointerType === 'touch'
   const sx = down.clientX
@@ -446,11 +459,20 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     if (!p) {
       cargoDrag.target = null
       cargoDrag.overMeeting = false
+      cargoDrag.overTrash = false
       return
     }
     cargoDrag.x = p.x
     cargoDrag.y = DRAG_Y
     cargoDrag.z = p.z
+    if (source.type === 'agenda') {
+      // The trash can is judged at its rim, where the pointer meets it on screen.
+      const rim = pointerOnPlane(cx, cy, TRASH.rimY) ?? p
+      cargoDrag.target = agendaDropTarget(withinTrash(rim.x, rim.z, TRASH, TRASH.catch))
+      cargoDrag.overMeeting = false
+      cargoDrag.overTrash = cargoDrag.target === TRASH_TARGET
+      return
+    }
     // The zone is where the pointer meets the deck tops, not the higher plane the shape floats on.
     const floor = pointerOnPlane(cx, cy, DROP_ZONE_Y) ?? p
     cargoDrag.target = cargoDropTarget(dropZoneAt([floor.x, 0, floor.z]), source)
@@ -466,6 +488,7 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     const s = useOffice.getState()
     if (s.hover === key) s.setHover(null)
     cargoDrag.key = key
+    cargoDrag.agenda = source.type === 'agenda'
     follow(px, py)
     setCursor('grabbing')
   }
@@ -481,6 +504,8 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     if (cargoDrag.key === key) cargoDrag.key = null
     cargoDrag.target = null
     cargoDrag.overMeeting = false
+    cargoDrag.agenda = false
+    cargoDrag.overTrash = false
     setCursor('')
     return target
   }
@@ -497,6 +522,10 @@ function startCargoDrag(key: string, source: AgendaSource, dropZoneAt: ThemeLayo
     if (ev.pointerId !== pointerId) return
     if (dragging) follow(ev.clientX, ev.clientY)
     const target = stop()
+    if (source.type === 'agenda') {
+      if (target === TRASH_TARGET) void withdrawByDrop(source.id)
+      return
+    }
     if (target === 'meeting') useOffice.getState().openDialog({ kind: 'raiseAgenda', source })
     const requirementId = requirementOf(target)
     if (requirementId !== null && source.type === 'task') void linkToRequirement(requirementId, source.id)
@@ -529,6 +558,25 @@ async function linkToRequirement(requirementId: string, taskId: string) {
     return
   }
   if (await st.linkRequirement(requirementId, taskId)) useOffice.getState().toast('good', `${name}에 연결했어요`)
+}
+
+/**
+ * An agenda shape let go over the bridge trash can (#291 · FR-LRN-14): withdraw the agenda item with the same store action as
+ * the meeting dialog's "안건 거두기" button. Only the agenda item changes (`withdrawn`) — the original issue · PR · help request
+ * stays. The rules are checked again first (the item may have been decided meanwhile); a refusal or a failed request leaves the
+ * shape on the table (it has already flown back) and says why — for a failed request the store shows the server's reason.
+ */
+async function withdrawByDrop(agendaItemId: string) {
+  const st = useOffice.getState()
+  const snapshot = st.office?.snapshot
+  if (!snapshot) return
+  const item = snapshot.agendaItems.find((a) => a.id === agendaItemId)
+  const refusal = withdrawRefusal(snapshot.viewer, item)
+  if (refusal !== null || !item) {
+    st.toast('warn', refusal ?? '')
+    return
+  }
+  if (await st.withdrawAgendaItem(agendaItemId)) useOffice.getState().toast('good', `"${item.title}" 안건을 회의에서 뺐어요`)
 }
 
 /** A help-request agenda item clicked (#205): open the panel on its help request (관리 패널 도움 요청 탭 — #183) */
