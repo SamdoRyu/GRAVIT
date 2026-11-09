@@ -1,5 +1,6 @@
 // 정거장 조명 · 우주 배경 — 시안의 "카메라를 따라 도는 스튜디오 조명 + 행성 반사광"과 별 · 행성. 소유: C.
 // 행성 · 대기 빛 · 성운 색은 사무실마다 다르다(#277 — 팔레트는 받기만 한다, skyPalette.ts). 바뀌면 약 1초에 걸쳐 섞는다.
+// 구름 띠 · 대기 가장자리 빛 · 위성 · 궤도선 · 별 깜빡임 · 별똥별은 SkyDetails(#278).
 // 시안은 three r150 레거시 조명이라, 여기 세기는 물리 단위로 맞추려 π를 곱한다(Canvas는 linear · flat).
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
@@ -8,6 +9,7 @@ import { DYN_LAYER, LOW_POWER, noRaycast } from '../../scene/runtime'
 import { STATION_BOUNDS, WORLD_SCALE } from './geometry'
 import { glowTex } from './parts'
 import type { SkyPalette } from './skyPalette'
+import { PlanetDetails, StarDetails } from './SkyDetails'
 
 const PI = Math.PI
 const S = WORLD_SCALE
@@ -105,7 +107,8 @@ export function StationSky({ palette }: { palette: SkyPalette }) {
   const target = useMemo(() => new Object3D(), [])
   const geo = useMemo(() => {
     const rnd = seeded(7)
-    return { small: starGeometry(1600, 900 * S, rnd), big: starGeometry(160, 880 * S, rnd), planet: planetGeometry(200 * S) }
+    // 큰 별(깜빡임)은 SkyDetails가 그린다
+    return { small: starGeometry(1600, 900 * S, rnd), planet: planetGeometry(200 * S) }
   }, [])
   // 팔레트를 따라 색이 바뀌는 재질 — 한 번 만들고 색만 고친다
   const mats = useMemo(
@@ -207,9 +210,7 @@ export function StationSky({ palette }: { palette: SkyPalette }) {
         <points geometry={geo.small} raycast={noRaycast}>
           <pointsMaterial color={0xffffff} size={1.6} sizeAttenuation={false} transparent opacity={0.85} fog={false} depthWrite={false} />
         </points>
-        <points geometry={geo.big} raycast={noRaycast}>
-          <pointsMaterial color={0xfff1de} size={3} sizeAttenuation={false} transparent opacity={0.9} fog={false} depthWrite={false} />
-        </points>
+        <StarDetails radius={880 * S} />
         {NEBULA.map(([deg, tilt], i) => {
           const a = (deg * PI) / 180
           const d = new Vector3(Math.sin(a), tilt, Math.cos(a)).normalize().multiplyScalar(800 * S)
@@ -224,6 +225,7 @@ export function StationSky({ palette }: { palette: SkyPalette }) {
         <mesh raycast={noRaycast} material={mats.halo}>
           <sphereGeometry args={[200 * S * 1.045, 64, 40]} />
         </mesh>
+        <PlanetDetails radius={200 * S} paint={paint} />
       </group>
     </>
   )
