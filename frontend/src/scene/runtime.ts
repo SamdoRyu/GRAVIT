@@ -17,6 +17,9 @@ export interface AvatarLive {
 }
 export const avatarLive = new Map<Id, AvatarLive>()
 
+/** Live position of the docking-bay ship (사무실 바꾸기) and its flight, if any (e2e · DockShip). */
+export const shipLive: { x: number; y: number; z: number; flight: 'depart' | 'arrive' | null } = { x: 0, y: 0, z: 0, flight: null }
+
 /** Live light dot of a crew member moving between rooms (CONTRACTS.md 「10」 아바타 이동 연출), keyed by member id. */
 export interface TrailLive {
   x: number

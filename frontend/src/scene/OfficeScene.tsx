@@ -10,6 +10,7 @@ import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
 import { CommBoard } from './CommBoard'
+import { DockShip } from './DockShip'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
 import { podsShown } from './stationScene'
@@ -67,6 +68,7 @@ export function OfficeScene() {
         <CommBoard />
         <ActivityNotes />
         <ArchiveTag />
+        <DockShip />
       </group>
       <TaskTooltip />
     </>

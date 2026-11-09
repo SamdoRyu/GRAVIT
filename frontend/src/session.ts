@@ -42,6 +42,11 @@ interface SessionState {
    * 이 계정이 처음 고른 것이면 도착 장면을 한 번 보여 준다(앱을 열 때 자동으로 들어가는 것은 장면 없이)
    */
   enterWorkspace: (workspaceId: Id) => Promise<void>
+  /**
+   * 사무실 안에서 다른 사무실로 옮긴다(도킹 우주선 — scene/DockShip.tsx). 다음에 앱을 열면 그 사무실로. 우주선 비행이 도착 연출이라
+   * 처음 도착 장면은 보여 주지 않는다
+   */
+  travelToWorkspace: (workspaceId: Id) => Promise<void>
   /** 도착 장면이 끝났다 */
   finishLanding: () => void
   /** 사무실을 닫고 사무실 고르기로 — 다음에 앱을 열어도 고르기부터 */
@@ -211,6 +216,7 @@ export const useSession = create<SessionState>((set, get) => {
     },
 
     enterWorkspace: (workspaceId) => open(workspaceId, true),
+    travelToWorkspace: (workspaceId) => open(workspaceId, false),
     finishLanding: () => set({ landing: false }),
 
     leaveWorkspace: () => {

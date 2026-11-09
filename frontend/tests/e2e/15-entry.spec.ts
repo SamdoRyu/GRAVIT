@@ -1,7 +1,7 @@
-// 15. 진입 흐름 (#64 · #68 화면 몫): 사무실 고르기 → 사무실 → 사무실 바꾸기 → 로그아웃 → 로그인(심사용 · GitHub mock),
+// 15. 진입 흐름 (#64 · #68 화면 몫): 사무실 고르기 → 사무실 → 사무실 바꾸기(도킹 우주선의 "정거장 목록 화면으로") → 로그아웃 → 로그인(심사용 · GitHub mock),
 // 지난번 사무실 기억. mock 기본 세션은 GitHub 사용자(김옥토)이고 팀 사무실 · 시연 사무실에 들어갈 수 있다.
 import type { Page } from '@playwright/test'
-import { expect, readStore, test } from './fixtures'
+import { expect, openShip, readStore, test } from './fixtures'
 
 const picker = (page: Page) => page.getByRole('region', { name: '사무실 고르기' })
 const login = (page: Page) => page.getByRole('region', { name: '정거장에 탑승하기' })
@@ -38,10 +38,12 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   expect(await readStore(page, (s) => s.office?.workspaceId)).toBe('ws_1')
 
-  // 사무실 바꾸기 → 고르기, 새로 고침해도 고르기부터
+  // 사무실 바꾸기(도킹 우주선 → 정거장 목록 화면으로) → 고르기, 새로 고침해도 고르기부터. 더보기에는 이제 없다
   const menu = await openMenu(page)
   await expect(menu.getByText('김옥토')).toBeVisible()
-  await menu.getByRole('menuitem', { name: '사무실 바꾸기' }).click()
+  await expect(menu.getByRole('menuitem', { name: '사무실 바꾸기' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await (await openShip(page)).getByRole('button', { name: '정거장 목록 화면으로' }).click()
   await expect(picker(page)).toBeVisible()
   await page.reload()
   await expect(picker(page)).toBeVisible()
@@ -132,7 +134,7 @@ test('a GitHub user with no visible organization still sees the app-install hint
     const { useSession } = await import(/* @vite-ignore */ path)
     useSession.setState({ listRepositories: async () => ({ organizations: [] }) })
   })
-  await (await openMenu(page)).getByRole('menuitem', { name: '사무실 바꾸기' }).click()
+  await (await openShip(page)).getByRole('button', { name: '정거장 목록 화면으로' }).click()
   const repos = picker(page).getByRole('region', { name: '레포에서 사무실 열기' })
   await expect(repos.getByText(/팀 레포가 안 보이면 .*GRAVIT GitHub 앱/)).toBeVisible()
   await expect(repos.getByRole('region')).toHaveCount(0)
