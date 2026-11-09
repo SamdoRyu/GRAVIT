@@ -4,7 +4,9 @@ import { expect, openApp, readStore, test } from './fixtures'
 test('loads the office: HUD, KPI numbers, 3D canvas, no console errors', async ({ page, source }) => {
   await openApp(page, source)
 
-  await expect(page.getByRole('banner').getByText('팀 오피스')).toBeVisible()
+  // 상단 바 — GRAVIT | 지금 연 저장소 이름(team-samdo/gitvillage → gitvillage)
+  await expect(page.getByRole('banner').getByText('GRAVIT', { exact: true })).toBeVisible()
+  await expect(page.getByRole('banner').getByText('gitvillage', { exact: true })).toBeVisible()
   await expect(page.getByRole('tablist').getByRole('tab', { name: /^칸반/ })).toBeVisible()
   await expect(page.getByRole('region', { name: '관리 패널' })).toBeVisible()
   // 사람별 업무량 표현은 HUD에 없다 — 팀원 탭 · 업무량 오버레이 · 업무 재배정 추천 (FR-FLOW-06, #102 T5-c-2)

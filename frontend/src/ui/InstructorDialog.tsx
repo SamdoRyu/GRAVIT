@@ -73,7 +73,7 @@ export function InstructorDialog() {
   const candidates = loaded?.candidates ? assignableCandidates(loaded.candidates) : null
 
   return (
-    <Modal title="강사" onClose={close} width={480}>
+    <Modal title="강사 관리" onClose={close} width={480}>
       <div className="modal-body ins">
         <p className="dim small ins-lead">강사는 이 사무실을 보고, 팀이 요청한 피드백 · 도움 요청에 답해요. 지정과 해제는 레포 관리자가 해요.</p>
         {failed ? (

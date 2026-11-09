@@ -1,0 +1,442 @@
+/* GRAVIT — 시안 B "크림 라이트"(밝고 부드러운 히어로 톤) HUD: top bar · more menu · right management panel.
+ * Only the TOPBAR, the MORE MENU and the PANEL (tabs · search · cards) are restyled. The 3D scene, scene assets,
+ * kanban data, meetings, session and permissions are not changed.
+ * Namespaced under .hud.ivory-hud to avoid restyling other screens.
+ */
+.hud.ivory-hud {
+  --cream-paper: rgba(249, 247, 255, 0.93);
+  --cream-solid: #faf8ff;
+  --cream-stroke: rgba(132, 114, 214, 0.2);
+  --cream-ink: #24204b;
+  --cream-muted: #77739b;
+  --cream-purple: #7656ee;
+  --cream-purple-strong: #6545e3;
+  --cream-purple-soft: #ece6ff;
+  --cream-purple-line: #d9cffd;
+  --cream-green-bg: #e8eee6;
+  --cream-green: #4b6b55;
+  --cream-shadow: 0 14px 36px rgba(46, 33, 120, 0.18), 0 2px 8px rgba(46, 33, 120, 0.06);
+}
+
+/* A full-width header stays above the right rail, like the approved mockup. */
+.hud.ivory-hud .hud-top {
+  right: 12px;
+}
+.hud.ivory-hud .rail {
+  top: 96px;
+}
+
+/* ---- top bar ---- */
+.hud.ivory-hud .topbar.glass {
+  min-height: 74px;
+  padding: 9px 16px 9px 22px;
+  gap: 9px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  background: var(--cream-paper);
+  color: var(--cream-ink);
+  box-shadow: var(--cream-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.hud.ivory-hud .topbar .brand {
+  gap: 10px;
+  min-width: 0;
+}
+.hud.ivory-hud .topbar .brand-orbit {
+  width: 33px;
+  height: 33px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--cream-purple);
+}
+.hud.ivory-hud .topbar .brand-orbit svg {
+  width: 31px;
+  height: 31px;
+}
+.hud.ivory-hud .topbar .brand-logo {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+  color: var(--cream-ink);
+}
+.hud.ivory-hud .topbar .brand-divider {
+  width: 1px;
+  height: 29px;
+  margin: 0 8px;
+  background: var(--cream-stroke);
+}
+/* 지금 연 저장소 이름 — 구분선 오른쪽, 양옆 5px */
+.hud.ivory-hud .topbar .brand-repo {
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cream-ink);
+}
+
+.hud.ivory-hud .topbar .kpis {
+  height: 48px;
+}
+.hud.ivory-hud .topbar .kpi {
+  padding-inline: 17px;
+  border-left-color: var(--cream-stroke);
+  color: var(--cream-ink);
+}
+.hud.ivory-hud .topbar .kpi-value {
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -0.045em;
+}
+.hud.ivory-hud .topbar .kpi-label {
+  font-size: 12px;
+  color: var(--cream-muted);
+}
+.hud.ivory-hud .topbar .kpi-click:hover .kpi-value {
+  color: var(--cream-purple);
+}
+
+.hud.ivory-hud .topbar .sync-status {
+  min-height: 35px;
+  height: auto;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border-color: rgba(75, 107, 85, 0.1);
+  font-weight: 600;
+}
+.hud.ivory-hud .topbar .sync-ok {
+  background: var(--cream-green-bg);
+  color: var(--cream-green);
+}
+.hud.ivory-hud .topbar .sync-running {
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple);
+}
+/* Failure status keeps the existing semantic red; never make errors look green. */
+.hud.ivory-hud .topbar .sync-failing {
+  background: #fbe4e6;
+  color: #b23a4a;
+}
+
+/* "회의" — 시안의 채운 보라 버튼 */
+.hud.ivory-hud .topbar > .btn {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: linear-gradient(135deg, #8d70f6, var(--cream-purple-strong));
+  color: #fff;
+  font-weight: 650;
+  box-shadow: 0 6px 16px rgba(101, 69, 227, 0.32);
+}
+.hud.ivory-hud .topbar > .btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7f60f2, #5838d6);
+  border-color: transparent;
+  color: #fff;
+}
+.hud.ivory-hud .topbar > .btn:focus-visible {
+  outline: 2px solid var(--cream-purple-strong);
+  outline-offset: 2px;
+}
+.hud.ivory-hud .topbar > .btn .badge {
+  background: #fff;
+  color: var(--cream-purple-strong);
+}
+/* 더보기 — 시안의 동그란 선 버튼(종 버튼 자리) */
+.hud.ivory-hud .topbar .menu-wrap > .btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--cream-purple-line);
+  background: #fff;
+  color: var(--cream-purple-strong);
+  box-shadow: 0 3px 10px rgba(46, 33, 120, 0.08);
+}
+.hud.ivory-hud .topbar .menu-wrap > .btn:hover,
+.hud.ivory-hud .topbar .menu-wrap > .btn[aria-expanded='true'] {
+  background: var(--cream-purple-soft);
+  border-color: rgba(118, 86, 238, 0.45);
+  color: var(--cream-purple-strong);
+}
+.hud.ivory-hud .topbar .meet-live {
+  border-color: rgba(118, 86, 238, 0.22);
+  background: var(--cream-purple-soft);
+}
+.hud.ivory-hud .topbar .meet-live .meet-end {
+  background: #fff;
+  color: var(--cream-purple-strong);
+}
+
+/* Display-only account indicator; account actions remain in the existing menu. */
+.hud.ivory-hud .topbar .topbar-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: linear-gradient(145deg, #a99be8, #7c6cd0);
+  box-shadow: 0 0 0 1px var(--cream-purple-line), 0 3px 10px rgba(46, 33, 120, 0.12);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ---- more menu ---- */
+.hud.ivory-hud .ivory-more-menu.glass {
+  width: 266px;
+  min-width: 266px;
+  max-width: calc(100vw - 24px);
+  max-height: min(73vh, 590px);
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 20px;
+  background: rgba(250, 248, 255, 0.98);
+  border: 1px solid var(--cream-purple-line);
+  color: var(--cream-ink);
+  box-shadow: 0 20px 44px rgba(46, 33, 120, 0.22), 0 3px 12px rgba(46, 33, 120, 0.08);
+  scrollbar-width: thin;
+}
+.hud.ivory-hud .ivory-more-menu .menu-group {
+  display: grid;
+  gap: 2px;
+}
+.hud.ivory-hud .ivory-more-menu .menu-heading {
+  display: block;
+  padding: 8px 11px 5px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: #8a86ab;
+}
+.hud.ivory-hud .ivory-more-menu .menu-item {
+  min-height: 39px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--cream-ink);
+  font-weight: 550;
+  text-align: left;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+.hud.ivory-hud .ivory-more-menu .menu-item svg {
+  color: #7d68d3;
+  flex: none;
+}
+.hud.ivory-hud .ivory-more-menu .menu-item:hover:not(:disabled),
+.hud.ivory-hud .ivory-more-menu .menu-item:focus-visible {
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple-strong);
+}
+.hud.ivory-hud .ivory-more-menu .menu-sep {
+  margin: 9px 3px 6px;
+  background: var(--cream-stroke);
+}
+.hud.ivory-hud .ivory-more-menu .menu-me {
+  padding: 3px 10px 8px;
+  font-size: 12px;
+  color: var(--cream-muted);
+}
+.hud.ivory-hud .ivory-more-menu .menu-role {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--cream-purple-strong);
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--cream-purple-soft);
+}
+.hud.ivory-hud .ivory-more-menu .menu-danger,
+.hud.ivory-hud .ivory-more-menu .menu-danger svg {
+  color: #b2465a;
+}
+.hud.ivory-hud .ivory-more-menu .menu-danger:hover:not(:disabled) {
+  background: #fbe8ec;
+  color: #a2324a;
+}
+
+/* ---- right management panel (tabs · search · cards) ---- */
+.hud.ivory-hud .rail .panel.glass {
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  background: var(--cream-paper);
+  color: var(--cream-ink);
+  box-shadow: var(--cream-shadow);
+}
+.hud.ivory-hud .rail .panel-head {
+  padding: 12px 12px 8px 14px;
+  border-bottom: 0;
+}
+.hud.ivory-hud .rail .tabs {
+  gap: 4px;
+}
+.hud.ivory-hud .rail .tabs button {
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 12px;
+  color: var(--cream-ink);
+  font-weight: 600;
+}
+.hud.ivory-hud .rail .tabs button:hover {
+  background: rgba(236, 230, 255, 0.6);
+  color: var(--cream-purple-strong);
+}
+.hud.ivory-hud .rail .tabs button.is-on {
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple-strong);
+  font-weight: 700;
+}
+.hud.ivory-hud .rail .tab-count {
+  color: var(--cream-purple);
+  opacity: 0.85;
+}
+.hud.ivory-hud .rail .panel-head .btn-ghost {
+  color: var(--cream-ink);
+}
+.hud.ivory-hud .rail .panel-head .btn-ghost:hover:not(:disabled) {
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple-strong);
+}
+.hud.ivory-hud .rail .filters {
+  padding: 4px 14px 10px;
+  border-bottom: 0;
+}
+.hud.ivory-hud .rail .search {
+  color: var(--cream-muted);
+}
+.hud.ivory-hud .rail .search > svg {
+  left: 12px;
+}
+.hud.ivory-hud .rail .search input {
+  height: 38px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--cream-purple-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--cream-ink);
+  font-size: var(--fs-m);
+}
+.hud.ivory-hud .rail .search input::placeholder {
+  color: #9894b8;
+}
+.hud.ivory-hud .rail .search input:focus {
+  border-color: var(--cream-purple);
+  box-shadow: 0 0 0 3px rgba(118, 86, 238, 0.16);
+}
+.hud.ivory-hud .rail .col-head strong {
+  color: var(--cream-ink);
+  font-weight: 700;
+}
+.hud.ivory-hud .rail .card {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(118, 86, 238, 0.1), 0 4px 12px rgba(46, 33, 120, 0.05);
+}
+.hud.ivory-hud .rail .card:hover,
+.hud.ivory-hud .rail .card.is-hover {
+  box-shadow: 0 0 0 1px rgba(118, 86, 238, 0.24), 0 8px 18px rgba(46, 33, 120, 0.1);
+}
+.hud.ivory-hud .rail .card.is-selected {
+  box-shadow: 0 0 0 1.5px var(--cream-purple), 0 8px 18px rgba(101, 69, 227, 0.16);
+}
+/* 막힌 이슈 · PR은 왼쪽 빨간 줄을 그대로 둔다(위 카드 그림자가 덮지 않게) */
+.hud.ivory-hud .rail .card-v1.is-blocked {
+  box-shadow: inset 3px 0 0 var(--bad), 0 0 0 1px rgba(118, 86, 238, 0.1), 0 4px 12px rgba(46, 33, 120, 0.05);
+}
+/* 다른 탭의 카드도 같은 둥근 모서리(상태별 테두리 · 배경은 각 탭 CSS 그대로) */
+.hud.ivory-hud .rail .help-item,
+.hud.ivory-hud .rail .req-item,
+.hud.ivory-hud .rail .act-item,
+.hud.ivory-hud .rail .help-comment {
+  border-radius: 16px;
+}
+/* 하위 탭(회고 · 결정 기록 등) 선택 강조 */
+.hud.ivory-hud .rail .seg button {
+  border-radius: 10px;
+  color: var(--cream-ink);
+}
+.hud.ivory-hud .rail .seg button.is-on {
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple-strong);
+  font-weight: 700;
+}
+/* 주요 버튼 — 도움 요청 쓰기 · 올리기 · 스탠드업 저장/고치기: 흰 글자의 보라 버튼, 마우스를 올려도 배경 · 테두리는 그대로.
+   .hud button { color: inherit }가 .btn-primary의 흰 글자를 덮어 패널 글자색이 되던 것을 바로잡는다 */
+.hud.ivory-hud .rail .help-new,
+.hud.ivory-hud .rail form[aria-label='도움 요청 쓰기'] button[type='submit'],
+.hud.ivory-hud .rail form[aria-label='내 스탠드업'] button[type='submit'] {
+  border: 1px solid transparent;
+  background: var(--cream-purple-strong);
+  color: #fff;
+  font-weight: 650;
+}
+.hud.ivory-hud .rail .help-new:hover:not(:disabled),
+.hud.ivory-hud .rail form[aria-label='도움 요청 쓰기'] button[type='submit']:hover:not(:disabled),
+.hud.ivory-hud .rail form[aria-label='내 스탠드업'] button[type='submit']:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--cream-purple-strong);
+  color: #fff;
+}
+/* 도움 요청 쓰기 — + 아이콘이 있는 둥근 알약 */
+.hud.ivory-hud .rail .help-new {
+  height: 36px;
+  padding: 0 16px 0 13px;
+  gap: 6px;
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(101, 69, 227, 0.26);
+}
+.hud.ivory-hud .rail .help-new svg {
+  color: #fff;
+}
+.hud.ivory-hud .rail .kind {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--cream-purple-soft);
+  color: var(--cream-purple-strong);
+}
+.hud.ivory-hud .rail .gh-link {
+  color: #3e357f;
+}
+
+@media (max-width: 1100px) {
+  /* Respect the existing responsive overlay panel positioning. */
+  .hud.ivory-hud .rail {
+    top: var(--top-h, 94px);
+  }
+  .hud.ivory-hud .topbar .brand-logo,
+  .hud.ivory-hud .topbar .brand-divider {
+    display: none;
+  }
+  .hud.ivory-hud .topbar {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+  .hud.ivory-hud .topbar .kpi {
+    padding-inline: 10px;
+  }
+}
+@media (max-width: 700px) {
+  .hud.ivory-hud .topbar.glass { min-height: 62px; padding: 8px 10px; border-radius: 28px; }
+  .hud.ivory-hud .topbar .topbar-avatar { display: none; }
+  .hud.ivory-hud .topbar .brand-mark { width: 26px; height: 26px; }
+  .hud.ivory-hud .topbar .brand-name { font-size: 13px; }
+  .hud.ivory-hud .topbar .kpi-value { font-size: 16px; }
+  .hud.ivory-hud .topbar .kpi-label { font-size: 10px; }
+  .hud.ivory-hud .topbar .sync-status { min-height: 32px; }
+  .hud.ivory-hud .topbar > .btn { height: 34px; padding: 0 14px; }
+  .hud.ivory-hud .topbar .menu-wrap > .btn { width: 34px; height: 34px; }
+  .hud.ivory-hud .ivory-more-menu.glass { max-height: min(72vh, 490px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud.ivory-hud .ivory-more-menu { animation: none; }
+}
