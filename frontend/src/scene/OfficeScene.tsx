@@ -6,6 +6,7 @@ import { Suspense, useEffect } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
 import { ActivityNotes } from './ActivityNotes'
+import { AgendaTrash } from './AgendaTrash'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
 import { CameraRig } from './CameraRig'
@@ -67,6 +68,7 @@ export function OfficeScene() {
         </Suspense>
         <TaskBoxes />
         <MeetingRoomState />
+        <AgendaTrash />
         <RequirementDeck />
         <CommBoard />
         {/* 강사 우주선(#290) — 라코 glTF를 기다리는 동안에도 나머지 장면은 그대로 */}
