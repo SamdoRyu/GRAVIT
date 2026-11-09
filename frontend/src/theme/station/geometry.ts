@@ -54,10 +54,18 @@ export function podConsole(pod: Pick<Pod, 'x' | 'z' | 'axis' | 'outward'>): { x:
   return { x, z, ry }
 }
 
-/** 승무원이 자기 포드의 콘솔 화면을 바라보게(#302) — 자리에서 콘솔 쪽 방향(라디안, 0 = +z) */
+/** 승무원이 시안 자리에서 콘솔 쪽(포드 축을 따라 바깥쪽)으로 다가서는 거리(시안 단위) — 아주 조금만(#302) */
+export const CREW_STEP_TO_CONSOLE = 0.5
+
+/**
+ * 승무원이 자기 포드의 콘솔 화면을 바라보게(#302): 시안 자리에서 콘솔 쪽으로 CREW_STEP_TO_CONSOLE만큼 다가서고(옆으로는 그대로라
+ * 작업 상자 쪽은 비운 채), 그 자리에서 콘솔 쪽을 본다(라디안, 0 = +z).
+ */
 function facingConsole(pod: Pod): Pod {
   const c = podConsole(pod)
-  return { ...pod, crew: { ...pod.crew, facing: Math.atan2(c.x - pod.crew.x, c.z - pod.crew.z) } }
+  const x = pod.crew.x + (pod.axis === 'x' ? pod.outward * CREW_STEP_TO_CONSOLE : 0)
+  const z = pod.crew.z + (pod.axis === 'z' ? pod.outward * CREW_STEP_TO_CONSOLE : 0)
+  return { ...pod, crew: { x, z, facing: Math.atan2(c.x - x, c.z - z) } }
 }
 
 /** 북쪽 줄 포드(콘솔이 북쪽) — 시안 K 포드의 상대 위치 */

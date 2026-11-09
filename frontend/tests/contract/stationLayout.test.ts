@@ -130,4 +130,14 @@ describe('작업 포드 승무원은 자기 컴퓨터를 바라본다 (#302)', (
       assert.ok(diff(c.ry, toConsole + Math.PI) < Math.PI / 4, `포드 ${i}: 화면이 승무원 쪽`)
     }
   })
+
+  it('시안 자리보다 콘솔 쪽으로 조금만 다가선다 — 책상과 작업 상자는 넉넉히 비운다', () => {
+    for (const [i, pod] of PODS.entries()) {
+      const c = podConsole(pod)
+      const along = pod.axis === 'x' ? Math.abs(c.x - pod.crew.x) : Math.abs(c.z - pod.crew.z)
+      // 시안 자리는 콘솔에서 2.9~3.1 — 0.5 다가서 2.4~2.6, 책상 앞(콘솔 깊이 0.8 + 상판 0.65)에는 닿지 않는다
+      assert.ok(along > 2.3 && along < 2.7, `포드 ${i}: 콘솔까지 ${along.toFixed(2)}`)
+      assert.ok(Math.hypot(pod.crew.x - pod.cargo.x, pod.crew.z - pod.cargo.z) > 1.2, `포드 ${i}: 작업 상자와 떨어짐`)
+    }
+  })
 })
