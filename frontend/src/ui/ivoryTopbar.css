@@ -434,18 +434,25 @@
   color: #fff;
 }
 
-/* ---- 회의 시작 · 안건 올리기 · 활동 기록 대화상자 (#269) — 같은 보라 버튼, 흰 글자, hover 때도 그대로 ----
-   대화상자 마크업은 C의 MeetingDialogs.tsx · ActivityDialog.tsx 그대로, Modal의 aria-label(제목)로 고른다 */
-.hud.ivory-hud .modal[aria-label='회의 시작'] .modal-foot .btn-primary,
-.hud.ivory-hud .modal[aria-label='안건 올리기'] .modal-foot .btn-primary,
-.hud.ivory-hud .modal[aria-label='활동 기록'] form[aria-label='활동 기록하기'] .btn-primary,
-.hud.ivory-hud .modal[aria-label='회의 시작'] .modal-foot .btn-primary:hover:not(:disabled),
-.hud.ivory-hud .modal[aria-label='안건 올리기'] .modal-foot .btn-primary:hover:not(:disabled),
-.hud.ivory-hud .modal[aria-label='활동 기록'] form[aria-label='활동 기록하기'] .btn-primary:hover:not(:disabled) {
+/* ---- 사무실 화면의 주요 버튼 전부 (#269) — 도움 요청 "올리기"와 같은 보라 · 흰 글자, hover 때도 그대로 ----
+   오른쪽 패널(도움 요청 · 스탠드업 · 주간 · 결정 기록 · 회고 · 기술 결정 카드 · 평가 …)과 대화상자(회의 · 안건 · 활동 기록 ·
+   기간 · 컨벤션 라이브러리 · 요구사항 대기 목록 …)의 .btn-primary. 마크업은 각 담당 파일 그대로, 색만 여기서.
+   hud.css의 파랑(--accent) · hover 진한 파랑을 덮고, .hud button { color: inherit }가 흰 글자를 덮던 것도 바로잡는다.
+   포커스 테두리(.hud :focus-visible) · 비활성화(.btn:disabled 반투명)는 기존 규칙 그대로. 입장 화면(.entry-card)은 HUD 밖이라 그대로 */
+.hud.ivory-hud .btn-primary,
+.hud.ivory-hud .btn-primary:hover:not(:disabled) {
   border: 1px solid transparent;
   background: var(--cream-purple-strong);
   color: #fff;
   font-weight: 650;
+}
+/* 기술 결정 카드 만들기 — 넓게 볼 때 버튼이 "카드를 만들 PR" 글씨 + 선택 상자 가운데에 떠서 생기던 단차를 없앤다:
+   버튼을 선택 상자 아래 선에 맞추고 높이도 선택 상자와 같게 */
+.hud.ivory-hud .rail .retro form[aria-label='기술 결정 카드 만들기'] {
+  align-items: flex-end;
+}
+.hud.ivory-hud .rail .retro form[aria-label='기술 결정 카드 만들기'] > .btn {
+  height: 32px;
 }
 
 @media (max-width: 1100px) {
