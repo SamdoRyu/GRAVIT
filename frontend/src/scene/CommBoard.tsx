@@ -30,19 +30,19 @@ function openBoardPanel() {
 const pill = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  padding: '3px 10px',
+  gap: 5,
+  padding: '2px 8px',
   borderRadius: 999,
   background: 'rgba(255,255,255,0.96)',
-  boxShadow: '0 2px 10px rgba(30,45,90,0.18)',
-  font: '600 11.5px var(--font, sans-serif)',
+  boxShadow: '0 2px 8px rgba(30,45,90,0.18)',
+  font: '600 10px var(--font, sans-serif)',
   color: '#1b2333',
   whiteSpace: 'nowrap' as const,
   userSelect: 'none' as const,
 }
 
 /** 새 강사 답변 점(#290) — 알약 오른쪽 위 모서리에 겹친다. 알약이 없으면(열린 도움 요청 0 — 안건이 된 글의 답변) 점만 */
-const dotBase = { display: 'block', width: 9, height: 9, borderRadius: '50%', background: '#e5484d', boxShadow: '0 0 0 2px #fff' } as const
+const dotBase = { display: 'block', width: 7, height: 7, borderRadius: '50%', background: '#e5484d', boxShadow: '0 0 0 1.5px #fff' } as const
 const cornerDot = { ...dotBase, position: 'absolute' as const, top: -3, right: -3 }
 const soloDot = dotBase
 
