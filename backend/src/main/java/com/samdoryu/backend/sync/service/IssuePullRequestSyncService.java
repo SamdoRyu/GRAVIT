@@ -3,6 +3,7 @@ package com.samdoryu.backend.sync.service;
 import com.samdoryu.backend.evaluation.service.EvaluationRoundService;
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.GithubReaderSelector;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -11,12 +12,14 @@ import com.samdoryu.backend.github.dto.GithubReview;
 import com.samdoryu.backend.github.dto.GithubUser;
 import com.samdoryu.backend.sync.domain.StoredGithubJson;
 import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionCommit;
 import com.samdoryu.backend.sync.domain.SubmissionIssueLink;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskAssignee;
 import com.samdoryu.backend.sync.domain.TaskClosedReason;
 import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionCommitRepository;
 import com.samdoryu.backend.sync.repository.SubmissionIssueLinkRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
@@ -39,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 이슈 · PR · 리뷰 · 커밋 시각 · 라벨 · PR–이슈 공식 연결을 읽어 앱 모델로 저장한다(#69 · #71 · FR-GH-02 · 04,
+ * 이슈 · PR · 리뷰 · 커밋(시각 · 사용자별 커밋 #261) · 라벨 · PR–이슈 공식 연결을 읽어 앱 모델로 저장한다(#69 · #71 · FR-GH-02 · 04,
  * CONTRACTS.md 「2」 소유와 변경 주체). 팀원은 먼저 {@link WorkspaceSyncService}가 맞춘다.
  * <ul>
  *   <li>GitHub 식별자 {@code (사무실, 번호)}로 앱 행을 찾아 덮어쓰고, 없으면 만든다. 행을 지우지 않는다.</li>
@@ -64,18 +67,20 @@ public class IssuePullRequestSyncService {
     private final TaskAssigneeRepository taskAssigneeRepository;
     private final SubmissionRepository submissionRepository;
     private final SubmissionIssueLinkRepository submissionIssueLinkRepository;
+    private final SubmissionCommitRepository submissionCommitRepository;
     private final EvaluationRoundService evaluationRoundService;
 
     public IssuePullRequestSyncService(WorkspaceService workspaceService, GithubReaderSelector readerSelector,
             TaskRepository taskRepository, TaskAssigneeRepository taskAssigneeRepository,
             SubmissionRepository submissionRepository, SubmissionIssueLinkRepository submissionIssueLinkRepository,
-            EvaluationRoundService evaluationRoundService) {
+            SubmissionCommitRepository submissionCommitRepository, EvaluationRoundService evaluationRoundService) {
         this.workspaceService = workspaceService;
         this.readerSelector = readerSelector;
         this.taskRepository = taskRepository;
         this.taskAssigneeRepository = taskAssigneeRepository;
         this.submissionRepository = submissionRepository;
         this.submissionIssueLinkRepository = submissionIssueLinkRepository;
+        this.submissionCommitRepository = submissionCommitRepository;
         this.evaluationRoundService = evaluationRoundService;
     }
 
@@ -185,6 +190,7 @@ public class IssuePullRequestSyncService {
         List<StoredGithubJson.Review> reviews = reader.reviews(repo, pr.number()).stream()
                 .map(IssuePullRequestSyncService::storedReview)
                 .toList();
+        List<GithubCommit> commits = reader.pullRequestCommits(repo, pr.number());
         GithubUser author = pr.author();
 
         Submission fresh = Submission.builder()
@@ -199,7 +205,7 @@ public class IssuePullRequestSyncService {
                 .reviewRequestsJson(JSON.writeValueAsString(reviewRequests))
                 .reviewsJson(JSON.writeValueAsString(reviews))
                 .labelsJson(JSON.writeValueAsString(pr.labels()))
-                .lastCommitAt(reader.lastCommitAt(repo, pr.number()).orElse(null))
+                .lastCommitAt(commits.isEmpty() ? null : commits.get(commits.size() - 1).committedAt())
                 .githubCreatedAt(pr.createdAt())
                 .githubUpdatedAt(pr.updatedAt())
                 .mergedAt(state == SubmissionState.MERGED ? pr.mergedAt() : null)
@@ -210,7 +216,37 @@ public class IssuePullRequestSyncService {
         Submission submission = existing.map(s -> s.overwriteFrom(fresh))
                 .orElseGet(() -> submissionRepository.save(fresh));
         syncIssueLinks(workspace, submission, reader.linkedIssues(repo, pr.number()));
+        saveCommits(workspace, submission, commits, matcher, now);
         evaluationRoundService.openRoundForSync(submission, now);
+    }
+
+    /**
+     * PR의 커밋을 저장한다 — 사용자별 커밋(스탠드업 미리 채우기, #261). {@code (사무실, SHA)}로 찾아 이미 있으면 작성자 팀원 짝만
+     * 다시 맞추고, 없으면 만든다. 지우지 않는다. 작성자는 이슈 담당자 · PR 작성자와 같은 규칙으로 지금 팀원과 짝짓는다.
+     */
+    private void saveCommits(Workspace workspace, Submission submission, List<GithubCommit> commits,
+            GithubMemberMatcher matcher, Instant now) {
+        if (commits.isEmpty()) {
+            return;
+        }
+        Map<String, SubmissionCommit> existing = submissionCommitRepository
+                .findByWorkspaceIdAndShaIn(workspace.getId(), commits.stream().map(GithubCommit::sha).toList())
+                .stream()
+                .collect(Collectors.toMap(SubmissionCommit::getSha, Function.identity()));
+        for (GithubCommit commit : commits) {
+            Member authorMember = matcher.find(commit.author()).orElse(null);
+            SubmissionCommit row = existing.get(commit.sha());
+            if (row != null) {
+                row.refresh(authorMember, now);
+                continue;
+            }
+            GithubUser author = commit.author();
+            SubmissionCommit created = submissionCommitRepository.save(new SubmissionCommit(submission, commit.sha(),
+                    commit.title(), author == null ? null : author.id(), author == null ? null : author.login(),
+                    authorMember, commit.authoredAt(), commit.committedAt(), now));
+            // 같은 PR에 같은 SHA가 두 번 오면(드물다) 두 번째는 위 갱신으로 간다
+            existing.put(commit.sha(), created);
+        }
     }
 
     /**

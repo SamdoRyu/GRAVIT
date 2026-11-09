@@ -6,6 +6,7 @@ import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.github.GithubHttp;
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.dto.GithubCollaborator;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -88,12 +89,13 @@ public class GithubAppReader implements GithubReader {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record CommitDetailJson(CommitDateJson committer, CommitDateJson author) {
+    record CommitDetailJson(CommitDateJson committer, CommitDateJson author, String message) {
     }
 
+    /** @param author 커밋 이메일과 이어진 GitHub 계정 — 없으면 null */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record CommitJson(CommitDetailJson commit) {
-        Instant date() {
+    record CommitJson(String sha, UserJson author, CommitDetailJson commit) {
+        Instant committedAt() {
             if (commit == null) {
                 return null;
             }
@@ -101,6 +103,13 @@ public class GithubAppReader implements GithubReader {
                 return commit.committer().date();
             }
             return commit.author() == null ? null : commit.author().date();
+        }
+
+        Instant authoredAt() {
+            if (commit != null && commit.author() != null && commit.author().date() != null) {
+                return commit.author().date();
+            }
+            return committedAt();
         }
     }
 
@@ -255,13 +264,35 @@ public class GithubAppReader implements GithubReader {
         };
     }
 
-    /** {@code GET …/pulls/{n}/commits} — 마지막 커밋(목록의 끝)의 커밋 시각. */
+    /**
+     * {@code GET …/pulls/{n}/commits} — GitHub 순서(오래된 것부터). 작성자는 커밋 이메일과 이어진 GitHub 계정(없으면 null),
+     * 제목은 메시지 첫 줄. SHA나 시각이 없는 항목은 뺀다.
+     */
     @Override
-    public Optional<Instant> lastCommitAt(GithubRepoRef repo, int pullRequestNumber) {
+    public List<GithubCommit> pullRequestCommits(GithubRepoRef repo, int pullRequestNumber) {
         String token = tokens.token(repo.installationId());
-        List<CommitJson> commits = pages(token, uri -> uri.path("/repos/{owner}/{repo}/pulls/" + pullRequestNumber
-                + "/commits"), repo, CommitJson[].class, page -> page);
-        return commits.isEmpty() ? Optional.empty() : Optional.ofNullable(commits.get(commits.size() - 1).date());
+        List<GithubCommit> result = new ArrayList<>();
+        for (CommitJson commit : pages(token, uri -> uri.path("/repos/{owner}/{repo}/pulls/" + pullRequestNumber
+                + "/commits"), repo, CommitJson[].class, page -> page)) {
+            if (commit.sha() == null || commit.committedAt() == null) {
+                continue;
+            }
+            GithubUser author = commit.author() == null || commit.author().id() == null
+                    || commit.author().login() == null ? null : commit.author().toUser();
+            result.add(new GithubCommit(commit.sha(), author,
+                    firstLine(commit.commit() == null ? null : commit.commit().message()), commit.authoredAt(),
+                    commit.committedAt()));
+        }
+        return result;
+    }
+
+    /** 커밋 메시지 첫 줄(앞뒤 공백 없이). 메시지가 없으면 빈 문자열. */
+    static String firstLine(String message) {
+        if (message == null) {
+            return "";
+        }
+        int end = message.indexOf('\n');
+        return (end < 0 ? message : message.substring(0, end)).strip();
     }
 
     /** {@code GET …/collaborators?affiliation=all} — 콜라보레이터 전원(GitHub 사용자 ID · 로그인 · 사진 · admin). */

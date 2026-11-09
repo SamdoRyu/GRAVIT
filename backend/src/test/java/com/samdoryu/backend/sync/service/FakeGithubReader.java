@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.samdoryu.backend.github.GithubReader;
 import com.samdoryu.backend.github.dto.GithubCollaborator;
+import com.samdoryu.backend.github.dto.GithubCommit;
 import com.samdoryu.backend.github.dto.GithubIssue;
 import com.samdoryu.backend.github.dto.GithubIssueLink;
 import com.samdoryu.backend.github.dto.GithubPullRequest;
@@ -26,6 +27,8 @@ class FakeGithubReader implements GithubReader {
     List<GithubIssue> issues = new ArrayList<>();
     List<GithubPullRequest> pullRequests = new ArrayList<>();
     Map<Integer, List<GithubIssueLink>> links = new HashMap<>();
+    /** PR 번호 → 그 PR의 커밋(오래된 것부터). 없으면 커밋 없음. */
+    Map<Integer, List<GithubCommit>> commits = new HashMap<>();
     /** 넣으면 콜라보레이터를 읽을 때(동기화 첫 단계) 이 예외를 던진다 — GitHub 오류 흉내. */
     RuntimeException failWith;
     /** 이슈 변경분을 읽을 때 받은 기준 시각(null = 전부). */
@@ -67,8 +70,8 @@ class FakeGithubReader implements GithubReader {
     }
 
     @Override
-    public Optional<Instant> lastCommitAt(GithubRepoRef repo, int pullRequestNumber) {
-        return Optional.empty();
+    public List<GithubCommit> pullRequestCommits(GithubRepoRef repo, int pullRequestNumber) {
+        return commits.getOrDefault(pullRequestNumber, List.of());
     }
 
     @Override

@@ -82,8 +82,14 @@ class SeedGithubReaderTest {
                 .containsExactly(GithubReview.State.CHANGES_REQUESTED, GithubReview.State.APPROVED);
         assertThat(reader.reviews(GithubRepoRef.DEMO, 8)).isEmpty();
         assertThat(reader.reviews(GithubRepoRef.DEMO, 999)).isEmpty();
-        assertThat(reader.lastCommitAt(GithubRepoRef.DEMO, 7)).contains(Instant.parse("2026-11-04T05:50:00Z"));
-        assertThat(reader.lastCommitAt(GithubRepoRef.DEMO, 999)).isEmpty();
+        // PR 커밋 — 마지막 커밋이 PR의 마지막 커밋 시각, 작성자는 Seed 로그인 이름(#261)
+        assertThat(reader.pullRequestCommits(GithubRepoRef.DEMO, 7)).singleElement().satisfies(commit -> {
+            assertThat(commit.sha()).isEqualTo("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b");
+            assertThat(commit.author().login()).isEqualTo("seed-kim");
+            assertThat(commit.committedAt()).isEqualTo(Instant.parse("2026-11-04T05:50:00Z"));
+            assertThat(commit.authoredAt()).isEqualTo(Instant.parse("2026-11-04T05:50:00Z"));
+        });
+        assertThat(reader.pullRequestCommits(GithubRepoRef.DEMO, 999)).isEmpty();
     }
 
     @Test
