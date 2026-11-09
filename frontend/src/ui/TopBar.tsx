@@ -12,7 +12,7 @@ import { finiteOrNull, formatDuration, formatHours, formatMonthDay } from './for
 import { useNow } from './hooks'
 import { Icon } from './icons'
 import { useUi } from './uiState'
-import { ConnectionBanner } from './Toasts'
+import { SystemBanners } from './ErrorStates'
 import { SyncStatus } from './SyncStatus'
 import { confirmedAgenda, ongoingMeetingOf } from './meetingView'
 
@@ -325,8 +325,6 @@ function repoLabel(ws: WorkspaceSnapshot['workspace']): { name: string; full: st
 
 export function TopBar() {
   const me = useSession((state) => state.me)
-  // 사무실을 읽지 못했다(받은 Snapshot이 없음) — 데모 모델의 상태가 아니다
-  const failed = useOffice((s) => s.office?.status === 'error')
   const connection = useOffice((s) => s.connection)
   const snapshot = useOffice((s) => s.office?.snapshot ?? null)
   const repo = snapshot ? repoLabel(snapshot.workspace) : null
@@ -361,13 +359,8 @@ export function TopBar() {
         {me && <span className="topbar-avatar" title={me.user.displayName} aria-label={`로그인 사용자: ${me.user.displayName}`}>{me.user.displayName.trim().charAt(0) || '?'}</span>}
         <MoreMenu />
       </header>
-      {failed && (
-        <div className="error-banner" role="alert">
-          <span className="error-dot" />
-          데이터를 불러오지 못했어요
-        </div>
-      )}
-      <ConnectionBanner />
+      {/* 동기화 진행 중 · 동기화 실패 · 실시간 연결 끊김 · 최신 데이터 못 받음 (#274). 첫 읽기 실패 · 열 수 없음은 전체 화면(OfficeBlocker) */}
+      <SystemBanners />
       <TapTip />
       </div>
     </div>

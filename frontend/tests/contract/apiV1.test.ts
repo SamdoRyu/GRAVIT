@@ -297,6 +297,12 @@ describe('v1 api — 쓰기 · CSRF', () => {
     fake.next.push((_r, res) => sendError(res, 403, 'invalid'), (_r, res) => sendJson(res, 200, {}), (_r, res) => sendError(res, 403, 'invalid', '출처가 맞지 않아요'))
     await rejectsWith(api.requestSync('3'), 'invalid', '출처가 맞지 않아요')
     assert.equal(fake.requests.length, 3)
+    // 화면이 CSRF(403 invalid)를 입력 오류(400 invalid)와 나눌 수 있게 HTTP 상태를 함께 넘긴다 (#274)
+    fake.next.push((_r, res) => sendError(res, 403, 'invalid'), (_r, res) => sendJson(res, 200, {}), (_r, res) => sendError(res, 403, 'invalid'))
+    await assert.rejects(api.requestSync('3'), (e: unknown) => e instanceof DataError && e.code === 'invalid' && e.status === 403)
+    fake.next.push((_r, res) => sendError(res, 400, 'invalid', '이유를 적어 주세요'))
+    await assert.rejects(api.requestSync('3'), (e: unknown) => e instanceof DataError && e.code === 'invalid' && e.status === 400)
+    fake.requests.length = 0
 
     fake.requests.length = 0
     fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '강사는 동기화할 수 없어요'))
@@ -689,6 +695,8 @@ describe('v1 api — 에러', () => {
     await fake.close()
     const gone = createV1ApiDataSource({ baseUrl: url, csrfToken: () => null })
     await rejectsWith(gone.getMe(), 'unavailable', '서버에 연결할 수 없어요')
+    // 응답을 받지 못함 = status 0 — 쓰기라면 결과가 불확실해 화면은 자동으로 다시 보내지 않는다 (#274)
+    await assert.rejects(gone.getMe(), (e: unknown) => e instanceof DataError && e.status === 0)
     fake = await startFake() // afterEach가 닫을 서버
   })
 })

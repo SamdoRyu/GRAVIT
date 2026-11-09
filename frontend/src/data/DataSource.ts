@@ -249,9 +249,15 @@ export type DataErrorCode = ErrorCode
 /** DataSource가 거부할 때 이것을 던진다 — 화면은 `message`(한국어)를 보인다. */
 export class DataError extends Error {
   code: DataErrorCode
-  constructor(message: string, code: DataErrorCode = 'invalid') {
+  /**
+   * 서버가 돌려준 HTTP 상태. 같은 code라도 상태로 갈리는 때가 있다 — `invalid` 400(입력 오류) ↔ 403(CSRF · 요청 출처, CONTRACTS.md 「6」).
+   * 0 = 응답을 받지 못함(네트워크 — 쓰기가 서버에 닿았는지 모른다). undefined = 상태를 모름(mock 등 — code로만 판단)
+   */
+  status?: number
+  constructor(message: string, code: DataErrorCode = 'invalid', status?: number) {
     super(message)
     this.name = 'DataError'
     this.code = code
+    if (status !== undefined) this.status = status
   }
 }

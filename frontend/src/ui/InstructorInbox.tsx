@@ -3,11 +3,13 @@
 // 두 곳에서 같은 목록을 쓴다. 항목을 누르면 그 사무실을 열고 관리 패널의 해당 탭으로 간다 — 답은 각 화면의 원래 API로 쓴다.
 // 강사(MeResponse.isInstructor)에게만 보인다. 숨김은 편의이고 서버가 다시 검사한다(403). 저장하지 않는 계산 값이라 열 때마다 읽는다.
 import { useEffect, useState } from 'react'
+import { panelProblem, type PanelProblem } from '../data/rules/errors'
 import { DEFAULT_INBOX_FILTER, INBOX_FILTERS, INBOX_KIND_LABEL, answeredParam, inboxDestination, type InboxFilter } from '../data/rules/inbox'
 import type { InboxItem } from '../data/types'
 import { useSession } from '../session'
 import { useOffice } from '../store'
 import { Modal } from './Dialogs'
+import { PanelEmpty, PanelState } from './ErrorStates'
 import { relativeTime } from './format'
 import { useNow } from './hooks'
 import { useUi } from './uiState'
@@ -47,12 +49,16 @@ export function InboxList({ onOpen }: { onOpen?: () => void }) {
   const key = `${filter}|${reload}`
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [opening, setOpening] = useState<string | null>(null)
+  // 읽기 실패의 원인 — 강사 아님(권한) ↔ 조회 실패(다시 불러오기)를 목록 자리에서 나눈다 (#274 — D 공용)
+  const [problem, setProblem] = useState<{ key: string; value: PanelProblem } | null>(null)
 
   useEffect(() => {
     let alive = true
     void useSession
       .getState()
-      .loadInstructorInbox(answeredParam(filter))
+      .loadInstructorInbox(answeredParam(filter), (e) => {
+        if (alive) setProblem({ key, value: panelProblem('inbox', e) })
+      })
       .then((value) => {
         if (alive) setLoaded({ key, value })
       })
@@ -62,6 +68,7 @@ export function InboxList({ onOpen }: { onOpen?: () => void }) {
   }, [filter, key])
 
   const current = loaded?.key === key ? loaded.value : undefined
+  const failure = problem?.key === key && problem.value.kind === 'state' ? problem.value : null
 
   const open = async (item: InboxItem) => {
     setOpening(itemKey(item))
@@ -83,16 +90,9 @@ export function InboxList({ onOpen }: { onOpen?: () => void }) {
           요청함을 읽는 중…
         </p>
       ) : current === null ? (
-        <div className="inbox-state">
-          <p className="dim small">요청함을 불러오지 못했어요.</p>
-          <button type="button" className="btn btn-sm" onClick={() => setReload((n) => n + 1)}>
-            다시 읽기
-          </button>
-        </div>
+        failure && <PanelState problem={failure} onRetry={() => setReload((n) => n + 1)} />
       ) : current.length === 0 ? (
-        <p className="dim small">
-          {EMPTY_TEXT[filter]} 팀원이 도움 요청 · 결정 기록 · 기술 결정 카드에서 강사에게 요청하면 여기에 보여요.
-        </p>
+        <PanelEmpty title={EMPTY_TEXT[filter]} body="팀원이 도움 요청 · 결정 기록 · 기술 결정 카드에서 강사에게 요청하면 여기에 모여요." />
       ) : (
         <ul className="help-list" aria-label="강사 요청함 목록">
           {current.map((item) => (

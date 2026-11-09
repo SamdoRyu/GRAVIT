@@ -9,6 +9,8 @@ import type { Id, RequirementDto } from '../data/types'
 import { planRequirementDeck } from '../scene/model/requirementDeck'
 import { useOffice } from '../store'
 import { Modal } from './Dialogs'
+import { FieldError, FormAlert } from './ErrorStates'
+import { useWriteProblem } from './useWriteProblem'
 import './requirements.css'
 
 function close() {
@@ -99,13 +101,16 @@ function WaitingItem({
   const name = requirementName(r)
   const [board, setBoard] = useState<Id>(shown[shown.length - 1]?.id ?? '')
   const [busy, setBusy] = useState(false)
+  // 연결이 막히면(관리자 아님 · 대상 없음 · active 아님 · 보안 확인) 이 요구사항 아래에 원인과 다음 행동 (#274). 다시 보내기는 사람이 누른다
+  const w = useWriteProblem('linkRequirement', { resubmit: () => void link() })
 
   const link = async () => {
     if (!linkTaskId) return
     const st = useOffice.getState()
     const already = st.office?.snapshot?.requirementLinks.some((l) => l.requirementId === r.id && l.taskId === linkTaskId) ?? false
     setBusy(true)
-    const done = await st.linkRequirement(r.id, linkTaskId)
+    w.clear()
+    const done = await st.linkRequirement(r.id, linkTaskId, w.report)
     setBusy(false)
     if (!done) return
     st.toast('good', already ? `이미 ${name}에 연결돼 있어요` : `${name}에 연결했어요`)
@@ -127,6 +132,8 @@ function WaitingItem({
         <strong className="req-title">{r.title}</strong>
         <span className={`small${r.linkedTaskCount === 0 ? ' req-empty' : ' dim'}`}>{progressText(r)}</span>
       </div>
+      {w.notice && <FormAlert notice={w.notice} busy={w.busy} onAction={w.act} />}
+      {w.field && <FieldError text={w.field} />}
       {linking ? (
         <div className="req-actions">
           <button type="button" className="btn btn-sm btn-primary" disabled={!canLink || linkTaskId === null || busy} onClick={() => void link()}>

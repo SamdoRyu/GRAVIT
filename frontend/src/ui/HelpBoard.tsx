@@ -1,11 +1,13 @@
 // 관리 패널 "도움 요청" 탭 (#183 — FR-LRN-15 ~ 19 · 21, CONTRACTS_API.md 「11」). 소유: A (D 동의 — 2026-11-06).
 // 목록은 Snapshot의 helpRequests, 상세(코멘트)는 열 때 읽는다. 권한은 서버가 다시 검사한다 — 화면은 할 수 있는 버튼만 보인다.
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AGENDA_TITLE_MAX } from '../data/rules/meeting'
 import { HELP_CONTENT_MAX, HELP_LEARNING_MAX, HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isOpenForDiscussion } from '../data/rules/help'
 import type { HelpCommentDto, HelpRequestDetail, HelpRequestStatus, HelpRequestSummary, Id, MemberDto, Viewer, WorkspaceKind } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
+import { FormAlert } from './ErrorStates'
+import { useWriteProblem } from './useWriteProblem'
 import { relativeTime } from './format'
 import { useNow } from './hooks'
 import { Icon } from './icons'
@@ -115,11 +117,15 @@ function HelpCompose({ draft }: { draft: HelpDraft | null }) {
   const [fromStandupId, setFromStandupId] = useState<Id | null>(draft?.fromStandupId ?? null)
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  // 실패해도 쓴 내용은 그대로 — 원인 · 다음 행동은 폼 위, 입력 오류는 입력란 아래 (#274 — D 공용)
+  const formRef = useRef<HTMLFormElement>(null)
+  const w = useWriteProblem('createHelp', { resubmit: () => formRef.current?.requestSubmit() })
   const close = () => {
     setOpen(false)
     setContent('')
     setFromStandupId(null)
     setSubmitted(false)
+    w.clear()
     if (draft) useUi.getState().startHelpDraft(null) // 초안을 다 썼다 — 다시 열면 빈 폼
   }
   if (!open) {
@@ -136,7 +142,8 @@ function HelpCompose({ draft }: { draft: HelpDraft | null }) {
     setSubmitted(true)
     if (error || busy) return
     setBusy(true)
-    const created = await useOffice.getState().createHelpRequest(request)
+    w.clear()
+    const created = await useOffice.getState().createHelpRequest(request, w.report)
     setBusy(false)
     if (created) {
       useOffice.getState().toast('good', '도움 요청을 올렸어요')
@@ -144,8 +151,9 @@ function HelpCompose({ draft }: { draft: HelpDraft | null }) {
     }
   }
   return (
-    <form className="help-form" onSubmit={submit} noValidate aria-label="도움 요청 쓰기">
-      <TextField label="무엇이 막혔나요?" value={content} max={HELP_CONTENT_MAX} rows={3} error={submitted ? error : null} placeholder="해 본 것과 막힌 지점을 적어 주세요" onChange={setContent} autoFocus />
+    <form ref={formRef} className="help-form" onSubmit={submit} noValidate aria-label="도움 요청 쓰기">
+      {w.notice && <FormAlert notice={w.notice} busy={w.busy} onAction={w.act} />}
+      <TextField label="무엇이 막혔나요?" value={content} max={HELP_CONTENT_MAX} rows={3} error={(submitted ? error : null) ?? w.field} placeholder="해 본 것과 막힌 지점을 적어 주세요" onChange={setContent} autoFocus />
       {fromStandupId && <p className="dim small dnote">스탠드업의 "막힌 것"에서 넘어왔어요</p>}
       <div className="help-actions">
         <button type="button" className="btn btn-sm btn-ghost" onClick={close}>

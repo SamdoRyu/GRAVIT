@@ -58,7 +58,33 @@ const SYNCED_RESOURCES = ['members', 'tasks', 'submissions'] as const
 export const MOCK_REVIEW_LOGIN = { username: 'review', password: 'review' } as const
 
 /** mock 전용 — GitHub 로그인은 브라우저가 GitHub로 갔다 돌아오는 흐름이라 mock에서는 이 함수로 끝낸다 */
-export type V1MockDataSource = DataSource & { completeGithubLogin(): void }
+export type V1MockDataSource = DataSource & {
+  completeGithubLogin(): void
+  /**
+   * 다음 호출 한 번을 이 오류로 실패시킨다(여러 번 부르면 차례로) — 개발 · E2E에서 예외 처리 화면(#274)을 띄우는 용도.
+   * 서버 규칙을 흉내 내는 것이 아니다. 상태(status)를 넣으면 CSRF(403 invalid) · 응답 없음(0)도 흉내 낸다
+   */
+  failNext(method: Exclude<keyof DataSource, 'label' | 'subscribe'>, error: DataError): void
+}
+
+/** failNext를 붙인다 — 실패시킬 오류가 있으면 데이터를 건드리지 않고 그 오류로 거절한다 */
+function withFaults(source: Omit<V1MockDataSource, 'failNext'>): V1MockDataSource {
+  const faults = new Map<string, DataError[]>()
+  const wrapped: Record<string, unknown> = { ...source }
+  for (const [name, fn] of Object.entries(source)) {
+    if (typeof fn !== 'function' || name === 'subscribe' || name === 'completeGithubLogin') continue
+    wrapped[name] = async (...args: unknown[]) => {
+      const fault = faults.get(name)?.shift()
+      if (fault) {
+        await Promise.resolve()
+        throw fault
+      }
+      return (fn as (...a: unknown[]) => unknown).apply(source, args)
+    }
+  }
+  wrapped.failNext = (method: string, error: DataError) => void faults.set(method, [...(faults.get(method) ?? []), error])
+  return wrapped as unknown as V1MockDataSource
+}
 
 const MSG = {
   unauthorized: '로그인이 필요해요',
@@ -291,7 +317,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
     return `${prefix}_${state.nextId++}`
   }
 
-  return {
+  return withFaults({
     label: '로컬 mock 데이터 (v1)',
 
     async getLoginOptions() {
@@ -1184,7 +1210,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       save()
       emit(workspaceId, { type: 'changed', resources: ['tasks'] })
     },
-  }
+  })
 }
 
 function findHelpRequest(ws: MockWorkspace, helpRequestId: Id): HelpRequestSummary {

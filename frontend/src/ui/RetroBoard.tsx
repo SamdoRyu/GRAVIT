@@ -3,6 +3,7 @@
 // 강사는 팀원을 골라 읽기만 한다(만들기 · 배운 점 쓰기 없음). 권한은 서버가 다시 검사한다(403). 평가자 · 사람별 합계 · 순위는 없다.
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { CARD_CELLS } from '../data/rules/decisionCard'
+import { panelProblem, type PanelProblem } from '../data/rules/errors'
 import { kstToday } from '../data/rules/period'
 import {
   ACTIVITY_KIND_LABEL,
@@ -19,6 +20,7 @@ import type { DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, Retr
 import { useOffice } from '../store'
 import { Empty } from './common'
 import { DecisionCardsView } from './DecisionCards'
+import { PanelEmpty, PanelState } from './ErrorStates'
 import { formatDate, relativeTime } from './format'
 import { TextField } from './HelpBoard'
 import { useNow } from './hooks'
@@ -109,12 +111,16 @@ function TimelineView({ memberId }: { memberId: Id }) {
   const [reload, setReload] = useState(0)
   const key = `${memberId}|${page}|${reload}`
   const [loaded, setLoaded] = useState<Loaded<PageResponse<TimelineEntry>> | null>(null)
+  // 읽기 실패의 원인 — 권한 오류(다시 불러와도 같음) ↔ 조회 실패(다시 불러오기)를 패널 안에서 나눈다 (#274 — D 공용)
+  const [problem, setProblem] = useState<{ key: string; value: PanelProblem } | null>(null)
 
   useEffect(() => {
     let alive = true
     void useOffice
       .getState()
-      .loadTimeline(memberId, page, TIMELINE_PAGE_SIZE)
+      .loadTimeline(memberId, page, TIMELINE_PAGE_SIZE, (e) => {
+        if (alive) setProblem({ key, value: panelProblem('timeline', e) })
+      })
       .then((value) => {
         if (alive) setLoaded({ key, value })
       })
@@ -126,10 +132,12 @@ function TimelineView({ memberId }: { memberId: Id }) {
   const current = loaded?.key === key ? loaded : null
   if (current === null) return <p className="dim small dnote">불러오는 중…</p>
   if (current.value === null) {
-    return <Empty icon="alert" title="학습 타임라인을 불러오지 못했어요" action={<button type="button" className="btn btn-sm" onClick={() => setReload((n) => n + 1)}>다시 읽기</button>} />
+    const p = problem?.key === key ? problem.value : null
+    // 세션 만료는 "다시 로그인해 주세요" 전체 화면이 대신한다
+    return p?.kind === 'state' ? <PanelState problem={p} onRetry={() => setReload((n) => n + 1)} /> : null
   }
   const { items, totalItems, totalPages } = current.value
-  if (totalItems === 0) return <Empty icon="history" title="아직 학습 타임라인이 비어 있어요" hint="PR 평가를 받거나 남기고, 회의 안건을 올리면 여기에 쌓여요." />
+  if (totalItems === 0) return <PanelEmpty icon="history" title="아직 학습 타임라인이 비어 있어요" body="PR 평가를 받거나 남기고, 회의 안건을 올리면 여기에 차례대로 쌓여요." />
 
   return (
     <>
