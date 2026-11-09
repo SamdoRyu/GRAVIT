@@ -158,7 +158,7 @@ macOS · Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 씁니다.
 
 ## 공통 계약
 
-- **기준 계약 커밋: `4dc5c726f7732fff491bff77d21f470186594d44`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
+- **기준 계약 커밋: `4c4423691bb71500f1da51ba237b2469372f01a8`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
 - 개발 중에 읽는 곳: [`docs/CONTRACTS.md`](docs/CONTRACTS.md)(도메인 · ID · 에러 · 보안 · 계약 테스트) · [`docs/CONTRACTS_API.md`](docs/CONTRACTS_API.md)(엔드포인트 · DTO)
   - 기획 저장소 커밋 `796fc25`의 두 파일을 **2026-11-03에 그대로 옮겼습니다**(본문 변경 없음, 맨 위에 출처 안내만 추가).
   - 본문에 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md · 코드 컨벤션 (BE) 등)의 고정 링크는 [`docs/README.md`](docs/README.md)에 있습니다.
