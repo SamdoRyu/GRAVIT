@@ -434,6 +434,20 @@
   color: #fff;
 }
 
+/* ---- 회의 시작 · 안건 올리기 · 활동 기록 대화상자 (#269) — 같은 보라 버튼, 흰 글자, hover 때도 그대로 ----
+   대화상자 마크업은 C의 MeetingDialogs.tsx · ActivityDialog.tsx 그대로, Modal의 aria-label(제목)로 고른다 */
+.hud.ivory-hud .modal[aria-label='회의 시작'] .modal-foot .btn-primary,
+.hud.ivory-hud .modal[aria-label='안건 올리기'] .modal-foot .btn-primary,
+.hud.ivory-hud .modal[aria-label='활동 기록'] form[aria-label='활동 기록하기'] .btn-primary,
+.hud.ivory-hud .modal[aria-label='회의 시작'] .modal-foot .btn-primary:hover:not(:disabled),
+.hud.ivory-hud .modal[aria-label='안건 올리기'] .modal-foot .btn-primary:hover:not(:disabled),
+.hud.ivory-hud .modal[aria-label='활동 기록'] form[aria-label='활동 기록하기'] .btn-primary:hover:not(:disabled) {
+  border: 1px solid transparent;
+  background: var(--cream-purple-strong);
+  color: #fff;
+  font-weight: 650;
+}
+
 @media (max-width: 1100px) {
   /* Respect the existing responsive overlay panel positioning. */
   .hud.ivory-hud .rail {
