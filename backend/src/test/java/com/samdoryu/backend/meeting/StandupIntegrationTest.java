@@ -19,11 +19,13 @@ import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository
 import com.samdoryu.backend.meeting.domain.Standup;
 import com.samdoryu.backend.meeting.repository.StandupRepository;
 import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionCommit;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskAssignee;
 import com.samdoryu.backend.sync.domain.TaskClosedReason;
 import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionCommitRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
 import com.samdoryu.backend.sync.repository.TaskRepository;
@@ -74,6 +76,7 @@ class StandupIntegrationTest {
     @Autowired TaskRepository tasks;
     @Autowired TaskAssigneeRepository taskAssignees;
     @Autowired SubmissionRepository submissions;
+    @Autowired SubmissionCommitRepository submissionCommits;
 
     private Workspace ws;
     private Workspace otherWs;
@@ -254,15 +257,24 @@ class StandupIntegrationTest {
                 .syncedAt(createdAt).build());
     }
 
+    private void commit(Submission pr, String sha, String title, Member author, long authorGithubId, String authoredAt) {
+        Instant at = Instant.parse(authoredAt);
+        submissionCommits.saveAndFlush(new SubmissionCommit(pr, sha, title, authorGithubId, author == alice ? "alice" : "bob",
+                author, at, at, at));
+    }
+
     private static String review(long githubUserId, String login, String submittedAt) {
         return "{\"reviewerGithubUserId\":" + githubUserId + ",\"reviewerGithubLogin\":\"" + login
                 + "\",\"state\":\"approved\",\"submittedAt\":\"" + submittedAt + "\"}";
     }
 
-    /** 내가 연 PR · 머지된 내 PR · 내가 제출한 리뷰 · 내가 담당자인 이슈의 닫힘 — 전날 한국 시간 하루 안만, 시각 순. */
+    /** 내 커밋 · 내가 연 PR · 머지된 내 PR · 내가 제출한 리뷰 · 내가 담당자인 이슈의 닫힘 — 전날 한국 시간 하루 안만, 시각 순. */
     @Test
     void prefillCollectsMyGithubActivityOfThePreviousKstDay() throws Exception {
-        pr(15, alice, 1001L, Instant.parse("2026-11-04T03:00:00Z"), null, "[]");
+        Submission pr15 = pr(15, alice, 1001L, Instant.parse("2026-11-04T03:00:00Z"), null, "[]");
+        commit(pr15, "a".repeat(40), "세션 만료 처리", alice, 1001L, "2026-11-04T02:10:00Z");
+        commit(pr15, "b".repeat(40), "전전날 커밋", alice, 1001L, "2026-11-03T14:59:59Z"); // 한국 시간 11-03 — 빠진다
+        commit(pr15, "c".repeat(40), "밥의 커밋", bob, 1002L, "2026-11-04T05:00:00Z"); // 밥의 커밋 — 빠진다
         pr(16, alice, 1001L, LONG_AGO, Instant.parse("2026-11-04T14:59:59Z"), "[]"); // 한국 시간 11-04 23:59:59
         pr(17, bob, 1002L, Instant.parse("2026-11-04T01:00:00Z"), null, "[" // 밥의 PR — 밥이 연 것은 빠진다
                 + review(1001L, "alice", "2026-11-04T06:30:00Z") + ","
@@ -276,17 +288,21 @@ class StandupIntegrationTest {
         String response = mvc.perform(get(base(ws) + "/" + PREFILL_DATE + "/mine/prefill").session(aliceSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.date").value("2026-11-05"))
-                .andExpect(jsonPath("$.items.length()").value(4))
-                .andExpect(jsonPath("$.items[0].kind").value("pr_opened"))
-                .andExpect(jsonPath("$.items[0].githubNumber").value(15))
-                .andExpect(jsonPath("$.items[0].title").value("PR 15"))
-                .andExpect(jsonPath("$.items[1].kind").value("review_submitted"))
-                .andExpect(jsonPath("$.items[1].githubNumber").value(17))
-                .andExpect(jsonPath("$.items[2].kind").value("issue_closed"))
-                .andExpect(jsonPath("$.items[2].githubNumber").value(12))
-                .andExpect(jsonPath("$.items[3].kind").value("pr_merged"))
-                .andExpect(jsonPath("$.items[3].githubNumber").value(16))
-                .andExpect(jsonPath("$.items[3].occurredAt").value("2026-11-04T14:59:59Z"))
+                .andExpect(jsonPath("$.items.length()").value(5))
+                .andExpect(jsonPath("$.items[0].kind").value("commit"))
+                .andExpect(jsonPath("$.items[0].title").value("세션 만료 처리"))
+                .andExpect(jsonPath("$.items[0].githubNumber").value(nullValue()))
+                .andExpect(jsonPath("$.items[0].occurredAt").value("2026-11-04T02:10:00Z"))
+                .andExpect(jsonPath("$.items[1].kind").value("pr_opened"))
+                .andExpect(jsonPath("$.items[1].githubNumber").value(15))
+                .andExpect(jsonPath("$.items[1].title").value("PR 15"))
+                .andExpect(jsonPath("$.items[2].kind").value("review_submitted"))
+                .andExpect(jsonPath("$.items[2].githubNumber").value(17))
+                .andExpect(jsonPath("$.items[3].kind").value("issue_closed"))
+                .andExpect(jsonPath("$.items[3].githubNumber").value(12))
+                .andExpect(jsonPath("$.items[4].kind").value("pr_merged"))
+                .andExpect(jsonPath("$.items[4].githubNumber").value(16))
+                .andExpect(jsonPath("$.items[4].occurredAt").value("2026-11-04T14:59:59Z"))
                 .andReturn().getResponse().getContentAsString();
         var actual = ContractShape.readTree(response);
         ContractShape.assertSameShape(ContractShape.readExample("meeting", "standup-prefill.json"), actual);
