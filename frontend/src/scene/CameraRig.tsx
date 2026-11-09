@@ -1,12 +1,15 @@
 // Orbit camera with limits and a floor-clamped target, framing the station in the area the HUD leaves free. Dragging a box
 // locks it through runtime cameraLock (TaskBox) — the store's old drag / focus state is gone (#102 ④).
+// Selecting a crew member / issue / PR (3D click or a HUD panel) eases the camera toward it, keeping the viewing angle; clearing
+// the selection eases back to where it was — unless the user moved the camera meanwhile, then it stays theirs (#286).
 import { OrbitControls } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import { MathUtils, PerspectiveCamera as ScratchCamera, TOUCH, Vector3, type PerspectiveCamera } from 'three'
-import { useOffice } from '../store'
+import { useOffice, type OfficeSelection } from '../store'
 import { STATION_BOUNDS, WORLD_SCALE } from '../theme/station/geometry'
-import { cameraGesture, cameraLock, type ControlsImpl } from './runtime'
+import { FOCUS_S, easeInOut, focusPose } from './cameraFocus'
+import { avatarLive, boxLive, cameraGesture, cameraLock, type ControlsImpl } from './runtime'
 
 // Station extent in world units (the station is drawn at WORLD_SCALE).
 const B = {
@@ -41,6 +44,18 @@ for (const x of [B.minX, B.maxX]) for (const y of [B.minY, B.maxY]) for (const z
 const scratch = new ScratchCamera(FOV, 1, 0.1, 300)
 const corner = new Vector3()
 const box = { w: 0, h: 0, cx: 0, cy: 0 }
+
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+
+/** Where the selected thing is in 3D, or null when it has no place there (a member without a pod, …). */
+function focusPoint(sel: OfficeSelection): Vector3 | null {
+  if (sel.kind === 'member') {
+    const a = avatarLive.get(sel.id)
+    return a?.visible ? new Vector3(a.x, a.y + 0.5, a.z) : null
+  }
+  const b = boxLive.get(`${sel.kind}:${sel.id}`)
+  return b ? new Vector3(b.x, b.y + 0.18, b.z) : null
+}
 
 /** Projected pixel extent / centre (relative to the view centre, y down) of the station seen from `dist` along `d`. */
 function measure(dist: number, d: Vector3, tgt: Vector3, W: number, H: number) {
@@ -99,6 +114,14 @@ export function CameraRig() {
   const gesture = useRef({ active: false, until: 0, angle: 0, dist: 0, target: 0 })
   const snap = useRef({ pos: new Vector3(), tgt: new Vector3(), moved: false })
   const mountedAt = useRef(performance.now())
+  const selection = useOffice((s) => s.officeSelection)
+  // Focus on the selection (#286): the view before the first focus (to come back to), a running ease, and whether the user
+  // took the camera over while focused (then we never come back).
+  const focus = useRef<{
+    home: { pos: Vector3; tgt: Vector3; moved: boolean } | null
+    anim: { fp: Vector3; ft: Vector3; tp: Vector3; tt: Vector3; t0: number; dur: number; done?: () => void } | null
+    userTook: boolean
+  }>({ home: null, anim: null, userTook: false })
 
   useEffect(() => {
     cameraLock.controls = ref.current
@@ -142,6 +165,37 @@ export function CameraRig() {
     const t = window.setTimeout(() => (el.style.touchAction = 'none'), 300)
     return () => window.clearTimeout(t)
   }, [gl])
+
+  // Selection changed: ease toward it, or back home when it was cleared.
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    const f = focus.current
+    const ease = (tp: Vector3, tt: Vector3, done?: () => void) => {
+      f.anim = { fp: camera.position.clone(), ft: c.target.clone(), tp, tt, t0: performance.now(), dur: reducedMotion() ? 0 : FOCUS_S * 1000, done }
+    }
+    if (selection) {
+      const at = focusPoint(selection)
+      if (!at) return // nothing to look at in 3D: leave the camera where it is
+      if (!f.home) {
+        f.home = { pos: camera.position.clone(), tgt: c.target.clone(), moved: userMoved.current }
+        f.userTook = false
+      }
+      const p = focusPose(camera.position.toArray(), c.target.toArray(), at.toArray(), undefined, MIN_DIST)
+      ease(new Vector3(...p.position), new Vector3(...p.target))
+      return
+    }
+    const home = f.home
+    if (!home) return
+    f.home = null
+    if (f.userTook) {
+      f.anim = null
+      return
+    }
+    ease(home.pos, home.tgt, () => {
+      userMoved.current = home.moved
+    })
+  }, [selection, camera])
 
   const applyOffset = (x: number, y: number, W: number, H: number) => {
     curOff.current.x = x
@@ -204,10 +258,28 @@ export function CameraRig() {
     if (!c) return
     const dt = Math.min(delta, 0.1)
 
+    // Focus ease (#286). Our own writes are recorded as the "last" pose so the gesture check below doesn't count them.
+    const f = focus.current
+    if (f.anim) {
+      const a = f.anim
+      const k = a.dur <= 0 ? 1 : (performance.now() - a.t0) / a.dur
+      const e = easeInOut(k)
+      c.target.lerpVectors(a.ft, a.tt, e)
+      camera.position.lerpVectors(a.fp, a.tp, e)
+      c.update()
+      lastPos.copy(camera.position)
+      lastTarget.copy(c.target)
+      if (k >= 1) {
+        f.anim = null
+        a.done?.()
+      }
+    }
+    const focusing = f.home !== null || f.anim !== null
+
     // Orbit/zoom/pan deltas since we last wrote the camera (our own writes are excluded) add up while a gesture is
     // running or settling (damping); a click or tap's few px of jitter stays under the thresholds.
     const g = gesture.current
-    if (framed.current && !userMoved.current && (g.active || performance.now() < g.until)) {
+    if (framed.current && (!userMoved.current || focusing) && (g.active || performance.now() < g.until)) {
       offset.copy(camera.position).sub(c.target)
       prevOff.copy(lastPos).sub(lastTarget)
       const len = offset.length()
@@ -217,13 +289,20 @@ export function CameraRig() {
         g.dist += Math.abs(len - plen) / plen
       }
       g.target += c.target.distanceTo(lastTarget)
-      if (g.angle > MOVED_ANGLE || g.dist > MOVED_DIST || g.target > MOVED_TARGET) userMoved.current = true
+      if (g.angle > MOVED_ANGLE || g.dist > MOVED_DIST || g.target > MOVED_TARGET) {
+        userMoved.current = true
+        // the user took over while focused: stop easing, and don't come back on deselect
+        if (focusing) {
+          f.userTook = true
+          f.anim = null
+        }
+      }
     }
 
     // Smooth re-framing when the free area changes: ease the distance (until the user takes over) and the centring.
     if (framed.current && goal.current.has) {
       const k = 1 - Math.exp(-6 * dt)
-      if (!userMoved.current) {
+      if (!userMoved.current && !focusing) {
         offset.copy(camera.position).sub(c.target)
         const len = offset.length()
         const dd = goal.current.dist - len
