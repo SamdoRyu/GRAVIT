@@ -57,6 +57,8 @@ public class GithubLoginSuccessHandler implements AuthenticationSuccessHandler {
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
             Authentication authentication) throws IOException {
+        // 같은 브라우저 세션의 이전 로그인 토큰을 먼저 지운다 — 이번 로그인이 토큰을 두지 않거나(강사) 실패해도 남지 않게(#250)
+        GithubUserToken.clear(request.getSession(false));
         SecurityContext context = contextHolder.createEmptyContext();
         try {
             GithubLoginProfile profile = GithubLoginProfile.from((OAuth2User) authentication.getPrincipal());

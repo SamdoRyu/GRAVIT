@@ -39,7 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
  * GitHub는 로그인한 사용자 토큰(서버 세션)으로 읽고, GitHub 호출은 DB 트랜잭션 밖에서 한다.
  * <ul>
  *   <li>허용 목록 강사 계정은 레포 관리자 · 참여자가 아니다(P1) — 레포 선택은 빈 목록, 사무실 열기는 {@code forbidden_role}.</li>
- *   <li>심사용 계정은 GitHub 권한이 없다(P15) — 레포 선택은 빈 목록, 사무실 열기는 레포가 안 보여 {@code not_found}.</li>
+ *   <li>심사용 계정은 GitHub 권한이 없다(P15) — 레포 선택은 빈 목록, 사무실 열기는 레포가 안 보여 {@code not_found}.
+ *       세션의 GitHub 토큰이 아니라 계정 종류로 판정한다(#250).</li>
  * </ul>
  */
 @Service
@@ -150,8 +151,8 @@ public class WorkspaceOpeningService {
     }
 
     /**
-     * {@code POST /api/workspaces} — 검사 순서: 본문 형식 · 날짜({@code invalid}) → 강사({@code forbidden_role}) → 레포가
-     * 안 보임({@code not_found}) → 레포 관리자 아님({@code forbidden_role}) → 이미 열림({@code conflict}).
+     * {@code POST /api/workspaces} — 검사 순서: 본문 형식 · 날짜({@code invalid}) → 강사({@code forbidden_role}) → GitHub
+     * 계정이 아님 · 레포가 안 보임({@code not_found}) → 레포 관리자 아님({@code forbidden_role}) → 이미 열림({@code conflict}).
      */
     public Opened open(AppPrincipal principal, Optional<String> userToken, OpenWorkspaceRequest request, Instant now) {
         long repoId = Ids.fromBody(request.githubRepoId());
@@ -160,6 +161,10 @@ public class WorkspaceOpeningService {
         }
         if (appProperties.isAllowlistedInstructor(principal.githubUserId())) {
             throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        if (principal.accountType() != AccountType.GITHUB) {
+            // 심사용 계정은 시연 사무실에만(P15) — 세션에 다른 로그인의 GitHub 토큰이 있어도 쓰지 않는다(#250)
+            throw new ApiException(ErrorCode.NOT_FOUND);
         }
         String token = userToken.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
         GithubInstalledRepository repo = githubUserClient.installedRepositories(token).stream()

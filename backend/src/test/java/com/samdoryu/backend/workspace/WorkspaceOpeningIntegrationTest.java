@@ -305,6 +305,22 @@ class WorkspaceOpeningIntegrationTest {
                     .andExpect(status().isNotFound());
         }
 
+        /**
+         * #250 — 심사용 계정은 시연 사무실에만(P15). 같은 브라우저 세션에 이전 GitHub 로그인의 토큰이 남아 있어도 사무실을 열지
+         * 못한다 — 레포가 안 보이는 것과 같은 404, GitHub를 부르지 않는다.
+         */
+        @Test
+        void reviewAccountWithALeftoverGithubTokenIs404AndOpensNothing() throws Exception {
+            MockHttpSession reviewer = TestLogin.reviewUser(97L).session();
+            GithubUserToken.store(reviewer, TOKEN);
+
+            mvc.perform(open(request("5001", "2026-11-04", "2026-11-17", null, true)).session(reviewer))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("not_found"));
+            assertThat(workspaces.findByGithubRepoId(5001L)).isEmpty();
+            then(githubUserClient).should(never()).installedRepositories(any());
+        }
+
         /** 허용 목록 강사 계정은 콜라보레이터여도 레포 관리자가 아니다(P1). */
         @Test
         void allowlistedInstructorIs403() throws Exception {

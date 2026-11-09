@@ -3,6 +3,7 @@ package com.samdoryu.backend.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -14,6 +15,8 @@ import com.samdoryu.backend.auth.repository.AppUserRepository;
 import com.samdoryu.backend.auth.repository.ReviewAccountRepository;
 import com.samdoryu.backend.common.contract.ContractShape;
 import com.samdoryu.backend.common.id.Ids;
+import com.samdoryu.backend.github.GithubUserClient;
+import com.samdoryu.backend.github.GithubUserToken;
 import com.samdoryu.backend.workspace.domain.Member;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.domain.WorkspaceKind;
@@ -33,6 +36,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +75,9 @@ class ReviewLoginIntegrationTest {
     @Autowired ReviewAccountRepository reviewAccounts;
     @Autowired WorkspaceRepository workspaces;
     @Autowired MemberRepository members;
+
+    /** 실제 GitHub를 부르지 않는다 — 심사용 세션은 GitHub를 읽을 일이 없어야 한다(#250) */
+    @MockitoBean GithubUserClient githubUserClient;
 
     private Workspace realWorkspace;
 
@@ -153,6 +160,26 @@ class ReviewLoginIntegrationTest {
                         .header(HttpHeaders.ORIGIN, ORIGIN))
                 .andExpect(status().isNoContent());
         mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * #250 — 로그아웃 없이 같은 브라우저 세션에서 심사용으로 로그인하면, 이전 GitHub 로그인의 토큰이 세션에 남지 않는다.
+     * 그래서 그 세션으로 사무실을 열 수 없다(레포가 안 보이는 것과 같은 404).
+     */
+    @Test
+    void loginDropsTheGithubTokenOfAnEarlierLoginInTheSameSession() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        GithubUserToken.store(session, "gho_previous");
+
+        login(session, "rev-student", STUDENT_PASSWORD).andExpect(status().isNoContent());
+
+        assertThat(GithubUserToken.from(session)).isEmpty();
+        write(session, "/api/workspaces", "{\"githubRepoId\":\"5002\",\"projectStartDate\":\"2026-11-04\","
+                + "\"projectEndDate\":\"2026-11-17\",\"specDocumentPath\":null,\"activityConsent\":true}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("not_found"));
+        assertThat(workspaces.findByGithubRepoId(5002L)).isEmpty();
+        then(githubUserClient).shouldHaveNoInteractions();
     }
 
     /**

@@ -10,6 +10,7 @@ import com.samdoryu.backend.auth.service.ReviewAccountService;
 import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.error.ErrorResponseWriter;
 import com.samdoryu.backend.github.GithubUserClient;
+import com.samdoryu.backend.github.GithubUserToken;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -103,8 +104,11 @@ public class SecurityConfig {
                             // 로그인 페이지를 따로 두지 않는다(기본 로그인 페이지를 만들지 않게) — 화면은 SPA다
                             .loginPage(AccountService.REVIEW_LOGIN_URL)
                             .loginProcessingUrl(AccountService.REVIEW_LOGIN_URL)
-                            .successHandler((request, response, authentication) ->
-                                    response.setStatus(HttpStatus.NO_CONTENT.value()))
+                            // 같은 브라우저 세션의 이전 GitHub 로그인 토큰을 지운다 — 심사용 계정은 GitHub를 읽지 않는다(#250)
+                            .successHandler((request, response, authentication) -> {
+                                GithubUserToken.clear(request.getSession(false));
+                                response.setStatus(HttpStatus.NO_CONTENT.value());
+                            })
                             // 어느 값이 틀렸는지 말하지 않는다
                             .failureHandler((request, response, exception) ->
                                     errorResponseWriter.write(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED)));

@@ -28,6 +28,16 @@ public final class GithubUserToken implements Serializable {
         session.setAttribute(SESSION_ATTRIBUTE, new GithubUserToken(accessToken));
     }
 
+    /**
+     * 이 세션의 토큰을 지운다 — 로그인 성공 처리(GitHub · 심사용 모두)가 맨 먼저 부른다. 세션 ID만 바뀌고 속성은 남으므로
+     * 로그아웃 없이 다른 로그인으로 바뀌면 이전 사용자의 토큰이 남는다(#250). 세션이 없으면 할 일이 없다.
+     */
+    public static void clear(HttpSession session) {
+        if (session != null) {
+            session.removeAttribute(SESSION_ATTRIBUTE);
+        }
+    }
+
     /** 이 세션의 토큰. GitHub로 로그인하지 않은 세션(심사용 계정 등)이면 빈 값. */
     public static Optional<String> from(HttpSession session) {
         if (session == null) {
