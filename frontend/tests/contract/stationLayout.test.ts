@@ -5,7 +5,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { createV1MockDataSource } from '../../src/data/mock/v1'
 import { deskSeats } from '../../src/scene/model/buildSceneModel'
 import type { PlaceRole, Vec3 } from '../../src/scene/model/types'
-import { ALWAYS_SHOWN_PODS, BRIDGE, POD, PODS, WORLD_SCALE } from '../../src/theme/station/geometry'
+import { ALWAYS_SHOWN_PODS, BRIDGE, POD, PODS, podConsole, WORLD_SCALE } from '../../src/theme/station/geometry'
 import { createStationLayout } from '../../src/theme/station/stationLayout'
 
 const load = (workspaceId: string) =>
@@ -115,5 +115,19 @@ describe('stationLayout — 이동 길 route (CONTRACTS.md 「8」 · 「10」 �
     assert.deepEqual(layout.route!('desk:nobody' as PlaceRole, 'meeting'), [])
     assert.deepEqual(layout.route!('meeting', 'meeting'), [])
     assert.deepEqual(layout.route!('backlog', 'meeting'), [])
+  })
+})
+
+describe('작업 포드 승무원은 자기 컴퓨터를 바라본다 (#302)', () => {
+  it('포드 8개 모두 — 승무원의 방향이 콘솔 쪽이고, 콘솔 화면은 승무원 쪽을 향한다', () => {
+    const diff = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
+    assert.equal(PODS.length, 8)
+    for (const [i, pod] of PODS.entries()) {
+      const c = podConsole(pod)
+      const toConsole = Math.atan2(c.x - pod.crew.x, c.z - pod.crew.z)
+      assert.ok(diff(pod.crew.facing, toConsole) < 1e-9, `포드 ${i}: 콘솔 쪽을 본다`)
+      // 콘솔 앞면(로컬 +z를 ry만큼 돌린 방향)은 승무원 쪽 — 승무원이 화면 앞에 선다
+      assert.ok(diff(c.ry, toConsole + Math.PI) < Math.PI / 4, `포드 ${i}: 화면이 승무원 쪽`)
+    }
   })
 })

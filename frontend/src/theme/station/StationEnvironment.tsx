@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { DoubleSide, IcosahedronGeometry, OctahedronGeometry, TorusGeometry } from 'three'
 import { noRaycast } from '../../scene/runtime'
-import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
+import { ARCHIVE, BRIDGE, COMM_HUB, DOCK, EXTRA_POD_TUBES, HUB, HULL_Y, LAUNCH_RACK, POD, PODS, podConsole, REQ_DECK, SCANNER, TUBES, WORLD_SCALE, type Pod } from './geometry'
 import { AmbientGlow, ChaseLamp, PanelGlint, StationAmbient } from './ambient'
 import { Bx, COLORS, Console, CutawayModule, Glow, Rack, Thruster, Tube, basic, lam } from './parts'
 
@@ -54,14 +54,12 @@ function Bridge() {
 }
 
 function PodUnit({ pod }: { pod: Pod }) {
-  // 콘솔은 바깥쪽 끝에서 2.1 안쪽, 바깥을 바라본다(시안 consoleAt)
-  const cx = pod.axis === 'x' ? pod.x + pod.outward * 2.1 : pod.x
-  const cz = pod.axis === 'z' ? pod.z + pod.outward * 2.1 : pod.z
-  const ry = pod.axis === 'z' ? (pod.outward < 0 ? 0 : PI) : pod.outward > 0 ? -PI / 2 : PI / 2
+  // 콘솔은 바깥쪽 끝에서 2.1 안쪽, 화면은 포드 안쪽(승무원 쪽)으로(시안 consoleAt — 승무원이 바라보는 자리, #302)
+  const c = podConsole(pod)
   return (
     <>
       <CutawayModule x={pod.x} z={pod.z} axis={pod.axis} length={POD.length} radius={POD.radius} cut={160} />
-      <Console p={[cx, POD.deckY, cz]} ry={ry} />
+      <Console p={[c.x, POD.deckY, c.z]} ry={c.ry} />
     </>
   )
 }

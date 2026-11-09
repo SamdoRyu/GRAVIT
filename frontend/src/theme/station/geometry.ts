@@ -43,15 +43,30 @@ export const POD = {
   deckY: deckY(2.5),
 } as const
 
-const CREW_FACING = Math.PI / 4
+/**
+ * 포드 콘솔(컴퓨터) 자리 — 시안 consoleAt: 바깥쪽 끝에서 2.1 안쪽. `ry`는 콘솔 그룹의 회전으로, 화면 앞면이 포드 안쪽(승무원 쪽)을 향한다.
+ * StationEnvironment PodUnit이 그리는 자리이고, 승무원은 이 자리를 바라본다(#302).
+ */
+export function podConsole(pod: Pick<Pod, 'x' | 'z' | 'axis' | 'outward'>): { x: number; z: number; ry: number } {
+  const x = pod.axis === 'x' ? pod.x + pod.outward * 2.1 : pod.x
+  const z = pod.axis === 'z' ? pod.z + pod.outward * 2.1 : pod.z
+  const ry = pod.axis === 'z' ? (pod.outward < 0 ? 0 : Math.PI) : pod.outward > 0 ? -Math.PI / 2 : Math.PI / 2
+  return { x, z, ry }
+}
+
+/** 승무원이 자기 포드의 콘솔 화면을 바라보게(#302) — 자리에서 콘솔 쪽 방향(라디안, 0 = +z) */
+function facingConsole(pod: Pod): Pod {
+  const c = podConsole(pod)
+  return { ...pod, crew: { ...pod.crew, facing: Math.atan2(c.x - pod.crew.x, c.z - pod.crew.z) } }
+}
 
 /** 북쪽 줄 포드(콘솔이 북쪽) — 시안 K 포드의 상대 위치 */
 function northPod(x: number, z: number): Pod {
-  return { x, z, axis: 'z', outward: -1, crew: { x: x - 0.7, z: z + 1.0, facing: CREW_FACING }, cargo: { x: x + 1.2, z: z - 0.4 } }
+  return { x, z, axis: 'z', outward: -1, crew: { x: x - 0.7, z: z + 1.0, facing: 0 }, cargo: { x: x + 1.2, z: z - 0.4 } }
 }
 /** 남쪽 줄 포드(콘솔이 남쪽) — 시안 C 포드의 상대 위치 */
 function southPod(x: number, z: number): Pod {
-  return { x, z, axis: 'z', outward: 1, crew: { x: x + 0.7, z: z - 0.9, facing: CREW_FACING }, cargo: { x: x - 1.2, z: z + 0.5 } }
+  return { x, z, axis: 'z', outward: 1, crew: { x: x + 0.7, z: z - 0.9, facing: 0 }, cargo: { x: x - 1.2, z: z + 0.5 } }
 }
 
 export const HUB = { x: 28, z: 30, radius: 2.9 } as const
@@ -59,18 +74,20 @@ export const HUB = { x: 28, z: 30, radius: 2.9 } as const
 /**
  * deskIndex → 포드. 넘패드로 보면 허브가 5.
  * 0~3은 시안 포드 K(8) · L(6) · P(4) · C(2). 4~7은 9 · 1 · 3 · 7(2026-11-04 결정) — 화면 양옆부터 대칭으로 채우고,
- * 카메라에서 가장 먼 7은 마지막에 쓴다.
+ * 카메라에서 가장 먼 7은 마지막에 쓴다. 승무원은 모두 자기 포드의 콘솔을 바라본다(facingConsole — #302).
  */
-export const PODS: readonly Pod[] = [
-  northPod(28, 23.8),
-  { x: 34.2, z: 30, axis: 'x', outward: 1, crew: { x: 33.4, z: 30.7, facing: CREW_FACING }, cargo: { x: 34.8, z: 28.8 } },
-  { x: 21.8, z: 30, axis: 'x', outward: -1, crew: { x: 22.6, z: 30.7, facing: CREW_FACING }, cargo: { x: 21.4, z: 28.8 } },
-  southPod(28, 36.2),
-  northPod(HUB.x + 5.75, HUB.z - 9.75),
-  southPod(HUB.x - 5.75, HUB.z + 9.75),
-  southPod(HUB.x + 5.75, HUB.z + 9.75),
-  northPod(HUB.x - 5.75, HUB.z - 9.75),
-]
+export const PODS: readonly Pod[] = (
+  [
+    northPod(28, 23.8),
+    { x: 34.2, z: 30, axis: 'x', outward: 1, crew: { x: 33.4, z: 30.7, facing: 0 }, cargo: { x: 34.8, z: 28.8 } },
+    { x: 21.8, z: 30, axis: 'x', outward: -1, crew: { x: 22.6, z: 30.7, facing: 0 }, cargo: { x: 21.4, z: 28.8 } },
+    southPod(28, 36.2),
+    northPod(HUB.x + 5.75, HUB.z - 9.75),
+    southPod(HUB.x - 5.75, HUB.z + 9.75),
+    southPod(HUB.x + 5.75, HUB.z + 9.75),
+    northPod(HUB.x - 5.75, HUB.z - 9.75),
+  ] satisfies Pod[]
+).map(facingConsole)
 
 /** 시안 포드 0~3은 앉은 팀원이 없어도 그리고, 4~7은 자리를 쓰는 팀원이 있을 때만 그린다(CONTRACTS.md 「10」). */
 export const ALWAYS_SHOWN_PODS = 4
