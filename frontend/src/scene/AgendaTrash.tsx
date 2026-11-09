@@ -24,15 +24,15 @@ export const TRASH_DROP_LABEL = '놓으면 회의에서 빠져요'
 
 // Bin in design units (drawn inside a group scaled by WORLD_SCALE, like the station theme).
 const H = BRIDGE_TRASH.height
-const R_TOP = 0.4
-const R_BOTTOM = 0.32
-const LID_H = 0.09
+const R_TOP = 0.58
+const R_BOTTOM = 0.46
+const LID_H = 0.12
 const BODY = new CylinderGeometry(R_TOP, R_BOTTOM, H - LID_H, 20, 1, false)
 const LID = new CylinderGeometry(R_TOP + 0.05, R_TOP + 0.05, LID_H, 20)
-const KNOB = new CylinderGeometry(0.1, 0.1, 0.06, 12)
+const KNOB = new CylinderGeometry(0.15, 0.15, 0.08, 12)
 /** Vertical ribs on the body — reads as a bin, not a stool */
-const RIB = new CylinderGeometry(0.022, 0.022, H - LID_H - 0.22, 6)
-const RIBS = Array.from({ length: 8 }, (_, i) => (i / 8) * Math.PI * 2)
+const RIB = new CylinderGeometry(0.03, 0.03, H - LID_H - 0.3, 6)
+const RIBS = Array.from({ length: 10 }, (_, i) => (i / 10) * Math.PI * 2)
 /** Floor ring and disc of the highlight — about the catch range, so it shows where letting go counts */
 const RING = new RingGeometry(BRIDGE_TRASH.catchRadius - 0.22, BRIDGE_TRASH.catchRadius, 48).rotateX(-Math.PI / 2)
 const DISC = new RingGeometry(0, BRIDGE_TRASH.catchRadius - 0.22, 48).rotateX(-Math.PI / 2)
