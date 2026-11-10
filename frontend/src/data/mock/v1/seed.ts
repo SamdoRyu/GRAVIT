@@ -50,6 +50,11 @@ export interface MockWorkspace {
   pastRounds?: { submissionId: Id; round: EvaluationRoundDto }[]
   /** 도움 요청의 코멘트 · 닫을 때 남긴 값 (#183) — Snapshot 요약(helpRequests)과 ID로 짝. 없으면 빈 목록 */
   helpThreads?: MockHelpThread[]
+  /**
+   * 도움 요청 개인 숨김 — "나에게서만 삭제"(#316 · 서버 HelpRequestHidden). (도움 요청, 사용자) 하나씩, 숨김 해제나 영구 삭제면 뺀다.
+   * 그 사용자의 Snapshot helpRequests에서만 뺀다. 없으면 빈 목록(이 칸이 생기기 전 저장값 포함)
+   */
+  hiddenHelpRequests?: { helpRequestId: Id; userId: Id; hiddenAt: Instant }[]
   /** 스탠드업 (#190) — Snapshot에 없고 날짜로 읽는다. 없으면 빈 목록 */
   standups?: StandupDto[]
   /** 회고 리포트 (#209) — 저장하는 칸만(종류 · 배운 점 · 만든 시각), 나머지는 읽을 때 계산한다. 없으면 빈 목록 */

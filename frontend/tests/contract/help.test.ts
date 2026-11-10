@@ -7,6 +7,7 @@ import { createMemoryStorage } from '../../src/data/mock'
 import { V1_STORAGE_KEY, createV1MockDataSource } from '../../src/data/mock/v1'
 import { createSeed } from '../../src/data/mock/v1/seed'
 import {
+  DELETED_HELP_REQUEST_TITLE,
   HELP_CONTENT_MAX,
   HELP_LEARNING_MAX,
   HELP_MSG,
@@ -15,6 +16,8 @@ import {
   helpCloseError,
   helpCommentError,
   helpCreateError,
+  helpDeleteLoss,
+  helpDeleteScopes,
   helpToAgendaError,
   instructorAnswerCheck,
   instructorRequestError,
@@ -370,5 +373,127 @@ describe('강사 답변 대기 · 새 강사 답변 (#290 — 3D 강사 우주�
     assert.deepEqual(instructorAnswerCheck(await source.getHelpRequest(TEAM_WS, 'hr_2')), check(0, null))
     assert.deepEqual(instructorAnswerCheck(await source.getHelpRequest(TEAM_WS, 'hr_4')), check(1, 'hc_3'))
     assert.equal(hr4.status, 'open') // 강사 답변은 상태를 바꾸지 않는다(「11」)
+  })
+})
+
+describe('도움 요청 삭제 두 방식 (#316 — 「11」 도움 요청 삭제, 서버 #315와 같은 규칙)', () => {
+  type Storage = ReturnType<typeof createMemoryStorage>
+  /** mock 저장값(서버가 가진 것) — 팀 사무실 */
+  const stored = (storage: Storage) => {
+    const state = JSON.parse(storage.getItem(V1_STORAGE_KEY)!)
+    return state.workspaces.find((w: { snapshot: { workspace: { id: string } } }) => w.snapshot.workspace.id === TEAM_WS)
+  }
+  const makeWith = (storage: Storage) => createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], now: () => NOW })
+  /** 다른 사용자(u_other)가 hr_1을 숨긴 저장값 */
+  const seededWithOthersHidden = (): Storage => {
+    const storage = createMemoryStorage()
+    const seed = createSeed(NOW, 'github')
+    seed.workspaces.find((w) => w.snapshot.workspace.id === TEAM_WS)!.hiddenHelpRequests = [{ helpRequestId: 'hr_1', userId: 'u_other', hiddenAt: '2026-11-05T02:00:00Z' }]
+    storage.setItem(V1_STORAGE_KEY, JSON.stringify(seed))
+    return storage
+  }
+
+  it('고를 수 있는 범위 — 요청자는 둘 다, 다른 팀원 · 강사(memberId 없음)는 나에게서만', () => {
+    const help = { requesterMemberId: 'm_1' }
+    assert.deepEqual(helpDeleteScopes(help, 'm_1'), ['me', 'everyone'])
+    assert.deepEqual(helpDeleteScopes(help, 'm_2'), ['me'])
+    assert.deepEqual(helpDeleteScopes(help, null), ['me'])
+  })
+
+  it('영구 삭제 경고의 개수 — 요청자가 아닌 사람의 코멘트(강사 답변 제외)와 강사 답변을 따로 센다', () => {
+    const c = (id: string, authorMemberId: string | null, isInstructorAnswer = false) => ({ ...helpRequestDetailExample.comments[0], id, authorMemberId, isInstructorAnswer })
+    const detail = { requesterMemberId: 'm_1', comments: [c('1', 'm_1'), c('2', 'm_2'), c('3', 'm_3'), c('4', null, true)] }
+    assert.deepEqual(helpDeleteLoss(detail), { otherComments: 2, instructorAnswers: 1 })
+    assert.deepEqual(helpDeleteLoss({ requesterMemberId: 'm_1', comments: [] }), { otherComments: 0, instructorAnswers: 0 })
+  })
+
+  it('나에게서만 삭제 — 숨긴 사람의 Snapshot에서만 빠지고 원본 · 코멘트는 그대로, 숨김 목록 · 해제, 이벤트 없음, 상태 무관', async () => {
+    const storage = createMemoryStorage()
+    const source = makeWith(storage)
+    const { changes, off } = listen(source)
+    // 남의 글(hr_2) · 해결된 글(hr_3) 모두 숨길 수 있다 — 두 번 숨겨도 그대로
+    await source.hideHelpRequest(TEAM_WS, 'hr_2')
+    await source.hideHelpRequest(TEAM_WS, 'hr_2')
+    await source.hideHelpRequest(TEAM_WS, 'hr_3')
+    let snap = await source.load(TEAM_WS)
+    assert.deepEqual(snap.helpRequests.map((h) => h.id).sort(), ['hr_1', 'hr_4'])
+    // 원본은 그대로 — 상세는 읽히고(숨김 목록에서 열어 해제), 저장값에 행이 남는다
+    assert.equal((await source.getHelpRequest(TEAM_WS, 'hr_2')).id, 'hr_2')
+    assert.equal(stored(storage).snapshot.helpRequests.length, 4)
+    assert.deepEqual((await source.listHiddenHelpRequests(TEAM_WS)).map((h) => h.id).sort(), ['hr_2', 'hr_3'])
+
+    await source.unhideHelpRequest(TEAM_WS, 'hr_2')
+    await source.unhideHelpRequest(TEAM_WS, 'hr_2') // 숨기지 않았으면 그대로
+    snap = await source.load(TEAM_WS)
+    assert.deepEqual(snap.helpRequests.map((h) => h.id).sort(), ['hr_1', 'hr_2', 'hr_4'])
+    assert.deepEqual((await source.listHiddenHelpRequests(TEAM_WS)).map((h) => h.id), ['hr_3'])
+    off()
+    assert.deepEqual(changes, []) // 개인 설정이라 다른 사람에게 알리지 않는다
+
+    await rejectsCode(source.hideHelpRequest(TEAM_WS, 'hr_nope'), 'not_found', HELP_MSG.notFound)
+    await rejectsCode(source.unhideHelpRequest(TEAM_WS, 'hr_nope'), 'not_found', HELP_MSG.notFound)
+  })
+
+  it('나에게서만 삭제 — 다른 사람이 숨긴 것은 내 Snapshot · 숨김 목록에 영향이 없다', async () => {
+    const source = makeWith(seededWithOthersHidden())
+    assert.ok((await source.load(TEAM_WS)).helpRequests.some((h) => h.id === 'hr_1'))
+    assert.deepEqual(await source.listHiddenHelpRequests(TEAM_WS), [])
+  })
+
+  it('모두에게서 영구 삭제 — 요청자만, 도움 요청 · 코멘트(남의 코멘트 포함) · 모든 숨김을 실제로 지운다. 지운 뒤에는 404', async () => {
+    const storage = seededWithOthersHidden()
+    const source = makeWith(storage)
+
+    // 남의 글은 지울 수 없다 — 아무것도 지우지 않는다
+    await rejectsCode(source.deleteHelpRequest(TEAM_WS, 'hr_2'), 'forbidden_role', HELP_MSG.notRequester)
+    assert.ok(stored(storage).snapshot.helpRequests.some((h: { id: string }) => h.id === 'hr_2'))
+    await rejectsCode(source.deleteHelpRequest(TEAM_WS, 'hr_nope'), 'not_found', HELP_MSG.notFound)
+
+    const { changes, off } = listen(source)
+    await source.deleteHelpRequest(TEAM_WS, 'hr_1') // 이삼도(m_2)의 코멘트가 달린 내 글
+    off()
+    const ws = stored(storage)
+    assert.equal(ws.snapshot.helpRequests.some((h: { id: string }) => h.id === 'hr_1'), false)
+    assert.equal(ws.helpThreads.some((t: { helpRequestId: string }) => t.helpRequestId === 'hr_1'), false)
+    assert.deepEqual(ws.hiddenHelpRequests, [])
+    // 논리 삭제 칸으로 남기지 않는다 — 저장값 어디에도 원문 · 코멘트가 없다
+    assert.equal(JSON.stringify(ws).includes('세션이 자꾸 끊겨요'), false)
+    assert.equal(JSON.stringify(ws).includes('same-site를 확인해 보세요'), false)
+    assert.equal((await source.load(TEAM_WS)).helpRequests.some((h) => h.id === 'hr_1'), false)
+    await rejectsCode(source.getHelpRequest(TEAM_WS, 'hr_1'), 'not_found')
+    await rejectsCode(source.deleteHelpRequest(TEAM_WS, 'hr_1'), 'not_found')
+    await rejectsCode(source.hideHelpRequest(TEAM_WS, 'hr_1'), 'not_found')
+    await rejectsCode(source.addHelpComment(TEAM_WS, 'hr_1', { content: '늦은 코멘트' }), 'not_found')
+    assert.deepEqual(changes, [{ type: 'changed', resources: ['help_requests'] }]) // 연결 안건이 없으면 help_requests만
+  })
+
+  it('모두에게서 영구 삭제 — 연결 안건은 지우지 않는다: confirmed는 거두고, 결정 · 거둔 안건은 남기고, 모두 원본을 끊고 제목을 "삭제된 도움 요청"으로', async () => {
+    const storage = createMemoryStorage()
+    const source = makeWith(storage)
+    // 거둔 안건 하나, 결정한 안건 하나(→ ended), 그리고 새 요청에서 만든 미논의 안건 하나
+    const withdrawn = await source.convertHelpRequestToAgenda(TEAM_WS, 'hr_1', { title: '로컬에서 GitHub 로그인 뒤 세션이 자꾸 끊겨요' })
+    await source.withdrawAgendaItem(TEAM_WS, withdrawn.id)
+    const decided = await source.convertHelpRequestToAgenda(TEAM_WS, 'hr_1', { title: '세션이 자꾸 끊겨요' })
+    await source.recordDecision(TEAM_WS, decided.id, { conclusion: 'SameSite를 Lax로', learning: '쿠키 설정', prDecision: null, followUpAssigneeMemberId: null, followUpDueDate: null, meetingId: null })
+    const created = await source.createHelpRequest(TEAM_WS, { content: '새로 막힌 것', fromStandupId: null })
+    const pending = await source.convertHelpRequestToAgenda(TEAM_WS, created.id, { title: '새로 막힌 것' })
+
+    const { changes, off } = listen(source)
+    await source.deleteHelpRequest(TEAM_WS, 'hr_1') // ended — 상태와 상관없이 지운다
+    await source.deleteHelpRequest(TEAM_WS, created.id) // on_agenda
+    off()
+    const items = (await source.load(TEAM_WS)).agendaItems
+    const byId = (id: string) => items.find((a) => a.id === id)!
+    assert.deepEqual([byId(withdrawn.id).status, byId(decided.id).status, byId(pending.id).status], ['withdrawn', 'discussed', 'withdrawn'])
+    for (const id of [withdrawn.id, decided.id, pending.id]) {
+      assert.deepEqual([byId(id).kind, byId(id).source, byId(id).title], ['help_request', null, DELETED_HELP_REQUEST_TITLE])
+    }
+    // 결정 기록(결론 · 배운 점)은 그대로 남는다
+    assert.deepEqual([byId(decided.id).decision?.conclusion, byId(decided.id).decision?.learning], ['SameSite를 Lax로', '쿠키 설정'])
+    assert.equal(JSON.stringify(stored(storage)).includes('세션이 자꾸 끊겨요'), false)
+    assert.deepEqual(changes, [
+      { type: 'changed', resources: ['help_requests', 'agenda_items'] },
+      { type: 'changed', resources: ['help_requests', 'agenda_items'] },
+    ])
   })
 })

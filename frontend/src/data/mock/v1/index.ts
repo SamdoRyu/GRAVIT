@@ -7,7 +7,7 @@ import { DataError, type DataSource } from '../../DataSource'
 import { CARD_MSG, cardConfirmError, cardCreateError, cardUpdateError, draftCardCells, followUpQuestionError, type CardMaterials } from '../../rules/decisionCard'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { averageReviewWaitHours } from '../../rules/flow'
-import { HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
+import { DELETED_HELP_REQUEST_TITLE, HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
 import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
@@ -270,7 +270,9 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
     }
     for (const sub of s.submissions) sub.currentRound = roundFor(ws, sub, me)
     const at = now()
-    const helpRequests = s.helpRequests.map((h) => helpSummary(h, at))
+    // 보는 사람이 숨긴 도움 요청("나에게서만 삭제" — #316)은 그 사람의 Snapshot에서만 뺀다(서버와 같이 응답 단계에서)
+    const hidden = hiddenIdsOf(ws, user.user.userId)
+    const helpRequests = s.helpRequests.filter((h) => !hidden.has(h.id)).map((h) => helpSummary(h, at))
     // 키 순서는 계약 표 그대로
     return {
       workspace: s.workspace,
@@ -813,6 +815,68 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       return helpSummary(help, now())
     },
 
+    // ---- 도움 요청 삭제 두 방식 (#316 — 「11」 도움 요청 삭제, 서버 #315와 같은 규칙) ----
+
+    async hideHelpRequest(workspaceId, helpRequestId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const help = findHelpRequest(ws, helpRequestId)
+      // 나에게서만 삭제 — 볼 수 있는 사람 누구나, 상태와 상관없이. 이미 숨겼으면 그대로. 다른 사람에게는 알리지 않는다(이벤트 없음)
+      ws.hiddenHelpRequests ??= []
+      if (!ws.hiddenHelpRequests.some((r) => r.helpRequestId === help.id && r.userId === user.user.userId)) {
+        ws.hiddenHelpRequests.push({ helpRequestId: help.id, userId: user.user.userId, hiddenAt: toInstant(now()) })
+        save()
+      }
+    },
+
+    async unhideHelpRequest(workspaceId, helpRequestId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const help = findHelpRequest(ws, helpRequestId)
+      const before = ws.hiddenHelpRequests?.length ?? 0
+      ws.hiddenHelpRequests = (ws.hiddenHelpRequests ?? []).filter((r) => !(r.helpRequestId === help.id && r.userId === user.user.userId))
+      if (ws.hiddenHelpRequests.length !== before) save()
+    },
+
+    async listHiddenHelpRequests(workspaceId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      const at = now()
+      return (ws.hiddenHelpRequests ?? [])
+        .filter((r) => r.userId === user.user.userId)
+        .sort((a, b) => b.hiddenAt.localeCompare(a.hiddenAt))
+        .flatMap((r) => {
+          const help = ws.snapshot.helpRequests.find((h) => h.id === r.helpRequestId)
+          return help ? [helpSummary(help, at)] : []
+        })
+    },
+
+    async deleteHelpRequest(workspaceId, helpRequestId) {
+      await wait()
+      const user = requireUser()
+      const ws = accessible(workspaceId, user)
+      // 모두에게서 영구 삭제 — 요청자만(검사 순서: 대상 404 → 요청자 403), 상태와 상관없이
+      const help = findOwnHelpRequest(ws, helpRequestId, currentMember(ws, user)!)
+      // 연결된 안건은 지우지 않는다: 미논의(confirmed)는 거두고, 모두 원본 연결을 끊고 복사된 제목을 고정 문구로 바꾼다
+      let agendaChanged = false
+      for (const item of ws.snapshot.agendaItems) {
+        if (item.source?.type !== 'help_request' || item.source.id !== help.id) continue
+        if (item.status === 'confirmed') item.status = 'withdrawn'
+        item.source = null
+        item.title = DELETED_HELP_REQUEST_TITLE
+        agendaChanged = true
+      }
+      // 도움 요청 · 코멘트(강사 답변 포함) · 모든 사람의 숨김을 실제로 지운다 — 논리 삭제 칸을 두지 않는다
+      ws.snapshot.helpRequests = ws.snapshot.helpRequests.filter((h) => h.id !== help.id)
+      ws.helpThreads = (ws.helpThreads ?? []).filter((t) => t.helpRequestId !== help.id)
+      ws.hiddenHelpRequests = (ws.hiddenHelpRequests ?? []).filter((r) => r.helpRequestId !== help.id)
+      save()
+      emit(workspaceId, { type: 'changed', resources: agendaChanged ? ['help_requests', 'agenda_items'] : ['help_requests'] })
+    },
+
     // ---- 「12」 스탠드업 (#190) — 날짜는 한국 시간. mock에는 강사 계정이 없다 ----
 
     async listStandups(workspaceId, date) {
@@ -1237,6 +1301,11 @@ function findOwnHelpRequest(ws: MockWorkspace, helpRequestId: Id, me: MemberDto)
   const help = findHelpRequest(ws, helpRequestId)
   if (help.requesterMemberId !== me.id) throw new DataError(HELP_MSG.notRequester, 'forbidden_role')
   return help
+}
+
+/** 이 사용자가 숨긴 도움 요청 ID("나에게서만 삭제" — #316) */
+function hiddenIdsOf(ws: MockWorkspace, userId: Id): Set<Id> {
+  return new Set((ws.hiddenHelpRequests ?? []).filter((r) => r.userId === userId).map((r) => r.helpRequestId))
 }
 
 /** 그 도움 요청의 코멘트 · 닫은 값 — 이 칸이 생기기 전 저장값이면 빈 것을 만든다 */

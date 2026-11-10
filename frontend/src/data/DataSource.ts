@@ -153,6 +153,20 @@ export interface DataSource {
   convertHelpRequestToAgenda(workspaceId: Id, helpRequestId: Id, request: HelpRequestToAgendaRequest): Promise<AgendaItemDto>
   /** POST W/help-requests/{id}/instructor-request — 요청자만. 이미 켜져 있으면 그대로 */
   requestInstructorHelp(workspaceId: Id, helpRequestId: Id): Promise<HelpRequestSummary>
+  /**
+   * PUT W/help-requests/{id}/hidden — 204. "나에게서만 삭제"(#315 · #316): 이 사용자에게만 숨긴다. 그 요청을 볼 수 있는 사람
+   * 누구나(팀원 · 강사), 상태와 상관없이. 이미 숨겼으면 그대로. 이벤트 없음 — 부른 쪽이 Snapshot을 다시 읽는다. 없으면 not_found
+   */
+  hideHelpRequest(workspaceId: Id, helpRequestId: Id): Promise<void>
+  /** DELETE W/help-requests/{id}/hidden — 204. 숨김 해제. 숨기지 않았으면 그대로. 없으면 not_found */
+  unhideHelpRequest(workspaceId: Id, helpRequestId: Id): Promise<void>
+  /** GET W/help-requests/hidden — 이 사무실에서 내가 숨긴 요청만, 숨긴 시각 내림차순 */
+  listHiddenHelpRequests(workspaceId: Id): Promise<HelpRequestSummary[]>
+  /**
+   * DELETE W/help-requests/{id} — 204. "모두에게서 영구 삭제": 요청자만(forbidden_role), 상태와 상관없이. 도움 요청 · 코멘트 ·
+   * 숨김을 실제로 지우고, 그 요청에서 만든 confirmed 안건은 withdrawn, 남는 안건은 원본을 끊고 제목을 "삭제된 도움 요청"으로
+   */
+  deleteHelpRequest(workspaceId: Id, helpRequestId: Id): Promise<void>
 
   // ---- 「12」 스탠드업 (#190 — 날짜는 한국 시간 LocalDate) ----
   /** GET W/standups?date= — 그날 쓴 팀원 것, memberId 순. 날짜 형식이 틀리면 invalid */

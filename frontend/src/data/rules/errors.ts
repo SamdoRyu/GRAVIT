@@ -24,8 +24,8 @@ export function isUncertainWrite(e: DataError): boolean {
 
 // ---- 폼 안 (쓰기) ---------------------------------------------------------------------
 
-/** 오류를 보이는 폼 — 사무실 열기 · 요구사항–이슈 연결 · PR 평가 · 회의 안건 올리기 · 도움 요청 쓰기 */
-export type WriteAction = 'openWorkspace' | 'linkRequirement' | 'evaluate' | 'raiseAgenda' | 'createHelp'
+/** 오류를 보이는 폼 — 사무실 열기 · 요구사항–이슈 연결 · PR 평가 · 회의 안건 올리기 · 도움 요청 쓰기 · 도움 요청 삭제 */
+export type WriteAction = 'openWorkspace' | 'linkRequirement' | 'evaluate' | 'raiseAgenda' | 'createHelp' | 'deleteHelp'
 
 /**
  * 폼 상단 띠의 다음 행동.
@@ -91,6 +91,13 @@ const WRITE_TEXT: Record<WriteAction, ActionText> = {
     forbidden: ['팀원만 도움을 요청할 수 있어요', `강사 계정이거나, 내 스탠드업이 아닌 글에서 요청했어요. ${KEEP}`],
     notFound: ['연결한 스탠드업을 찾을 수 없어요', `스탠드업이 지워졌을 수 있어요. ${KEEP}`],
     conflict: ['도움 요청을 올리지 못했어요', `그 사이 상태가 바뀌었어요. 최신 상태를 확인한 뒤 다시 올려 주세요. ${KEEP}`],
+    refresh: 'reload',
+  },
+  deleteHelp: {
+    invalid: '삭제 범위를 다시 골라 주세요.',
+    forbidden: ['요청한 사람만 모두에게서 지울 수 있어요', '내 화면에서만 숨기는 "나에게서만 삭제"는 할 수 있어요. 아무것도 지우지 않았어요.'],
+    notFound: ['이 도움 요청을 찾을 수 없어요', '이미 지워졌을 수 있어요. 최신 목록을 불러와 확인해 주세요.'],
+    conflict: ['도움 요청을 지우지 못했어요', '그 사이 상태가 바뀌었어요. 최신 상태를 확인한 뒤 다시 시도해 주세요. 아무것도 지우지 않았어요.'],
     refresh: 'reload',
   },
 }
