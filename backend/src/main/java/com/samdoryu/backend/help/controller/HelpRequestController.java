@@ -15,8 +15,6 @@ import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
 import jakarta.validation.Valid;
-import java.time.Instant;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -99,27 +97,15 @@ public class HelpRequestController {
         return agendaItemService.createFromHelpRequest(access, Ids.fromPath(helpRequestId), request.title());
     }
 
-    /** 접근 — 내가 숨긴 이 사무실의 도움 요청(#315 ① 나에게서만 삭제), createdAt 오름차순. */
-    @GetMapping("/hidden")
-    public List<HelpRequestSummary> listHidden(@PathVariable String workspaceId) {
-        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
-        return helpRequestService.listHidden(access, Instant.now());
-    }
-
-    /** 접근 — 팀원 · 지정된 강사 누구나 자기 화면에서만 숨긴다(#315 ①). 이미 숨겼으면 그대로. */
+    /**
+     * 접근 — 팀원 · 지정된 강사 누구나, 나에게서만 삭제(#315 ① · #333): 이 사용자의 조회 결과에서만 뺀다. 원문 · 코멘트는 그대로.
+     * 이미 뺐으면 그대로. 되돌리는 API는 없다.
+     */
     @PutMapping("/{helpRequestId}/hidden")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void hide(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         helpRequestService.hide(access, Ids.fromPath(helpRequestId));
-    }
-
-    /** 접근 — 숨김 해제(#315 ①). 숨기지 않았으면 그대로. */
-    @DeleteMapping("/{helpRequestId}/hidden")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void unhide(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
-        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
-        helpRequestService.unhide(access, Ids.fromPath(helpRequestId));
     }
 
     /**

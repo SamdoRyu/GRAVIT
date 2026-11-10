@@ -1,5 +1,5 @@
 // 도움 요청 삭제 범위 고르기 (#316 — CONTRACTS_API.md 「11」 도움 요청 삭제, 서버 #315). 소유: D.
-// - 나에게서만 삭제: 내 화면에서만 숨긴다(다른 사람에게는 그대로, 「숨긴 도움 요청」에서 다시 볼 수 있다). 볼 수 있는 사람 누구나.
+// - 나에게서만 삭제: 내 조회 결과에서만 뺀다(원문 · 코멘트는 그대로, 다른 사람에게는 계속 보인다 — #333). 볼 수 있는 사람 누구나. 실행 버튼은 「확인」.
 // - 모두에게서 영구 삭제: 요청자만. 경고(다른 사람 코멘트 · 강사 답변 개수, 복원 불가, 연결 안건 처리)를 본 뒤 한 번 더 눌러야 지운다.
 // 버튼을 숨기는 것은 권한 검사가 아니다 — 서버가 고른 범위(엔드포인트)대로 다시 검사하고, 실패는 폼 위 띠로 알린다.
 // 다른 대화상자처럼 HUD의 Dialogs가 그린다(오른쪽 패널 안에서 그리면 패널의 backdrop-filter에 갇힌다).
@@ -57,7 +57,7 @@ export function HelpDeleteDialog({ helpRequestId }: { helpRequestId: Id }) {
     const ok = scope === 'me' ? await st.hideHelpRequest(summary.id, w.report) : await st.deleteHelpRequest(summary.id, w.report)
     setBusy(false)
     if (!ok) return
-    st.toast('good', scope === 'me' ? '내 화면에서 숨겼어요. 「숨긴 도움 요청」에서 다시 볼 수 있어요' : '도움 요청을 모두에게서 지웠어요')
+    st.toast('good', scope === 'me' ? '나에게서만 삭제했어요. 다른 사람에게는 그대로 보여요' : '도움 요청을 모두에게서 지웠어요')
     useUi.getState().openHelpRequest(null)
     close()
   }
@@ -74,7 +74,7 @@ export function HelpDeleteDialog({ helpRequestId }: { helpRequestId: Id }) {
                 <input type="radio" name="help-delete-scope" value="me" checked={scope === 'me'} onChange={() => setScope('me')} />
                 <span>
                   <strong>나에게서만 삭제</strong>
-                  <span className="small dim">내 화면에서만 숨겨요. 다른 사람에게는 그대로 보이고, 「숨긴 도움 요청」에서 다시 볼 수 있어요.</span>
+                  <span className="small dim">내 목록에서만 사라져요. 원문과 코멘트는 그대로 남아 다른 사람에게는 계속 보여요.</span>
                 </span>
               </label>
               {scopes.includes('everyone') && (
@@ -115,7 +115,7 @@ export function HelpDeleteDialog({ helpRequestId }: { helpRequestId: Id }) {
             </button>
           )}
           <button type="submit" className={`btn btn-sm ${scope === 'everyone' && step === 'confirm' ? 'btn-danger-solid' : 'btn-primary'}`} disabled={busy}>
-            {scope === 'me' ? '나에게서만 삭제' : step === 'choose' ? '다음' : '영구 삭제'}
+            {scope === 'me' ? '확인' : step === 'choose' ? '다음' : '영구 삭제'}
           </button>
         </footer>
       </form>

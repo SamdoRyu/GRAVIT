@@ -73,8 +73,10 @@
 .btn-ghost.is-on { color: var(--accent); background: var(--accent-soft); }
 .btn-danger { color: var(--ink-bad); }
 .btn-danger:hover:not(:disabled) { background: var(--bad-soft); }
-.btn-danger-solid { background: var(--bad); border-color: transparent; color: #fff; }
-.btn-danger-solid:hover:not(:disabled) { background: #cf3a3f; }
+/* 흰 글자 · 같은 배경으로 고정 — hover로 바뀌지 않는다(#333). .hud button { color: inherit }보다 앞서게 .hud를 붙인다.
+   포커스 테두리는 .hud :focus-visible 그대로 */
+.hud .btn-danger-solid,
+.hud .btn-danger-solid:hover:not(:disabled) { background: var(--bad); border-color: transparent; color: #fff; }
 .btn-dashed { border-style: dashed; background: transparent; color: var(--text-dim); height: 38px; border-radius: 12px; }
 
 .select {

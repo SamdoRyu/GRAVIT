@@ -822,36 +822,12 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const user = requireUser()
       const ws = accessible(workspaceId, user)
       const help = findHelpRequest(ws, helpRequestId)
-      // 나에게서만 삭제 — 볼 수 있는 사람 누구나, 상태와 상관없이. 이미 숨겼으면 그대로. 다른 사람에게는 알리지 않는다(이벤트 없음)
+      // 나에게서만 삭제(#333) — 볼 수 있는 사람 누구나, 상태와 상관없이. 이미 뺐으면 그대로, 되돌리기 없음. 다른 사람에게는 알리지 않는다(이벤트 없음)
       ws.hiddenHelpRequests ??= []
       if (!ws.hiddenHelpRequests.some((r) => r.helpRequestId === help.id && r.userId === user.user.userId)) {
         ws.hiddenHelpRequests.push({ helpRequestId: help.id, userId: user.user.userId, hiddenAt: toInstant(now()) })
         save()
       }
-    },
-
-    async unhideHelpRequest(workspaceId, helpRequestId) {
-      await wait()
-      const user = requireUser()
-      const ws = accessible(workspaceId, user)
-      const help = findHelpRequest(ws, helpRequestId)
-      const before = ws.hiddenHelpRequests?.length ?? 0
-      ws.hiddenHelpRequests = (ws.hiddenHelpRequests ?? []).filter((r) => !(r.helpRequestId === help.id && r.userId === user.user.userId))
-      if (ws.hiddenHelpRequests.length !== before) save()
-    },
-
-    async listHiddenHelpRequests(workspaceId) {
-      await wait()
-      const user = requireUser()
-      const ws = accessible(workspaceId, user)
-      const at = now()
-      return (ws.hiddenHelpRequests ?? [])
-        .filter((r) => r.userId === user.user.userId)
-        .sort((a, b) => b.hiddenAt.localeCompare(a.hiddenAt))
-        .flatMap((r) => {
-          const help = ws.snapshot.helpRequests.find((h) => h.id === r.helpRequestId)
-          return help ? [helpSummary(help, at)] : []
-        })
     },
 
     async deleteHelpRequest(workspaceId, helpRequestId) {

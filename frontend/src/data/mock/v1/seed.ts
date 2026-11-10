@@ -51,7 +51,7 @@ export interface MockWorkspace {
   /** 도움 요청의 코멘트 · 닫을 때 남긴 값 (#183) — Snapshot 요약(helpRequests)과 ID로 짝. 없으면 빈 목록 */
   helpThreads?: MockHelpThread[]
   /**
-   * 도움 요청 개인 숨김 — "나에게서만 삭제"(#316 · 서버 HelpRequestHidden). (도움 요청, 사용자) 하나씩, 숨김 해제나 영구 삭제면 뺀다.
+   * 도움 요청 개인 제외 — "나에게서만 삭제"(#316 · #333 · 서버 HelpRequestHidden). (도움 요청, 사용자) 하나씩, 되돌리기 없음 — 영구 삭제면 뺀다.
    * 그 사용자의 Snapshot helpRequests에서만 뺀다. 없으면 빈 목록(이 칸이 생기기 전 저장값 포함)
    */
   hiddenHelpRequests?: { helpRequestId: Id; userId: Id; hiddenAt: Instant }[]

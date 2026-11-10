@@ -396,10 +396,6 @@ export function createV1ApiDataSource(opts: V1ApiOptions = {}): V1ApiDataSource 
     async hideHelpRequest(workspaceId, helpRequestId) {
       await write('PUT', `${helpPath(workspaceId, helpRequestId)}/hidden`)
     },
-    async unhideHelpRequest(workspaceId, helpRequestId) {
-      await write('DELETE', `${helpPath(workspaceId, helpRequestId)}/hidden`)
-    },
-    listHiddenHelpRequests: async (workspaceId) => json<HelpRequestSummary[]>(await read(`${workspacePath(workspaceId)}/help-requests/hidden`)),
     async deleteHelpRequest(workspaceId, helpRequestId) {
       await write('DELETE', helpPath(workspaceId, helpRequestId))
     },
