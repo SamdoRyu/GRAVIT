@@ -1,9 +1,10 @@
 // Meeting dialogs over the open v1 office (CONTRACTS_API.md 「10」 · #102 T5-c-2). OWNER: C.
 // Start: attendees (may be none — FR-MTG-05) and the confirmed agenda; the raiser can withdraw an item before it is decided.
-// End: record a decision per agenda item (conclusion · learning · PR decision · follow-up), then end with notes. Items left
+// End: record a decision per agenda item (conclusion · PR decision · follow-up), then end with notes — lessons and what was
+// discussed go in the notes (#318 — no separate learning inputs; existing learning items · decision lessons still show). Items left
 // undecided stay on the agenda for the next meeting. The PR decision is a record only — merging or closing happens on GitHub.
 // History: ended meetings with the decisions made in them.
-// Learning · other items (no source — #31) are written in the start and end dialogs; issues / PRs are raised from the 3D bridge.
+// Other items (no source — #31) are written in the start and end dialogs; issues / PRs are raised from the 3D bridge.
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AGENDA_TEXT_MAX, AGENDA_TITLE_MAX, agendaCreateError, blankToNull, decisionError, DECISION_TEXT_MAX, MEETING_MSG, MEETING_NOTES_MAX, meetingEndError } from '../data/rules/meeting'
 import type { AgendaItemCreateRequest, AgendaItemDto, Id, MeetingDto, MemberDto, WorkspaceSnapshot } from '../data/types'
@@ -262,20 +263,15 @@ export function RaiseAgendaDialog({ source }: { source: { type: 'task' | 'submis
   )
 }
 
-// ---- Write a learning · other item (no source — #31 · FR-LRN-11) -------------
-
-type NoteKind = Extract<AgendaItemCreateRequest['kind'], 'learning' | 'other'>
-const NOTE_KINDS: readonly NoteKind[] = ['learning', 'other']
-const NOTE_TITLE_LABEL: Record<NoteKind, string> = { learning: '무엇을 배웠나요', other: '무엇을 이야기할까요' }
-const NOTE_BACKGROUND_HINT: Record<NoteKind, string> = { learning: '어디서 · 어떻게 알게 됐는지', other: '이야기를 꺼낸 배경' }
+// ---- Write an other item (no source — #31 · FR-LRN-11) -----------------------
 
 /**
- * Puts a learning (shared lesson) or other item on the agenda (POST agenda-items, sourceId null). Collapsed to one button
- * until opened; after raising it folds back and the item joins the agenda list above it (and the bridge table in 3D).
+ * Puts an other item on the agenda (POST agenda-items, kind 'other', sourceId null). Collapsed to one button until opened;
+ * after raising it folds back and the item joins the agenda list above it (and the bridge table in 3D). Lessons are not
+ * raised here any more — they go in the meeting notes when ending the meeting (#318).
  */
 function AgendaNoteForm() {
   const [open, setOpen] = useState(false)
-  const [kind, setKind] = useState<NoteKind>('learning')
   const [title, setTitle] = useState('')
   const [background, setBackground] = useState('')
   const [tried, setTried] = useState('')
@@ -289,19 +285,18 @@ function AgendaNoteForm() {
     return (
       <button type="button" className="btn btn-sm agenda-note-open" onClick={() => setOpen(true)}>
         <Icon name="plus" size={14} />
-        배운 점 · 기타 안건 쓰기
+        기타 안건 쓰기
       </button>
     )
   }
 
-  const other = kind === 'other'
   const request: AgendaItemCreateRequest = {
-    kind,
+    kind: 'other',
     sourceId: null,
     title,
     background: blankToNull(background),
-    tried: other ? blankToNull(tried) : null,
-    unresolvedReason: other ? blankToNull(unresolved) : null,
+    tried: blankToNull(tried),
+    unresolvedReason: blankToNull(unresolved),
   }
   const error = agendaCreateError(request)
   const reset = () => {
@@ -323,7 +318,7 @@ function AgendaNoteForm() {
     w.clear()
     const st = useOffice.getState()
     if (await st.raiseAgendaItem({ ...request, title: title.trim() }, w.report)) {
-      st.toast('good', `${AGENDA_KIND_LABEL[kind]} 안건을 올렸어요`)
+      st.toast('good', `${AGENDA_KIND_LABEL.other} 안건을 올렸어요`)
       reset()
     } else {
       setBusy(false)
@@ -331,31 +326,20 @@ function AgendaNoteForm() {
   }
 
   return (
-    <form ref={formRef} className="agenda-note" onSubmit={submit} noValidate aria-label="배운 점 · 기타 안건 쓰기">
+    <form ref={formRef} className="agenda-note" onSubmit={submit} noValidate aria-label="기타 안건 쓰기">
       {w.notice && <FormAlert notice={w.notice} busy={w.busy} onAction={w.act} />}
-      <div className="seg" role="radiogroup" aria-label="안건 종류">
-        {NOTE_KINDS.map((k) => (
-          <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>
-            {AGENDA_KIND_LABEL[k]}
-          </button>
-        ))}
-      </div>
-      <Field label={NOTE_TITLE_LABEL[kind]} error={submitted && error === MEETING_MSG.agendaTitle ? error : ''}>
+      <Field label="무엇을 이야기할까요" error={submitted && error === MEETING_MSG.agendaTitle ? error : ''}>
         <input className="select" type="text" autoFocus value={title} maxLength={AGENDA_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
       </Field>
       <Field label="배경 (선택)">
-        <textarea className="select" rows={2} value={background} maxLength={AGENDA_TEXT_MAX} placeholder={NOTE_BACKGROUND_HINT[kind]} onChange={(e) => setBackground(e.target.value)} />
+        <textarea className="select" rows={2} value={background} maxLength={AGENDA_TEXT_MAX} placeholder="이야기를 꺼낸 배경" onChange={(e) => setBackground(e.target.value)} />
       </Field>
-      {other && (
-        <>
-          <Field label="해 본 것 (선택)">
-            <textarea className="select" rows={2} value={tried} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setTried(e.target.value)} />
-          </Field>
-          <Field label="혼자 결론 못 낸 이유 (선택)">
-            <textarea className="select" rows={2} value={unresolved} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setUnresolved(e.target.value)} />
-          </Field>
-        </>
-      )}
+      <Field label="해 본 것 (선택)">
+        <textarea className="select" rows={2} value={tried} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setTried(e.target.value)} />
+      </Field>
+      <Field label="혼자 결론 못 낸 이유 (선택)">
+        <textarea className="select" rows={2} value={unresolved} maxLength={AGENDA_TEXT_MAX} onChange={(e) => setUnresolved(e.target.value)} />
+      </Field>
       {submitted && error && error !== MEETING_MSG.agendaTitle && <p className="notice notice-warn">{error}</p>}
       {w.field && <FieldError text={w.field} />}
       <div className="decision-foot">
@@ -375,7 +359,6 @@ function AgendaNoteForm() {
 /** The decision form of one agenda item (POST agenda-items/{id}/decision) */
 function DecisionForm({ item, meeting, snapshot, members }: { item: AgendaItemDto; meeting: MeetingDto; snapshot: WorkspaceSnapshot; members: MemberDto[] }) {
   const [conclusion, setConclusion] = useState('')
-  const [learning, setLearning] = useState('')
   const [prDecision, setPrDecision] = useState<PrDecision | null>(null)
   const [followUp, setFollowUp] = useState('')
   const [followUpDue, setFollowUpDue] = useState('')
@@ -386,7 +369,8 @@ function DecisionForm({ item, meeting, snapshot, members }: { item: AgendaItemDt
 
   const request = {
     conclusion,
-    learning: blankToNull(learning),
+    // 배운 점은 회의록에 적는다(#318) — 결정마다 따로 받지 않는다
+    learning: null,
     prDecision,
     followUpAssigneeMemberId: followUp === '' ? null : followUp,
     followUpDueDate: followUpDue === '' ? null : followUpDue,
@@ -425,9 +409,6 @@ function DecisionForm({ item, meeting, snapshot, members }: { item: AgendaItemDt
           {submitted && error && prDecision === null && <em className="fld-error">{error}</em>}
         </div>
       )}
-      <Field label="배운 점 (선택)">
-        <textarea className="select" rows={2} value={learning} maxLength={DECISION_TEXT_MAX} placeholder="팀이 이번에 배운 것" onChange={(e) => setLearning(e.target.value)} />
-      </Field>
       <div className="decision-follow">
         <Field label="더 알아볼 사람 (선택)">
           <select className="select select-sm" value={followUp} onChange={(e) => setFollowUp(e.target.value)}>
@@ -537,8 +518,9 @@ export function EndMeetingDialog({ meetingId }: { meetingId: Id }) {
 
         <form id="end-meeting" onSubmit={submit} noValidate>
           <Field label="회의록 (선택)" error={notesError ?? ''}>
-            <textarea className="select" rows={3} value={notes} maxLength={MEETING_NOTES_MAX} placeholder="결정 배경이나 다음 할 일을 남겨 보세요" onChange={(e) => setNotes(e.target.value)} />
+            <textarea className="select" rows={4} value={notes} maxLength={MEETING_NOTES_MAX} placeholder="이번 회의에서 배운 점과 나눈 이야기 · 결정 배경 · 다음 할 일을 여기에 남겨 보세요" onChange={(e) => setNotes(e.target.value)} />
           </Field>
+          <p className="dim small">배운 점과 회의 내용은 회의록 한 곳에 적어요. 비워 두어도 회의는 끝나요.</p>
         </form>
         {!allowed && <p className="notice notice-warn">강사는 결정을 기록하거나 회의를 마칠 수 없어요.</p>}
       </div>
