@@ -7,7 +7,7 @@
 
 # API 계약 — 오피스 v1
 
-> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-09
+> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-10
 > [CONTRACTS.md](CONTRACTS.md)의 상세편이다. 공통 규칙(ID · 시각 · 상태 코드 · 페이지 · 에러 · 검사 순서 · 익명성 · Snapshot 경계)은 CONTRACTS.md에 있고 여기서 다시 적지 않는다. 엔드포인트 · DTO는 **이 문서 한 곳**이 기준이다. 바꿀 때는 CONTRACTS.md 「9. 계약 변경 절차」(문서 담당자가 고치고 커밋을 공유).
 > 근거: 2026-11-03 결정(Q1~Q6), 03 · 05 · 06 · 07. 이 문서는 새 기능 · 새 정책을 만들지 않는다 — 정책에서 바로 나오지 않는 인터페이스 선택에는 `[구현 기본값]`을 붙였다.
 
@@ -502,7 +502,7 @@ interface MyEvaluation { verdict: Verdict; reason: string; updatedAt: Instant }
 | 메서드 · 경로 | 요청 | 성공 | 역할 · 조건 | 실패 |
 | --- | --- | --- | --- | --- |
 | `POST W/agenda-items` | `AgendaItemCreateRequest` | `201 AgendaItemDto`(`confirmed`). PR 안건은 그때의 현재 회차를 `evaluationRoundId`로 기억한다 | 팀원. 개수 제한 없음 (FR-LRN-14) | 종류와 원본이 맞지 않음 · `help_request` 종류 `400 invalid`(도움 요청은 「11」 전환으로만), 원본이 없거나 다른 사무실 것 `404`, 강사 `403` |
-| `POST W/agenda-items/{agendaItemId}/withdraw` | — | `200 AgendaItemDto`(`withdrawn`) | 팀원 — 올린 사람 | 올린 사람이 아님 · 강사 `403`, `confirmed`가 아님 `409` |
+| `POST W/agenda-items/{agendaItemId}/withdraw` | — | `200 AgendaItemDto`(`withdrawn`). 안건 행은 지우지 않는다. `help_request` 안건이면 같은 트랜잭션에서 그 도움 요청을 안건으로 전환하기 직전 상태(`open` · `discussing` — 코멘트로 다시 계산하지 않음, 「11」 상태 전이)로 되돌린다. 본문 · 코멘트(강사 답변 포함) · "강사에게 요청"은 그대로다. 결정을 기록한 안건(`discussed`)은 `409`라 되돌리지 않는다. 응답 DTO는 그대로 — 되돌아온 도움 요청은 Snapshot `helpRequests`에서 읽는다. 변경 알림은 `agenda_items`, `help_request` 안건이면 `agenda_items` · `help_requests` (2026-11-10 — #313) | 팀원 — 올린 사람 | 올린 사람이 아님 · 강사 `403`, `confirmed`가 아님 `409`. 검사 순서는 대상(없거나 다른 사무실 것 `404`) → 올린 사람 → 상태 — 그대로 |
 | `POST W/agenda-items/{agendaItemId}/decision` | `DecisionRequest` | `200 AgendaItemDto`(`discussed`). 같은 트랜잭션에서: `revise_and_reevaluate`면 새 평가 회차(`meeting_reevaluate`), `help_request` 안건이면 그 도움 요청을 `ended`로 | 팀원 (올린 사람이 아니어도 됨) | `prDecision`이 PR 안건에 없거나 다른 종류에 있음 · 후속 담당자가 팀원이 아님 `400`, 강사 `403`, `confirmed`가 아님 · 머지 · 닫힌 PR 안건에 `revise_and_reevaluate`(CONTRACTS.md 「3」 평가 회차 — 2026-11-05) `409` |
 | `POST W/agenda-items/{agendaItemId}/feedback-request` | — | `200 AgendaItemDto`(`feedbackRequested: true`). 이미 켜져 있으면 그대로 | 팀원 | 결정 기록 전(`discussed`가 아님) `409`, 강사 `403` |
 | `POST W/agenda-items/{agendaItemId}/instructor-feedback` | `{ body: string }` (1~2000자) | `201 InstructorFeedbackDto`. 안건 · 결정 상태는 바뀌지 않는다 | R4. 피드백 요청이 켜진 결정 기록 | 요청 안 됨 · 학생 `403 forbidden_role` |
@@ -582,7 +582,7 @@ interface MeetingDto {
 | `POST W/help-requests` | `{ content: string; fromStandupId: Id \| null }` (1~2000자) | `201 HelpRequestSummary`(`open`) | 팀원. `fromStandupId`는 본인의 스탠드업 | 스탠드업이 본인 것이 아님 `403`, 강사 `403` |
 | `POST W/help-requests/{helpRequestId}/comments` | `{ content: string }` (1~2000자) | `201 HelpCommentDto`. 요청자가 아닌 팀원의 첫 코멘트면 `open` → `discussing`. 강사 답변(`isInstructorAnswer: true`)은 상태를 바꾸지 않는다 | 팀원, 또는 R4 — "강사에게 요청"이 켜진 글 | 요청 안 된 글에 강사 `403`, `resolved` · `ended` `409` |
 | `POST W/help-requests/{helpRequestId}/close` | `{ helpfulCommentId: Id \| null; learning: string }` (배운 점 1~200자) | `200 HelpRequestDetail`(`resolved`) | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 도움이 된 코멘트가 이 글의 것이 아님 · 강사 답변 · 요청자 본인 코멘트 `400`, 그 밖의 상태 `409` |
-| `POST W/help-requests/{helpRequestId}/to-agenda` | `{ title: string }` (1~100자) | `201 AgendaItemDto`(`help_request` 종류, `confirmed`). 도움 요청은 `on_agenda`. 직접 전환과 48시간 후보 확정이 같은 API다 | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 그 밖의 상태 `409` |
+| `POST W/help-requests/{helpRequestId}/to-agenda` | `{ title: string }` (1~100자) | `201 AgendaItemDto`(`help_request` 종류, `confirmed`). 도움 요청은 `on_agenda`. 직접 전환과 48시간 후보 확정이 같은 API다. 안건 철회로 되돌아온 요청도 다시 전환할 수 있다 — 새 `confirmed` 안건이 생기고, 거둔 안건 행은 `withdrawn`으로 남는다 (2026-11-10 — #313) | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 그 밖의 상태 `409`, 거두지 않은 안건이 이미 있음(동시에 두 번 전환 등 — 하나만 `201`) `409` |
 | `POST W/help-requests/{helpRequestId}/instructor-request` | — | `200 HelpRequestSummary`(`instructorRequested: true`). 이미 켜져 있으면 그대로(처음 시각 유지, 변경 알림 없음) | 팀원 — 요청자. 상태 `open` · `discussing` · `on_agenda` | 요청자가 아님 `403`, `resolved` · `ended` `409`(이미 켜져 있어도), 새로 켤 때 사무실에 지정된 강사가 없음 `409` — 시연 사무실은 심사용 강사 계정이 강사라 이 검사를 하지 않는다. 검사 순서는 대상 → 요청자 → 상태 → (이미 켜져 있으면 그대로) → 지정된 강사 (2026-11-09 결정) |
 
 ```ts
@@ -595,7 +595,7 @@ interface HelpRequestSummary {
   isAgendaCandidate: boolean;     // 계산 — open · discussing이고 만든 지 48시간 지남 (FR-LRN-18). 화면은 반투명 후보로
   instructorRequested: boolean;
   instructorRequestedAt: Instant | null;
-  agendaItemId: Id | null;        // 전환된 안건
+  agendaItemId: Id | null;        // 전환된 안건 중 거두지 않은 것(confirmed · discussed). 철회로 되돌아오면 null (2026-11-10 — #313)
   fromStandupId: Id | null;
   commentCount: number;
   createdAt: Instant;
@@ -617,6 +617,11 @@ interface HelpCommentDto {
 ```
 
 - 회의에서 결정을 기록하면(「10」) `on_agenda` → `ended`. 이슈로 만들기로 한 경우도 같다 — 이슈는 GitHub에서 만든다(FR-LRN-20).
+- **안건 철회** (2026-11-10 — #313): `on_agenda` → (안건 철회, 「10」 `withdraw`) → `open` · `discussing`. 안건만 거두고, 도움 요청은 **안건으로 전환하기 직전 상태 그대로** 되돌린다. `open`에서 전환했으면 `open`, `discussing`에서 전환했으면 `discussing`이다. 코멘트 유무로 다시 계산하지 않는다. `on_agenda` 동안 요청자가 아닌 팀원의 코멘트가 달렸어도, 직전 상태가 `open`이었으면 `open`이다.
+  - 본문 · 코멘트(강사 답변 포함) · `createdAt` · "강사에게 요청"(`instructorRequested` · `instructorRequestedAt`)은 바꾸지 않는다. `on_agenda` 동안 켠 강사 요청도 끄지 않는다.
+  - `agendaItemId`는 `null`이 되고, `isAgendaCandidate`는 되돌린 상태로 다시 계산한다(만든 지 48시간이 지났으면 `true`).
+  - 그 뒤 다시 전환할 수 있고, 철회와 전환을 되풀이해도 된다. 철회할 때마다 그 전환의 직전 상태로 돌아온다. 거두지 않은 안건(`confirmed` · `discussed`)은 도움 요청 하나당 하나뿐이다(CONTRACTS.md 「3」 무결성 제약).
+  - 예: `discussing`이고 만든 지 48시간이 지난 요청(강사 요청 안 함)을 전환했다가 거두면 `status: "discussing"`, `isAgendaCandidate: true`, `instructorRequested: false`, `agendaItemId: null`이 된다.
 
 ## 12. 스탠드업
 
