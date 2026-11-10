@@ -5,6 +5,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AdditiveBlending, Color, MeshBasicMaterial, SpriteMaterial, type Mesh } from 'three'
+import { glowing } from '../../scene/bloom'
 import { noRaycast } from '../../scene/runtime'
 import { bridgeMood } from './bridgeMood'
 import { glowTex } from './parts'
@@ -54,7 +55,8 @@ export function StationAmbient() {
 
 /** 콘솔 화면 빛 — 몇 초마다 은은하게 밝아졌다 어두워지고, 가끔(평균 몇십 초에 한 번) 0.1초쯤 깜빡인다 */
 export function ConsoleScreen({ color, at, position, rotation, size }: { color: number; at: V3; position: V3; rotation: V3; size: [number, number] }) {
-  const mat = useMemo(() => new MeshBasicMaterial({ color }), [color])
+  // 콘솔 화면은 은은히 번진다(#305)
+  const mat = useMemo(() => glowing(new MeshBasicMaterial({ color })), [color])
   useEffect(() => () => mat.dispose(), [mat])
   const base = useMemo(() => new Color(color), [color])
   const ph = useMemo(() => phaseOf(at), [at])

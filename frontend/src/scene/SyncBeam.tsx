@@ -8,6 +8,7 @@ import { AdditiveBlending, BufferGeometry, Color, DoubleSide, Float32BufferAttri
 import { useOffice } from '../store'
 import { COLORS, glowTex, lam } from '../theme/station/parts'
 import { COMM_HUB, HULL_Y, WORLD_SCALE } from '../theme/station/geometry'
+import { glowGain } from './bloom'
 import { noRaycast } from './runtime'
 
 const S = WORLD_SCALE
@@ -23,17 +24,17 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 
 function beamMaterial(): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { color: { value: new Color(0x9fd6ff) }, k: { value: 0 }, t: { value: 0 } },
+    uniforms: { color: { value: new Color(0x9fd6ff) }, k: { value: 0 }, t: { value: 0 }, opacity: { value: 1 } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 color; uniform float k; uniform float t;
+      uniform vec3 color; uniform float k; uniform float t; uniform float opacity;
       varying vec2 vUv;
       void main() {
         // 아래(접시)로 흐르는 띠 — 원통 양면을 더해 그려 가운데가 진하게 보인다
         float flow = 0.55 + 0.45 * sin(vUv.y * 40.0 + t * 9.0);
-        float a = k * flow * 0.32;
+        float a = k * flow * 0.32 * opacity;
         gl_FragColor = vec4(color * a, a);
       }`,
     transparent: true,
@@ -82,9 +83,10 @@ export function SyncBeam() {
       len,
       quat: new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir.clone().normalize()),
       mid: new Vector3().addVectors(DISH, SAT).multiplyScalar(0.5),
-      mat: beamMaterial(),
+      // 빛 번짐(#305)에는 약하게 — 그대로 번지면 하얀 번개처럼 보인다
+      mat: glowGain(beamMaterial(), 0.4),
       dotGeo: geo,
-      dotMat: new PointsMaterial({ map: glowTex(), color: 0xd8f0ff, size: 1.6, transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending }),
+      dotMat: glowGain(new PointsMaterial({ map: glowTex(), color: 0xd8f0ff, size: 1.6, transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending }), 0.4),
       phase: Array.from({ length: DOTS }, (_, i) => (i / DOTS + Math.sin(i * 7.31) * 0.01 + 1) % 1),
     }
   }, [])

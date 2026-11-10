@@ -5,6 +5,7 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AdditiveBlending, BackSide, BufferGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, MeshBasicMaterial, Object3D, SpriteMaterial, Vector3, type DirectionalLight, type Group, type Mesh } from 'three'
+import { noGlow } from '../../scene/bloom'
 import { DYN_LAYER, LOW_POWER, noRaycast } from '../../scene/runtime'
 import { STATION_BOUNDS, WORLD_SCALE } from './geometry'
 import { glowTex } from './parts'
@@ -113,8 +114,9 @@ export function StationSky({ palette }: { palette: SkyPalette }) {
   // 팔레트를 따라 색이 바뀌는 재질 — 한 번 만들고 색만 고친다
   const mats = useMemo(
     () => ({
-      halo: new MeshBasicMaterial({ transparent: true, opacity: 0.22, side: BackSide, depthWrite: false, fog: false, blending: AdditiveBlending }),
-      nebula: NEBULA.map(([, , opacity]) => new SpriteMaterial({ map: glowTex(), transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, fog: false })),
+      // 하늘의 더하기 빛은 번지지 않는다(#305 — 행성이 뿌옇게 날아가지 않게)
+      halo: noGlow(new MeshBasicMaterial({ transparent: true, opacity: 0.22, side: BackSide, depthWrite: false, fog: false, blending: AdditiveBlending })),
+      nebula: NEBULA.map(([, , opacity]) => noGlow(new SpriteMaterial({ map: glowTex(), transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, fog: false }))),
     }),
     [],
   )

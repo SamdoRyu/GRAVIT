@@ -16,6 +16,7 @@ import { DockShip } from './DockShip'
 import { InstructorShip } from './InstructorShip'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
+import { SelectiveBloom } from './SelectiveBloom'
 import { SyncBeam } from './SyncBeam'
 import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
@@ -49,6 +50,8 @@ export function OfficeScene() {
       <StationSky palette={skyPalette} />
       <WarpStreaks source={shipLive} />
       <CameraRig />
+      {/* 정한 불빛만 은은히 번진다(#305) — 화면 그리기를 맡는다 */}
+      <SelectiveBloom />
       {/* Anything that doesn't stop propagation lands here: a click on empty space / the hull clears the selection. */}
       <group
         onClick={(e) => {
