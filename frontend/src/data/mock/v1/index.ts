@@ -567,8 +567,18 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       if (item.raisedByMemberId !== currentMember(ws, user)!.id) throw new DataError(MEETING_MSG.withdrawNotOwner, 'forbidden_role')
       if (item.status !== 'confirmed') throw new DataError(MEETING_MSG.agendaNotConfirmed, 'conflict')
       item.status = 'withdrawn'
+      const resources: SnapshotResource[] = ['agenda_items']
+      // 도움 요청 안건이면 같은 쓰기에서 그 도움 요청을 전환 직전 상태로 되돌린다 — 다시 올릴 수 있다(#313 · #314, 「10」 withdraw)
+      const help = item.source?.type === 'help_request' ? ws.snapshot.helpRequests.find((h) => h.id === item.source!.id) : undefined
+      if (help?.status === 'on_agenda') {
+        const thread = threadOf(ws, help.id)
+        help.status = thread.statusBeforeAgenda ?? statusBeforeAgendaOf(help, thread, item.raisedAt)
+        help.agendaItemId = null
+        thread.statusBeforeAgenda = null
+        resources.push('help_requests')
+      }
       save()
-      emit(workspaceId, { type: 'changed', resources: ['agenda_items'] })
+      emit(workspaceId, { type: 'changed', resources })
       return structuredClone(item)
     },
 
@@ -607,6 +617,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       if (helpRequest?.status === 'on_agenda') {
         helpRequest.status = 'ended'
         helpRequest.closedAt = at
+        threadOf(ws, helpRequest.id).statusBeforeAgenda = null
         resources.push('help_requests')
       }
       if (meeting && !meeting.discussedAgendaItemIds.includes(item.id)) {
@@ -775,6 +786,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
         instructorFeedbacks: [],
       }
       ws.snapshot.agendaItems.push(item)
+      // 거두면 이 상태로 그대로 돌아간다 — 코멘트로 다시 계산하지 않는다(#313 · CONTRACTS_API.md 「11」 안건 철회)
+      threadOf(ws, help.id).statusBeforeAgenda = help.status as 'open' | 'discussing'
       help.status = 'on_agenda'
       help.agendaItemId = item.id
       save()
@@ -1235,6 +1248,17 @@ function threadOf(ws: MockWorkspace, helpRequestId: Id): MockHelpThread {
     ws.helpThreads.push(thread)
   }
   return thread
+}
+
+/**
+ * 전환 직전 상태가 기록되지 않은 on_agenda 요청(이 칸이 생기기 전 저장값)만 한 번 채우는 규칙 — 서버 V6 채우기와 같다:
+ * 전환 시각(안건 raisedAt) 전에 요청자가 아닌 팀원의 코멘트(강사 답변 제외)가 있었으면 discussing, 아니면 open.
+ */
+function statusBeforeAgendaOf(help: HelpRequestSummary, thread: MockHelpThread, raisedAt: Instant): 'open' | 'discussing' {
+  const discussed = thread.comments.some(
+    (c) => !c.isInstructorAnswer && c.authorMemberId !== help.requesterMemberId && Date.parse(c.createdAt) < Date.parse(raisedAt),
+  )
+  return discussed ? 'discussing' : 'open'
 }
 
 /** 응답용 요약 — 안건 후보 여부는 지금 시각으로 계산한다(서버도 읽을 때 계산) */

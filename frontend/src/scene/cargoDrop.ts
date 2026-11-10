@@ -7,8 +7,9 @@
 //   store openRequirementWaiting(taskId))
 // - anywhere else → nothing. Either way the shape flies back to its own place: neither changes where the original is.
 // An agenda shape on the bridge table (#291 — FR-LRN-14): only one the viewer may withdraw (raised by them, not decided yet) is
-// picked up. Let go over the bridge trash can → withdrawAgendaItem (the agenda item only — the original issue · PR · help
-// request stays); anywhere else → nothing, it flies back to its place on the table.
+// picked up. Let go over the bridge trash can → withdrawAgendaItem (the agenda item becomes `withdrawn`; the original issue · PR
+// stays, and a help request goes back to its state right before it was raised — #313 · #314); anywhere else → nothing, it flies
+// back to its place on the table.
 import type { AgendaItemDto, Viewer } from '../data/types'
 import { MEETING_MSG } from '../data/rules/meeting'
 import type { PlaceRole } from './model/types'

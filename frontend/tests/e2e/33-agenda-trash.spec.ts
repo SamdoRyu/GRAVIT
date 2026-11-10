@@ -5,35 +5,10 @@
 // 끌기 어려운 사람을 위한 회의 시작 대화상자의 "안건 거두기" 버튼은 그대로 쓴다.
 // 다른 사람의 안건은 mock 저장소(localStorage)에서 올린 사람을 바꾸고 다시 읽어 만든다(mock seed에는 안건이 없다).
 import type { Page } from '@playwright/test'
-import { callStore, expect, hoverBox, openApp, readStore, settled, test, waitForScene, type ScreenPoint } from './fixtures'
+import { pickUp, runtime, trashPoint } from './agendaTrash'
+import { callStore, expect, openApp, readStore, test, waitForScene } from './fixtures'
 
 type Item = { id: string; status: string; title: string; raisedByMemberId: string }
-
-/** Runtime drag state and whether a shape is drawn */
-function runtime(page: Page, key: string) {
-  return page.evaluate(async (k) => {
-    const rtPath = '/src/scene/runtime.ts'
-    const rt = await import(/* @vite-ignore */ rtPath)
-    const b = rt.boxLive.get(k)
-    return {
-      drag: rt.cargoDrag.key as string | null,
-      agenda: rt.cargoDrag.agenda as boolean,
-      overTrash: rt.cargoDrag.overTrash as boolean,
-      pos: b ? { x: b.x as number, z: b.z as number } : null,
-    }
-  }, key)
-}
-
-/** The trash can's rim on screen (theme/station/geometry.ts BRIDGE_TRASH, drawn at WORLD_SCALE) */
-async function trashPoint(page: Page): Promise<ScreenPoint> {
-  const w = await page.evaluate(async () => {
-    const geometryPath = '/src/theme/station/geometry.ts'
-    const { BRIDGE_TRASH, bridgeTrashCenter, WORLD_SCALE } = await import(/* @vite-ignore */ geometryPath)
-    const c = bridgeTrashCenter()
-    return { x: c.x * WORLD_SCALE, y: (c.y + BRIDGE_TRASH.height * 0.6) * WORLD_SCALE, z: c.z * WORLD_SCALE }
-  })
-  return settled(page, { kind: 'point', ...w })
-}
 
 async function items(page: Page): Promise<Item[]> {
   return readStore(page, (s) => s.office.snapshot.agendaItems)
@@ -52,15 +27,6 @@ async function raise(page: Page, taskId: string, title: string): Promise<string>
   expect(item).not.toBeNull()
   await expect.poll(async () => (await runtime(page, `agenda:${item!.id}`)).pos !== null, { message: 'agenda shape on the table' }).toBe(true)
   return item!.id
-}
-
-/** Press an agenda shape and move off it; returns whether it was picked up */
-async function pickUp(page: Page, key: string): Promise<boolean> {
-  const from = await hoverBox(page, key)
-  await page.mouse.down()
-  await page.mouse.move(from.x + 12, from.y + 12, { steps: 3 })
-  await page.waitForTimeout(150)
-  return (await runtime(page, key)).drag === key
 }
 
 /** The persisted mock state (what the "server" holds) */
