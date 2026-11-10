@@ -7,7 +7,7 @@
 
 # 공통 계약 — 오피스 v1
 
-> 문서: CONTRACTS.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-09
+> 문서: CONTRACTS.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-10
 > 이 문서를 읽는 에이전트에게: 여러 Claude Code 세션과 4명이 같은 계약으로 병렬 개발하려고 모아 둔 곳이다. 여기 없는 계약을 세션마다 따로 만들지 말고, 필요하면 문서 담당자에게 이 문서를 먼저 고쳐 달라고 요청한다(「9. 계약 변경 절차」). 작업 기준은 문서 담당자가 공지한 계약 커밋이다. 요구사항 · 정책의 기준은 03 · 05 · 06이고, 이 문서는 그것을 구현 모양으로 옮긴 것이다.
 > **엔드포인트별 경로 · 요청 · 응답 DTO · 역할 · 실패 코드 · JSON 예시는 [CONTRACTS_API.md](CONTRACTS_API.md) 한 곳에만 둔다.** 이 문서는 진입점이고 공통 규칙을 둔다. 같은 계약을 두 문서에 따로 적지 않는다.
 
@@ -77,7 +77,7 @@
 | `InstructorFeedback` | 사무실 | 안건(결정 기록), 강사 → AppUser, 내용, 시각 | AgendaItem 1–N | FR-LRN-22 |
 | `Meeting` | 사무실 | 시작 · 끝, 참석자, 메모 | → Workspace. 다룬 안건은 `AgendaItem`이 회의를 가리킨다 | 06 회의 |
 | `Standup` | 사무실 | 작성자 → Member, 날짜(한국 시간 기준 날짜 [구현 기본값]), 어제 한 일, 막힌 것 | → Workspace, → Member | FR-MTG-01 · 02 |
-| `HelpRequest` · `HelpComment` | 사무실 | 요청자 → Member, 내용, 상태, 강사에게 요청한 시각, 닫을 때 배운 점, 도움이 된 코멘트, 넘어온 스탠드업(선택), 전환된 안건(선택) / 코멘트 작성자 → AppUser, 내용, 강사 답변 여부 | HelpRequest 1–N HelpComment, HelpRequest 1–0..1 AgendaItem | FR-LRN-15~21 |
+| `HelpRequest` · `HelpComment` | 사무실 | 요청자 → Member, 내용, 상태, 강사에게 요청한 시각, 닫을 때 배운 점, 도움이 된 코멘트, 넘어온 스탠드업(선택), 전환된 안건(선택) / 코멘트 작성자 → AppUser, 내용, 강사 답변 여부 | HelpRequest 1–N HelpComment, HelpRequest 1–N AgendaItem — 거두지 않은 안건(`confirmed` · `discussed`)은 0..1, 거둔 안건은 여럿 남을 수 있다(2026-11-10 — #313) | FR-LRN-15~21 |
 | `TaskDueDate` | 사무실 | 이슈, 마감일, 입력한 사람 → AppUser · 시각 | Task 1–1. [확정] 고칠 수 있는 사람은 그 사무실 ROLE-02와 그 이슈의 담당자(`TaskAssignee`) 전원 — P14. GitHub 이슈는 바뀌지 않는다 | FR-PLAN-02 · 03 (2026-11-01 결정 · 권한은 2026-11-01 추가 결정) |
 | `DecisionCard` · `FollowUpQuestion` | 사무실 | PR, 본인 → Member, 9칸, 본인 확인 시각, 꼬리질문 요청 시각 / 강사 → AppUser, 내용 | DecisionCard 1–N FollowUpQuestion | FR-REP-07 · 11 · P11 |
 | `RetroReport` | 사무실 | 본인 → Member, 종류(최종 · 중간), 배운 점, 만든 시각 (나머지 칸은 계산) | → Member | FR-REP-01~03 · 05 |
@@ -180,6 +180,7 @@ JSON의 열거 값은 소문자 snake다(코드 컨벤션 (BE) 「이름」). �
 
 - **안건 후보**: 05의 "후보"는 v1 Must에서 48시간 미해결 도움 요청(FR-LRN-18)뿐이다. 이것은 `AgendaItem` 행이 아니라 도움 요청의 계산 값(`isAgendaCandidate`)으로 낸다 — 요청자가 확정하면(FR-LRN-19) 그때 `confirmed` 안건이 생긴다. 확정되지 않은 후보는 행이 없으므로 지울 것도 없다(P8 "지우지 않는다"와 같은 결과). 앱이 다른 후보를 자동으로 찾는 것은 추가 제안 후보 8이라 v1 계약에 없다 — 채택되면 `candidate` 값을 계약 변경(「9」)으로 더한다.
 - **도움 요청 "안건 후보"**: 위와 같이 상태 값이 아니라 `isAgendaCandidate`(상태가 `open` · `discussing`이고 만든 지 48시간이 지남)다.
+- **도움 요청 상태 전이 — 안건 철회** (2026-11-10 — #313): `on_agenda` → (안건 철회) → `open` · `discussing`. 도움 요청 안건을 거두면 같은 트랜잭션에서 도움 요청을 안건으로 전환하기 직전 상태로 되돌리고, 다시 전환할 수 있다. 거둔 안건 행은 `withdrawn`으로 남는다. 전체 전이와 남은 결정은 CONTRACTS_API.md 「11」.
 
 ### 요구사항 재동기화 (2026-11-03 결정 — Q2) [계약]
 
@@ -260,7 +261,7 @@ DB 유일 제약이나 서비스 검사로 막는다. 분산 트랜잭션은 쓰
 | `EvaluationRound`: (PR, 회차 번호) 유일 | 유일 제약 |
 | `Evaluation`: (회차, 평가자) 유일 — 1인 1회, 고치면 같은 행을 갱신 | 유일 제약 |
 | `Standup`: (사무실, 팀원, 날짜) · `TaskDueDate`: 이슈 하나 · `DecisionCard`: (팀원, PR) · `ActivityConfirmation`: (활동, 확인자) · `PeerFeedback`: (사무실, 작성자, 받는 사람, 주) 유일 | 유일 제약 |
-| `HelpRequest` → 전환된 안건은 하나 | 유일 제약 |
+| `HelpRequest` → 거두지 않은 안건(`confirmed` · `discussed`)은 도움 요청당 하나. 거둔(`withdrawn`) 행은 남고 세지 않는다 (2026-11-10 — #313) | 유일 제약(방법은 migration 때 — 예: 거두지 않은 행에만 값이 있는 생성 열에 유일 제약). 거둔 행을 다시 `confirmed`로 쓰지 않는다 — 철회 기록이 사라진다 |
 | `InstructorAssignment`: 현재 지정은 (사무실, GitHub 사용자 ID)당 하나 | 서비스 + DB(방법은 migration 때 — 예: 현재 지정 행에만 값이 있는 생성 열에 유일 제약) |
 | `Meeting`: 사무실마다 진행 중 회의는 하나 | 서비스(`conflict`) |
 | **같은 사무실끼리만 참조** — 요구사항 연결의 요구사항 · 이슈, 안건의 원본 · 회차, 후속 담당자, 도움이 된 코멘트, 카드의 PR 등은 모두 요청한 사무실 것이어야 한다 | 서비스 — 다르면 `not_found`. 계약 테스트로 확인 |
@@ -268,7 +269,7 @@ DB 유일 제약이나 서비스 검사로 막는다. 분산 트랜잭션은 쓰
 
 ### 지우지 않는 기록 [확정 → 계약]
 
-권한 해제 · 동기화 뒤에도 과거 기록을 남긴다(P1 · P7 · P8 · 2026-11-01 결정). 아래는 행을 지우는 API가 없다: `EvaluationRound` · `Evaluation`, `AgendaItem`(거두면 `withdrawn`), `InstructorAssignment`(해제 시각), `InstructorFeedback` · `HelpComment` · `FollowUpQuestion`, `Requirement`(`missing`), `Member`(`removedAt`), `Task` · `Submission`. 지울 수 있는 것은 `RequirementLink`(레포 관리자)와 `TaskDueDate`(마감 지우기)뿐이다.
+권한 해제 · 동기화 뒤에도 과거 기록을 남긴다(P1 · P7 · P8 · 2026-11-01 결정). 아래는 행을 지우는 API가 없다: `EvaluationRound` · `Evaluation`, `AgendaItem`(거두면 `withdrawn`), `InstructorAssignment`(해제 시각), `InstructorFeedback` · `HelpComment` · `FollowUpQuestion`, `Requirement`(`missing`), `Member`(`removedAt`), `Task` · `Submission`. 지울 수 있는 것은 `RequirementLink`(레포 관리자), `TaskDueDate`(마감 지우기), 그리고 조건부로 `HelpRequest`(요청자 — 상태가 `open`이고 코멘트 · 안건 기록이 없는 요청만, CONTRACTS_API.md 「11」 도움 요청 삭제 제한 — 2026-11-10 #315)뿐이다. 도움 요청 삭제 제한은 위 목록의 `AgendaItem` · `HelpComment` 기록을 지키기 위한 것이다.
 
 ## 4. API [계약]
 
@@ -337,8 +338,8 @@ DB 유일 제약이나 서비스 검사로 막는다. 분산 트랜잭션은 쓰
 | 사무실이 없거나 들어갈 수 없음 — 콜라보레이터가 아님, 지정되지 않았거나 해제된 강사, 실제 사무실을 요청한 심사용 계정, 등록되지 않은 사용자의 시연 사무실 | `not_found` (404) — 존재를 숨긴다 [구현 기본값] |
 | 대상이 없거나 다른 사무실 것, 경로의 ID 형식 오류, 꺼진 환경의 심사용 로그인 경로 | `not_found` (404) |
 | 사무실 안에서 역할이 맞지 않음 — 강사의 허용되지 않은 쓰기, 참여자의 레포 관리자 동작, 다른 학생의 개인 지표 요청 | `forbidden_role` (403) |
-| 대상 조건 위반 — 자기 PR 평가, 요청되지 않은 건에 강사 쓰기, 올린 사람이 아닌 거두기, 요청자가 아닌 닫기 · 전환, 담당자가 아닌 마감 수정, 남의 카드 · 리포트 고치기 | `forbidden_role` (403) |
-| 상태 충돌 — 지난 회차 평가, 닫힌 PR 평가, 이미 다룬 · 거둔 안건, 진행 중 회의가 이미 있음, 동기화가 이미 진행 중, 이미 열린 사무실, `active`가 아닌 요구사항에 연결, 같은 PR의 카드 중복, 레포 관리자가 자기 자신을 강사로 지정, 해결 · 종료된 도움 요청에 강사 요청, 지정된 강사가 없는 사무실에서 새 강사 요청 | `conflict` (409) |
+| 대상 조건 위반 — 자기 PR 평가, 요청되지 않은 건에 강사 쓰기, 올린 사람이 아닌 거두기, 요청자가 아닌 닫기 · 전환 · 삭제, 담당자가 아닌 마감 수정, 남의 카드 · 리포트 고치기 | `forbidden_role` (403) |
+| 상태 충돌 — 지난 회차 평가, 닫힌 PR 평가, 이미 다룬 · 거둔 안건, 진행 중 회의가 이미 있음, 동기화가 이미 진행 중, 이미 열린 사무실, `active`가 아닌 요구사항에 연결, 같은 PR의 카드 중복, 레포 관리자가 자기 자신을 강사로 지정, 해결 · 종료된 도움 요청에 강사 요청, 지정된 강사가 없는 사무실에서 새 강사 요청, 거두지 않은 안건이 이미 있는 도움 요청의 전환, 삭제 제한에 걸린 도움 요청 삭제(CONTRACTS_API.md 「11」) | `conflict` (409) |
 | GitHub 인증 실패 · 호출 한도 | `github_unauthorized` · `github_rate_limited` (503) |
 | 그 밖의 서버 오류 | `unavailable` (503) |
 
@@ -475,7 +476,7 @@ interface ThemeLayout {
 - 대표 담당자 = `task.assigneeMemberIds[0]`(「3」). 막힘 · 진행률 같은 도메인 값은 Snapshot의 서버 계산 값을 쓴다.
 - ThemeLayout 구현은 기본 테마(우주정거장 — 확정 시안 `frontend/public/station/`, 2026-11-04) 하나다. 테마 엔진은 만들지 않는다 [확정].
 - 드롭 결과: `requirement:*` → `linkRequirement`(상자는 제자리), `meeting` → `createAgendaItem`(원본은 제자리), 그 밖은 아무 일도 없음 [확정 — 위치 규칙]. 단, 대기 칸(`requirement:waiting`)에 놓으면 대기 목록에서 요구사항을 하나 고른 뒤 `linkRequirement`. 요구사항이 없는 빈 판은 드롭 구역이 아니다(`dropZoneAt` → `null`, 드롭 빛 없음) [2026-11-06 결정].
-- 안건 철회 드롭 [2026-11-09 결정 — #291 · FR-LRN-14]: 회의실(브리지) 탁자 근처에 쓰레기통을 둔다(구역 역할이 아니라 화면 장치 — `dropZoneAt` · SceneModel은 그대로). 회의실 탁자의 안건 도형은 보는 사람이 거둘 수 있는 안건(올린 사람 본인 · `confirmed`)만 집어 들 수 있고, 쓰레기통에 놓으면 `withdrawAgendaItem`(안건만 `withdrawn` — 원본 이슈 · PR · 도움 요청은 그대로), 그 밖에 놓으면 아무 일도 없다. 다른 사람의 안건 · 결정된 안건은 집어 들 수 없고, 놓는 순간 다시 확인하며 서버의 403 · 409가 최종이다. 회의 시작 대화상자의 거두기 버튼은 그대로 둔다.
+- 안건 철회 드롭 [2026-11-09 결정 — #291 · FR-LRN-14]: 회의실(브리지) 탁자 근처에 쓰레기통을 둔다(구역 역할이 아니라 화면 장치 — `dropZoneAt` · SceneModel은 그대로). 회의실 탁자의 안건 도형은 보는 사람이 거둘 수 있는 안건(올린 사람 본인 · `confirmed`)만 집어 들 수 있고, 쓰레기통에 놓으면 `withdrawAgendaItem`(안건은 `withdrawn` — 원본 이슈 · PR은 그대로, 도움 요청 안건이면 그 도움 요청이 안건 전 상태로 돌아간다 — CONTRACTS_API.md 「10」 · 2026-11-10 #313), 그 밖에 놓으면 아무 일도 없다. 다른 사람의 안건 · 결정된 안건은 집어 들 수 없고, 놓는 순간 다시 확인하며 서버의 403 · 409가 최종이다. 회의 시작 대화상자의 거두기 버튼은 그대로 둔다.
 - 요구사항 판 배치 [2026-11-06 결정]: 판 수 · 기본 순서 · 대기 칸 · 교환은 「10」과 ARCHITECTURE.md 「요구사항 묶음 표시」를 따른다. 대기 칸 교환 결과(판에 올린 요구사항 ID 목록, `string[] | null`)는 사무실별로 보는 사람의 브라우저에만 둔다 — 서버 저장 · API 없음. 스토어가 내주고 SceneModel이 입력으로 받는다. 보는 사람마다 배치가 다를 수 있다.
 - 게시판 [2026-11-06 결정]: `board` 오브젝트 하나. 배지는 `help:N`(`open` · `discussing` 도움 요청 수) · `candidate:k`(그중 `isAgendaCandidate`, k > 0일 때만)이고 0이면 붙이지 않는다. 회의 결정 기록 · 강사 피드백 · 배운 점은 세지 않는다. 고르면 HUD의 도움 요청 목록을 연다 — 회의 결정 기록 · 강사 피드백을 보는 HUD가 생기면 그것도 연다(FR-LRN-22). 도움 요청마다 3D 도형을 두지 않는다(시안 선반의 도형은 장식). 팀원 · 강사 모두 같은 값이고 사람별 값은 없다.
 
@@ -602,6 +603,8 @@ interface ThemeLayout {
 | 백엔드 담당(B12 · B13 · B14 미정 허용) | GitHub 이슈를 만들며 배분 — **병렬 기능 개발 전에 담당 · 작업 경계 지정**(2026-11-01 추가 결정) |
 | 계약 문서를 개발 저장소로 옮길지 | 개발 저장소 생성 때(「9」 메모) |
 | 로그인 성공 · 실패 뒤 도착 화면 · 마지막 사무실 저장 위치 | PRD 「열린 질문」 — 화면 착수 전 |
+| 안건 철회 뒤 되돌릴 도움 요청 상태 — `on_agenda` 동안 요청자가 아닌 팀원의 코멘트가 달린 경우 `open`인지 `discussing`인지 | #313 구현 때 백엔드 담당이 정해 PR에 적고 CONTRACTS_API.md 「11」에 반영 |
+| 코멘트가 있는 도움 요청의 삭제를 허용할지, 허용하면 코멘트를 같이 지울지 숨길지 | 팀 결정 — 정하기 전에는 `409`(CONTRACTS_API.md 「11」 삭제 제한 5) · #315 |
 
 **별도 이슈 후보 (이번 범위 밖 — 기록만)**
 
