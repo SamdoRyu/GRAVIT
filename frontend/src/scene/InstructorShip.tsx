@@ -1,6 +1,7 @@
 // 강사 우주선 (#290). "강사에게 요청"한 도움 요청이 강사 답변을 기다리는 동안(rules/help awaitingInstructor — 도움 요청 탭의
 // 빨간 점과 같은 값) 강사 라코가 차 같은 우주선을 타고 통신 허브 게시판 위로 날아와 떠 있고, 강사 답변이 다 달리면 다시
-// 날아간다. 움직임 줄이기 설정이면 비행 없이 나타나고 사라진다. 장식이다 — 특정 강사를 나타내지 않고(이름 · 사람별 값 없음),
+// 날아간다. 사무실을 열 때(새로고침 · 다른 사무실로 옮기기 포함)의 첫 상태는 비행 없이 보인다 — 이미 와 있거나 처음부터 없다(#328).
+// 움직임 줄이기 설정이면 비행 없이 나타나고 사라진다. 장식이다 — 특정 강사를 나타내지 않고(이름 · 사람별 값 없음),
 // 누를 수 없다(게시판 클릭은 그대로 도움 요청 목록). 우주선은 시안 팔레트의 기본 도형으로 만들고(새 glTF 없음), 라코는 확정
 // 시안 「아바타 모델 (스페이 · 라코 glTF)」의 모델(public/station — 읽기만)을 Sit 동작으로 태운다. OWNER: C.
 import { useAnimations, useGLTF } from '@react-three/drei'
@@ -8,10 +9,11 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AdditiveBlending, MeshBasicMaterial, type Group, type Mesh, type MeshStandardMaterial, type Texture } from 'three'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { useOffice } from '../store'
 import { crewEnvironment } from '../theme/station/crewEnvironment'
 import { COMM_HUB, WORLD_SCALE } from '../theme/station/geometry'
 import { COLORS, lam } from '../theme/station/parts'
-import { useAwaitingInstructor } from '../ui/useAwaitingInstructor'
+import { useAwaitingInstructor, useInstructorAnswersChecked } from '../ui/useAwaitingInstructor'
 import { FLIGHT_FROM, instructorShipPose, type InstructorFlight } from './instructorFlight'
 import { useLinearTextures } from './linearTextures'
 import { noRaycast } from './runtime'
@@ -151,10 +153,26 @@ type Phase = 'away' | InstructorFlight | 'here'
 
 export function InstructorShip() {
   const waiting = useAwaitingInstructor().size > 0
+  const checked = useInstructorAnswersChecked()
+  const workspaceId = useOffice((s) => s.office?.workspaceId ?? null)
   const [phase, setPhase] = useState<Phase>('away')
-  // 기다리는 글이 생기면 오고, 다 답하면 간다(렌더 중에 맞춘다 — 값이 바뀐 그 렌더에서 한 번). 비행 중에 바뀌면 처음부터 반대로
   const [seen, setSeen] = useState(false)
-  if (waiting !== seen) {
+  // 사무실을 열면(새로고침 · 다른 사무실로 옮기기 포함) 그 사무실의 강사 답변 확인이 처음 끝난 결과를 비행 없이 보인다 —
+  // 기다리는 글이 있으면 처음부터 게시판 위에, 없으면 처음부터 없다. 장면은 사무실을 옮겨도 그대로라, 확인이 끝날 때까지는
+  // 이전 사무실의 우주선도 비행 없이 치운다(#328)
+  const [settledFor, setSettledFor] = useState<string | null>(null)
+  if (workspaceId !== settledFor) {
+    if (checked) {
+      setSettledFor(workspaceId)
+      setSeen(waiting)
+      setPhase(waiting ? 'here' : 'away')
+    } else {
+      if (phase !== 'away') setPhase('away')
+      if (seen) setSeen(false)
+    }
+  } else if (waiting !== seen) {
+    // 같은 사무실에서 기다리는 글이 생기면 오고, 다 답하면 간다(렌더 중에 맞춘다 — 값이 바뀐 그 렌더에서 한 번). 비행 중에
+    // 바뀌면 처음부터 반대로
     setSeen(waiting)
     const still = reducedMotion()
     if (waiting && (phase === 'away' || phase === 'depart')) setPhase(still ? 'here' : 'arrive')

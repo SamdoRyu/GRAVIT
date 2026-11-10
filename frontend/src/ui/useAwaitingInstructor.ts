@@ -1,7 +1,7 @@
 // 강사 답변 판정 훅 (#290 — rules/help). 둘 다 문자열로 골라 Set으로 — 같은 값이면 다시 그리지 않는다(selector가 매번 새 배열을
 // 돌려주지 않게).
 import { useMemo } from 'react'
-import { awaitingInstructor, unreadInstructorAnswers } from '../data/rules/help'
+import { awaitingInstructor, needsInstructorCheck, unreadInstructorAnswers } from '../data/rules/help'
 import type { Id } from '../data/types'
 import { useOffice } from '../store'
 
@@ -11,6 +11,17 @@ const toSet = (key: string): ReadonlySet<Id> => new Set(key ? key.split('\n') : 
 export function useAwaitingInstructor(): ReadonlySet<Id> {
   const key = useOffice((s) => (s.office?.snapshot ? awaitingInstructor(s.office.snapshot.helpRequests, s.instructorAnswers).join('\n') : ''))
   return useMemo(() => toSet(key), [key])
+}
+
+/**
+ * 열린 사무실의 강사 답변 확인이 지금 다 끝났는가(#328) — Snapshot이 있고, 확인이 필요한 글(rules/help `needsInstructorCheck`)이
+ * 없다. 강사 우주선이 사무실을 열고(새로고침 · 옮기기 포함) 처음 끝난 결과를 비행 없이 보이는 데 쓴다.
+ */
+export function useInstructorAnswersChecked(): boolean {
+  return useOffice((s) => {
+    const snap = s.office?.snapshot
+    return !!snap && !snap.helpRequests.some((h) => needsInstructorCheck(h, s.instructorAnswers))
+  })
 }
 
 /**
