@@ -21,6 +21,7 @@ import { PALETTE } from '../theme'
 import { Glow } from '../theme/station/parts'
 import { bridgeMood } from '../theme/station/bridgeMood'
 import { CargoBadges } from './CargoBadges'
+import { CARGO_LAND, requestCargo } from './cargoFx'
 import { celebrateArrival, mergeFx } from './mergeFx'
 import { cargoBadgeView, isEmptyBadgeView } from './badgeView'
 import { BRIDGE, BRIDGE_TRASH, bridgeTrashCenter, WORLD_SCALE } from '../theme/station/geometry'
@@ -79,6 +80,8 @@ const PAD_LINES = [0, 1, 2].map((i) => ({ w: (i === 2 ? 0.45 : 0.75) * NOTE_S, x
 const easeInOut = (u: number) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2)
 const easeOutBack = (u: number) => 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2)
 
+/** 화물 상자가 나올 시각을 이만큼(ms) 넘겨서야 처리하게 되면(탭이 뒤에 있었다) 캡슐에서 날지 않는다 */
+const CARGO_STALE_MS = 1500
 const REDUCED_MOTION = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 
 /** 회의 중 안건 도형이 도는 중심(브리지 가운데, 월드 단위 — #299) */
@@ -115,10 +118,12 @@ interface Anim {
   home: string
   /** 머지 축하 중(날아가는 동안 빛 꼬리, 닿으면 반짝이) */
   cele: boolean
+  /** 새 이슈 화물(#304): 캡슐에서 튀어나올 시각(ms) — 그때까지 숨어 있다. 0 = 없음 */
+  cargoAt: number
 }
 
 function newAnim(): Anim {
-  return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1, home: '', cele: false }
+  return { init: false, px: 0, py: 0, pz: 0, ry: 0, tx: NaN, ty: 0, tz: 0, fx: 0, fy: 0, fz: 0, t: 0, dur: 1, arc: 0, flying: false, lift: 0, pop: 0, scale: 1, home: '', cele: false, cargoAt: 0 }
 }
 
 /** The original issue / PR a shape stands for: raised as an agenda item on the bridge, linked to a requirement on a plate */
@@ -227,6 +232,8 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
       a.pz = a.tz = slot.z
       a.ry = slot.rot
       a.pop = pop ? 0 : 1
+      // 보고 있는 중에 새로 들어온 이슈는 화물 캡슐에 실려 온다(#304)
+      if (pop && key.startsWith('task:') && !REDUCED_MOTION()) a.cargoAt = requestCargo()
       a.scale = slot.scale
       a.home = slot.home
       body.color.copy(main)
@@ -242,6 +249,30 @@ export const TaskBox = memo(function TaskBox({ entity, slot, select, raise, with
       a.ry = slot.rot
       a.lift = 0
       a.scale = slot.scale
+    }
+
+    // ---- 새 이슈 화물(#304): 캡슐에서 나올 때까지 숨어 있다가, 나오면 캡슐 자리에서 자기 자리로 날아간다 ----
+    if (a.cargoAt > 0) {
+      const now = performance.now()
+      if (now < a.cargoAt) {
+        g.visible = false
+        g.scale.setScalar(0.0001)
+        // 숨어 있는 동안 목록에서 골라도 카메라가 갈 곳은 자기 자리
+        live.current.x = slot.x
+        live.current.y = slot.y
+        live.current.z = slot.z
+        return
+      }
+      g.visible = true
+      // 탭이 뒤에 있다 돌아와 캡슐이 이미 떠났으면 그냥 제자리에서 나타난다
+      if (now - a.cargoAt < CARGO_STALE_MS) {
+        a.px = CARGO_LAND.x
+        a.py = CARGO_LAND.y
+        a.pz = CARGO_LAND.z
+        a.tx = NaN
+        a.pop = 0.35
+      }
+      a.cargoAt = 0
     }
 
     // ---- 머지 축하(#300): 보고 있는 중에 스캐너(검토) → 아카이브(완료)로 옮겨지는 머지된 PR ----

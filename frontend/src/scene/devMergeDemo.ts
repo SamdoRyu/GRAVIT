@@ -39,8 +39,8 @@ async function merge(): Promise<string | null> {
 /** 개발 모드에서만 단축키 · 콘솔 명령을 건다. 떼는 함수를 돌려준다 */
 export function installDevMergeDemo(): () => void {
   if (!import.meta.env.DEV) return () => {}
-  const w = window as unknown as { gravitDemo?: { merge: typeof merge } }
-  w.gravitDemo = { merge }
+  const w = window as unknown as { gravitDemo?: Record<string, unknown> }
+  w.gravitDemo = { ...w.gravitDemo, merge }
   const onKey = (e: KeyboardEvent) => {
     if (!e.shiftKey || e.code !== 'KeyP' || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return
     const el = document.activeElement as HTMLElement | null
@@ -50,6 +50,6 @@ export function installDevMergeDemo(): () => void {
   window.addEventListener('keydown', onKey)
   return () => {
     window.removeEventListener('keydown', onKey)
-    delete w.gravitDemo
+    if (w.gravitDemo) delete w.gravitDemo.merge
   }
 }
