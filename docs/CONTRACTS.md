@@ -80,8 +80,8 @@
 | `HelpRequest` · `HelpComment` | 사무실 | 요청자 → Member, 내용, 상태, 강사에게 요청한 시각, 닫을 때 배운 점, 도움이 된 코멘트, 넘어온 스탠드업(선택), 전환된 안건(선택), 안건 전환 직전 상태(`on_agenda`인 동안만 값이 있다 — 철회하면 이 값으로 되돌리고 비우며, 회의 결정으로 `ended`가 될 때도 비운다. 응답 DTO에는 없음 — 2026-11-10 #313) / 코멘트 작성자 → AppUser, 내용, 강사 답변 여부 | HelpRequest 1–N HelpComment, HelpRequest 1–N AgendaItem — 거두지 않은 안건(`confirmed` · `discussed`)은 0..1, 거둔 안건은 여럿 남을 수 있다(2026-11-10 — #313). 요청자가 영구 삭제하면 코멘트와 함께 실제로 지운다 — 연결된 안건 · 회의는 남기고 원본 연결만 끊는다(CONTRACTS_API.md 「11」 도움 요청 삭제 — 2026-11-10 #315) | FR-LRN-15~21 |
 | `HelpRequestHidden` (도움 요청 개인 제외 — 「나에게서만 삭제」) | 사무실 | 도움 요청, 사용자 → AppUser(팀원 · 강사), 뺀 시각 | → HelpRequest, → AppUser. (도움 요청, 사용자)가 유일하다. 그 사용자의 응답(Snapshot `helpRequests` · 강사 요청함)에서만 그 요청을 뺀다 — 원문 · 코멘트는 그대로. 되돌리는 API는 없고(#333), 도움 요청이 영구 삭제될 때만 행을 지운다 (2026-11-10 — #315 · #333) | FR-LRN-15 |
 | `TaskDueDate` | 사무실 | 이슈, 마감일, 입력한 사람 → AppUser · 시각 | Task 1–1. [확정] 고칠 수 있는 사람은 그 사무실 ROLE-02와 그 이슈의 담당자(`TaskAssignee`) 전원 — P14. GitHub 이슈는 바뀌지 않는다 | FR-PLAN-02 · 03 (2026-11-01 결정 · 권한은 2026-11-01 추가 결정) |
-| `DecisionCard` · `FollowUpQuestion` | 사무실 | PR, 본인 → Member, 9칸, 본인 확인 시각, 꼬리질문 요청 시각 / 강사 → AppUser, 내용 | DecisionCard 1–N FollowUpQuestion | FR-REP-07 · 11 · P11 |
-| `RetroReport` | 사무실 | 본인 → Member, 종류(최종 · 중간), 배운 점, 만든 시각 (나머지 칸은 계산) | → Member | FR-REP-01~03 · 05 |
+| `DecisionCard` · `FollowUpQuestion` | 사무실 | PR, 본인 → Member, 9칸, 꼬리질문 요청 시각(「확인함」 단계 없음 — 2026-11-10 #335) / 강사 → AppUser, 내용 | DecisionCard 1–N FollowUpQuestion | FR-REP-07 · 11 · P11 |
+| `RetroReport` | 사무실 | 본인 → Member, 종류(최종 · 중간), 제목, 느낀 점, 만든 시각, 고른 기술 결정 카드 (나머지 칸은 계산 — 2026-11-10 #335) | → Member, RetroReport N–M DecisionCard(고른 카드 — 만든 뒤 바꾸지 않음) | FR-REP-01~03 · 05 · 07 · P11 |
 | `ActivityRecord` · `ActivityConfirmation` · `PeerFeedback` | 사무실 | 06 「저장 항목」 칸 그대로. 확인은 확인자마다 한 행. 동료 피드백 작성자는 저장하고 응답에 담지 않는다 | → Member | FR-ACT |
 | `ConventionLibraryItem` | 서버 | 대상, 이름, 내용, 설명, 작성 강사 → AppUser, 수정 시각 | 서버 전체에 하나 | FR-LIB |
 | `SyncState` | 사무실 | 진행 중 여부, 마지막 성공 시각, 마지막 실패 시각 · code · 사유, 마지막 명세 문서 읽기 경고 | Workspace 1–1 | FR-GH-05 · P4 |
@@ -175,7 +175,7 @@ JSON의 열거 값은 소문자 snake다(코드 컨벤션 (BE) 「이름」). �
 | 회의 상태 | `ongoing` · `ended` | FR-MTG-03 |
 | 도움 요청 상태 | `open`(열림) · `discussing`(논의 중) · `resolved`(해결) · `on_agenda`(안건) · `ended`(종료) | 05 「상태값」 도움 요청 — 아래 메모 |
 | 활동 기록 유형 · 상태 | `planning` · `research` · `design` · `presentation` · `mentor_question` / `pending` · `confirmed` | FR-ACT-01 · 02 |
-| 회고 리포트 종류 | `final` · `midterm` | FR-REP-01 · 05 |
+| 회고 리포트 종류 | `final` · `midterm` — 화면은 `final`만 만든다(FR-REP-05 보류, 2026-11-10 #335) | FR-REP-01 · 05 |
 | 컨벤션 라이브러리 대상 | `branch_name` · `commit_message` · `pr_title` · `pr_body` · `issue_body` · `issue_template` · `pr_template` | FR-LIB-01 |
 | 동기화 진행 | `idle` · `running` | FR-GH-05 |
 

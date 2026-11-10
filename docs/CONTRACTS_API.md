@@ -727,15 +727,28 @@ interface ReceivedPeerFeedback { id: Id; week: string; thanks: string; improve: 
 | --- | --- | --- | --- |
 | `GET W/members/{memberId}/timeline?page=&size=` | — | `200 PageResponse<TimelineEntry>` — `occurredAt` 내림차순 | — |
 | `GET W/members/{memberId}/reports` | — | `200 RetroReportSummary[]` — `createdAt` 내림차순 | — |
-| `POST W/members/{memberId}/reports` | `{ kind: 'final' \| 'midterm' }` | `201 RetroReportDto` | 본인 |
+| `POST W/members/{memberId}/reports` | `RetroReportCreateRequest` — 아래 「회고 리포트 만들기」 | `201 RetroReportDto` | 본인. `title` · `learning`이 비었거나 길이 초과, `decisionCardIds`에 고를 수 없는 카드 · 중복이 있음 `400` |
 | `GET W/members/{memberId}/reports/{reportId}` | — | `200 RetroReportDto` — 계산 칸은 읽을 때 계산 | — |
-| `PUT W/members/{memberId}/reports/{reportId}/learning` | `{ learning: string }` (0~5000자) | `200 RetroReportDto` | 본인 |
+| `PUT W/members/{memberId}/reports/{reportId}/learning` | `{ learning: string }` (1~5000자 — 화면 이름 "느낀 점") | `200 RetroReportDto` | 본인. 빈 값 `400` (2026-11-10 — #335, 이전 0~5000자) |
 | `GET W/members/{memberId}/reports/{reportId}/markdown` | — | `200 text/markdown` — 팀원 이름은 "팀원 A"처럼 바뀐다 (FR-REP-03) | — |
 | `GET W/members/{memberId}/decision-cards` | — | `200 DecisionCardDto[]` — `createdAt` 내림차순 | — |
 | `POST W/members/{memberId}/decision-cards` | `{ submissionId: Id }` | `201 DecisionCardDto` — 9칸을 재료에서 규칙대로 채운다(AI 없음, 재료 없는 칸은 `null`) | 본인. 본인이 작성한 PR이 아님 `403`, PR이 아직 열림 `409`, 같은 PR 카드가 있음 `409` |
-| `PUT W/members/{memberId}/decision-cards/{cardId}` | `{ cells: DecisionCardCells; confirmed: boolean }` | `200 DecisionCardDto` | 본인. `confirmed: true`인데 `learning` 칸이 비었음 `400` |
+| `PUT W/members/{memberId}/decision-cards/{cardId}` | `{ cells: DecisionCardCells }` | `200 DecisionCardDto` | 본인. 「확인함」 단계는 없다 — 저장하면 리포트를 만들 때 고를 수 있다(`learning` 칸이 비지 않았을 때) (2026-11-10 — #335, 이전 `confirmed`) |
 | `POST W/members/{memberId}/decision-cards/{cardId}/follow-up-request` | — | `200 DecisionCardDto`(`followUpRequested: true`) | 본인 |
 | `POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions` | `{ body: string }` (1~1000자) | `201 FollowUpQuestionDto` — 9칸과 따로 붙는다 | R4. 요청 안 된 카드 `403` |
+
+**회고 리포트 만들기** (2026-11-10 — #335 · #336)
+
+- 요청 `{ kind, title, learning, decisionCardIds }`
+  - `title` 1~100자(앞뒤 공백 제거) · `learning` 1~5000자 — 둘 다 필수. `learning`은 리포트의 "느낀 점"이고, 카드의 「내가 배운 점」(`DecisionCardCells.learning`)과 다르다.
+  - `decisionCardIds` 0개 이상, 중복 없음. 모두 **경로 팀원의 카드이고 카드의 `learning` 칸이 비지 않은 것**이어야 한다. 아니면 `400 invalid` — 다른 팀원의 카드 · 없는 카드도 같은 `400`(존재를 구분하지 않는다).
+  - `kind`는 남긴다. 화면은 만들기 버튼 하나로 늘 `final`을 보낸다 — 중간 리포트(FR-REP-05)는 보류. 이미 만든 `midterm` 리포트는 그대로 읽힌다.
+- 저장: 종류 · 제목 · 느낀 점 · 만든 시각 · **고른 카드**. 고른 카드는 만든 뒤 바꾸지 않는다(바꾸는 API 없음).
+- 읽을 때 계산
+  - `decisionCards`: 고른 카드 중 지금 남아 있는 것만, **PR 번호 오름차순**. 카드 내용은 읽을 때의 최신 값이다.
+  - `areaLabels`(담당 기능 영역): **고른 카드의 PR + 그 PR에 연결된 이슈**의 `area:*` 라벨, 중복 없이 이름순. 고른 카드가 없으면 빈 목록.
+  - 요약(`summary`)은 없다 — 고른 카드와 상관없는 전체 개수라 뺐다.
+- 마크다운(`…/markdown`): 제목 = 리포트 `title`, 「느낀 점」, 담당 기능 영역, 안건 결과, 강사 피드백, 활동 분포, 기술 결정 카드(머리 `#PR번호 PR 제목`). 「요약」 절은 없다.
 
 ```ts
 type TimelineKind =
@@ -754,19 +767,24 @@ interface TimelineEntry {
   ref: { type: 'submission' | 'agenda_item' | 'task'; id: Id } | null;
 }
 
-interface RetroReportSummary { id: Id; kind: 'final' | 'midterm'; createdAt: Instant }
+interface RetroReportCreateRequest {
+  kind: 'final' | 'midterm';       // 화면은 늘 'final' (FR-REP-05 보류)
+  title: string;                   // 1~100자
+  learning: string;                // 느낀 점 1~5000자 (FR-REP-02)
+  decisionCardIds: Id[];           // 넣을 기술 결정 카드 — 본인 카드, 카드의 learning이 비지 않은 것
+}
+interface RetroReportSummary { id: Id; kind: 'final' | 'midterm'; title: string; createdAt: Instant }
 interface RetroReportDto extends RetroReportSummary {
   memberId: Id;
-  summary: string | null;          // 자동 요약 — 규칙으로 조립, AI 없음
-  areaLabels: string[];            // 담당 기능 영역 (area:* — FR-REP-01)
-  learning: string | null;         // 내가 배운 점 (FR-REP-02)
+  areaLabels: string[];            // 담당 기능 영역 — 고른 카드의 PR · 연결 이슈의 area:* (FR-REP-01)
+  learning: string | null;         // 느낀 점 (FR-REP-02) — #335 이전에 만든 리포트는 null일 수 있다
   agendaResults: {                 // 내가 올린 안건과 결론 · PR 결정 (FR-LRN-05 · 12)
     agendaItemId: Id; title: string; conclusion: string; learning: string | null;
     prDecision: 'revise_and_reevaluate' | 'merge_as_is' | 'close_pr' | null; decidedAt: Instant;
   }[];
   instructorFeedbacks: { agendaItemId: Id; instructor: UserRef; body: string; createdAt: Instant }[]; // FR-LRN-22
   activityDistribution: { kind: ActivityRecordDto['kind']; totalMinutes: number }[]; // 본인 것만 (FR-ACT-03)
-  decisionCards: DecisionCardDto[]; // 본인이 확인한 카드만 (P11)
+  decisionCards: DecisionCardDto[]; // 리포트를 만들 때 고른 카드만, PR 번호 오름차순 (P11)
 }
 
 interface DecisionCardCells {      // 9칸 — 각 0~2000자, 재료가 없으면 null
@@ -785,8 +803,6 @@ interface DecisionCardDto {
   memberId: Id;
   submissionId: Id;
   cells: DecisionCardCells;
-  confirmed: boolean;
-  confirmedAt: Instant | null;
   followUpRequested: boolean;
   followUpRequestedAt: Instant | null;
   followUpQuestions: FollowUpQuestionDto[];
