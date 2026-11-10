@@ -10,5 +10,11 @@
 .retro-cells { display: grid; gap: 6px; margin: 0; }
 .retro-cells dt { font-size: var(--fs-s); font-weight: 600; color: var(--text-dim); }
 .retro-cells dd { margin: 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* 기술 결정 카드(#218) — 확인 체크 한 줄 */
+/* 리포트 만들기(#335) — 넣을 기술 결정 카드 고르기 · 상세 머리의 담당 기능 영역 한 줄 */
 .retro-check { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); }
+.retro-check.is-disabled { opacity: 0.55; }
+.retro-pick { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.retro-pick legend { padding: 0; margin-bottom: 4px; }
+.retro-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.retro-pick-hint { margin-left: 22px; }
+.retro-areas { margin: 2px 0 0; }

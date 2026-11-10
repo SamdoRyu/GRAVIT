@@ -1,7 +1,8 @@
 // 학습 타임라인 · 회고 리포트 규칙 (CONTRACTS_API.md 「15」). 순수 함수 — mock과 화면이 같은 규칙 · 문구를 쓴다.
-// 서버(TimelineService · RetroReportService)와 같은 계산이다. 서버는 같은 검사를 다시 한다(400 invalid). #209.
+// 서버(TimelineService · RetroReportService)와 같은 계산이다. 서버는 같은 검사를 다시 한다(400 invalid). #209 · #335.
 import type {
   AgendaItemDto,
+  DecisionCardDto,
   EvaluationRoundDto,
   Id,
   Instant,
@@ -20,7 +21,9 @@ export type ReportKind = RetroReportSummary['kind']
 
 export const REPORT_KINDS: readonly ReportKind[] = ['final', 'midterm']
 export const REPORT_KIND_LABEL: Record<ReportKind, string> = { final: '최종', midterm: '중간' }
-/** 내가 배운 점 — 0~5000자 */
+/** 리포트 제목 — 1~100자 (#335) */
+export const REPORT_TITLE_MAX = 100
+/** 느낀 점 — 1~5000자 (#335, 이전 0~5000자) */
 export const REPORT_LEARNING_MAX = 5000
 /** 타임라인 페이지 — 서버 PageResponse.DEFAULT_SIZE · MAX_SIZE (CONTRACTS.md 「4」) */
 export const TIMELINE_PAGE_SIZE = 20
@@ -36,14 +39,23 @@ export const TIMELINE_KIND_LABEL: Record<TimelineEntry['kind'], string> = {
   commit_after_meeting: '회의 뒤 커밋',
 }
 
-/** 내보낸 마크다운 파일 이름 — "최종-회고-리포트-2026-11-05.md"(만든 날은 한국 시간) */
-export function reportFileName(report: Pick<RetroReportSummary, 'kind' | 'createdAt'>): string {
-  return `${REPORT_KIND_LABEL[report.kind]}-회고-리포트-${kstToday(new Date(report.createdAt))}.md`
+/** 만들기 폼의 제목 기본값 — "회고 리포트 · 11월 10일"(한국 시간) */
+export function defaultReportTitle(now: Date): string {
+  const [, month, day] = kstToday(now).split('-').map(Number)
+  return `회고 리포트 · ${month}월 ${day}일`
+}
+
+/** 내보낸 마크다운 파일 이름 — 제목(파일 이름에 못 쓰는 글자 · 공백은 "-") + 만든 날(한국 시간) */
+export function reportFileName(report: Pick<RetroReportSummary, 'title' | 'createdAt'>): string {
+  const safe = report.title.trim().replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '') || '회고-리포트'
+  return `${safe}-${kstToday(new Date(report.createdAt))}.md`
 }
 
 export const REPORT_MSG = {
   kind: '리포트 종류는 최종 · 중간 중에서 골라 주세요',
-  learning: `내가 배운 점은 ${REPORT_LEARNING_MAX}자까지 쓸 수 있어요`,
+  title: `제목은 1~${REPORT_TITLE_MAX}자로 적어 주세요`,
+  learning: `느낀 점은 1~${REPORT_LEARNING_MAX}자로 적어 주세요`,
+  cards: '배운 점을 쓴 내 기술 결정 카드만 넣을 수 있어요',
   page: '페이지 범위가 올바르지 않아요',
   memberNotFound: '팀원을 찾을 수 없어요',
   reportNotFound: '리포트를 찾을 수 없어요',
@@ -51,17 +63,33 @@ export const REPORT_MSG = {
   notSelfWrite: '본인 것만 쓸 수 있어요',
 } as const
 
-/** `POST W/members/{memberId}/reports` 검사 */
+const chars = (s: string) => Array.from(s).length
+const filled = (v: unknown, max: number): boolean => typeof v === 'string' && v.trim() !== '' && chars(v) <= max
+
+/**
+ * `POST W/members/{memberId}/reports` 모양 검사 — 종류 · 제목(1~100자) · 느낀 점(1~5000자) · 카드 ID 목록(문자열, 중복 없음).
+ * 카드가 본인 것이고 배운 점이 있는지는 데이터를 보고 따로 검사한다(서버 DecisionCardService.requireSelectableForReport).
+ */
 export function reportCreateError(req: unknown): string | null {
-  const kind = typeof req === 'object' && req !== null ? (req as { kind?: unknown }).kind : undefined
-  return REPORT_KINDS.includes(kind as ReportKind) ? null : REPORT_MSG.kind
+  if (typeof req !== 'object' || req === null) return REPORT_MSG.kind
+  const { kind, title, learning, decisionCardIds } = req as Record<string, unknown>
+  if (!REPORT_KINDS.includes(kind as ReportKind)) return REPORT_MSG.kind
+  if (!filled(title, REPORT_TITLE_MAX)) return REPORT_MSG.title
+  if (!filled(learning, REPORT_LEARNING_MAX)) return REPORT_MSG.learning
+  if (!Array.isArray(decisionCardIds) || decisionCardIds.some((id) => typeof id !== 'string') || new Set(decisionCardIds).size !== decisionCardIds.length) {
+    return REPORT_MSG.cards
+  }
+  return null
 }
 
-/** `PUT …/reports/{reportId}/learning` 검사 — 문자열 0~5000자(빈 값으로 지울 수 있다) */
+/** `PUT …/reports/{reportId}/learning` 검사 — 느낀 점 1~5000자(비울 수 없다 — #335) */
 export function reportLearningError(req: unknown): string | null {
   const learning = typeof req === 'object' && req !== null ? (req as { learning?: unknown }).learning : undefined
-  return typeof learning === 'string' && Array.from(learning).length <= REPORT_LEARNING_MAX ? null : REPORT_MSG.learning
+  return filled(learning, REPORT_LEARNING_MAX) ? null : REPORT_MSG.learning
 }
+
+/** 리포트에 고를 수 있는 카드 — 카드의 「내가 배운 점」이 비지 않았다 (P11 · 서버 DecisionCard.isSelectableForReport) */
+export const isSelectableForReport = (card: Pick<DecisionCardDto, 'cells'>): boolean => (card.cells.learning ?? '').trim() !== ''
 
 /** 타임라인 페이지 인자 — page 0 이상, size 1~100 정수 */
 export function timelinePageError(page: number, size: number): string | null {
@@ -123,13 +151,16 @@ export function timelineEntries(input: TimelineInput): TimelineEntry[] {
 
 // ---- 회고 리포트 ---------------------------------------------------------------
 
-/** 저장하는 칸 — 나머지는 읽을 때 지금 데이터로 계산한다 */
+/** 저장하는 칸 — 나머지는 읽을 때 지금 데이터로 계산한다 (#335: 제목 · 고른 카드 추가) */
 export interface StoredReport {
   id: Id
   memberId: Id
   kind: ReportKind
+  title: string
   createdAt: Instant
   learning: string | null
+  /** 만들 때 고른 카드 — 만든 뒤 바꾸지 않는다 */
+  decisionCardIds: Id[]
 }
 
 export interface ReportInput {
@@ -138,8 +169,8 @@ export interface ReportInput {
   agendaItems: readonly AgendaItemDto[]
   /** 본인의 확인된 활동 — 유형별 분 합계 (FR-ACT-03) */
   activityDistribution: RetroReportDto['activityDistribution']
-  /** 본인이 확인한 카드만 (P11) — createdAt 내림차순 */
-  decisionCards: RetroReportDto['decisionCards']
+  /** 그 팀원의 카드 전부 — 리포트는 고른 것만 쓴다 */
+  decisionCards: readonly DecisionCardDto[]
 }
 
 const byTime = <T>(at: (x: T) => Instant) => (a: T, b: T) => Date.parse(at(a)) - Date.parse(at(b))
@@ -147,8 +178,6 @@ const byTime = <T>(at: (x: T) => Instant) => (a: T, b: T) => Date.parse(at(a)) -
 /** 저장된 리포트 + 지금 데이터 → 응답 (서버 RetroReportService.toDto와 같은 계산) */
 export function retroReportView(report: StoredReport, input: ReportInput): RetroReportDto {
   const me = report.memberId
-  const myIssues = input.tasks.filter((t) => t.assigneeMemberIds.includes(me))
-  const myPrs = input.submissions.filter((pr) => pr.authorMemberId === me)
   const myAgenda = input.agendaItems.filter((a) => a.raisedByMemberId === me)
   const agendaResults = myAgenda
     .flatMap((a) => (a.decision ? [{ agendaItemId: a.id, title: a.title, conclusion: a.decision.conclusion, learning: a.decision.learning, prDecision: a.decision.prDecision, decidedAt: a.decision.decidedAt }] : []))
@@ -156,24 +185,29 @@ export function retroReportView(report: StoredReport, input: ReportInput): Retro
   const instructorFeedbacks = myAgenda
     .flatMap((a) => a.instructorFeedbacks.map((f) => ({ agendaItemId: a.id, instructor: f.instructor, body: f.body, createdAt: f.createdAt })))
     .sort(byTime((f) => f.createdAt))
-  const areaLabels = [...new Set([...myIssues.flatMap((t) => t.labels), ...myPrs.flatMap((pr) => pr.labels)].filter((l) => l.startsWith('area:')))].sort()
-  const summary =
-    `맡은 이슈 ${myIssues.length}개(닫힘 ${myIssues.filter((t) => t.state === 'closed').length}) · ` +
-    `작성한 PR ${myPrs.length}개(머지 ${myPrs.filter((pr) => pr.state === 'merged').length}) · ` +
-    `올린 안건 ${myAgenda.length}건(결론 ${agendaResults.length})`
+  // 고른 카드만, PR 번호 오름차순(같으면 카드 ID) — 담당 기능 영역은 그 PR과 연결 이슈의 area:*
+  const prById = new Map(input.submissions.map((pr) => [pr.id, pr]))
+  const prNumber = (card: DecisionCardDto) => prById.get(card.submissionId)?.githubPrNumber ?? Number.MAX_SAFE_INTEGER
+  const chosen = input.decisionCards
+    .filter((card) => report.decisionCardIds.includes(card.id))
+    .sort((a, b) => prNumber(a) - prNumber(b) || a.id.localeCompare(b.id))
+  const chosenPrs = chosen.flatMap((card) => prById.get(card.submissionId) ?? [])
+  const linkedIssueIds = new Set(chosenPrs.flatMap((pr) => pr.linkedTaskIds))
+  const linkedIssues = input.tasks.filter((t) => linkedIssueIds.has(t.id))
+  const areaLabels = [...new Set([...chosenPrs.flatMap((pr) => pr.labels), ...linkedIssues.flatMap((t) => t.labels)].filter((l) => l.startsWith('area:')))].sort()
   // 키 순서는 계약 표 그대로
   return {
     id: report.id,
     kind: report.kind,
+    title: report.title,
     createdAt: report.createdAt,
     memberId: me,
-    summary,
     areaLabels,
     learning: report.learning,
     agendaResults,
     instructorFeedbacks,
     activityDistribution: input.activityDistribution,
-    decisionCards: input.decisionCards,
+    decisionCards: chosen,
   }
 }
 
@@ -198,13 +232,18 @@ const CELL_LABELS: [keyof RetroReportDto['decisionCards'][number]['cells'], stri
   ['source', '원본'],
 ]
 
-/** 리포트 → 마크다운(익명화 전). 서버 RetroReportService.toMarkdown과 같은 모양 */
-export function reportMarkdown(report: RetroReportDto): string {
+/**
+ * 리포트 → 마크다운(익명화 전). 서버 RetroReportService.toMarkdown과 같은 모양 — 제목 · 느낀 점 · 담당 기능 영역 · 안건 결론 ·
+ * 강사 피드백 · 활동 분포 · 기술 결정 카드(머리 "#PR번호 PR 제목"). 요약은 없다(#335).
+ */
+export function reportMarkdown(report: RetroReportDto, submissions: readonly Pick<SubmissionDto, 'id' | 'githubPrNumber' | 'title'>[]): string {
+  const prById = new Map(submissions.map((pr) => [pr.id, pr]))
   const out: string[] = []
-  out.push(`# ${REPORT_KIND_LABEL[report.kind]} 회고 리포트\n\n`, `- 만든 시각: ${report.createdAt}\n\n`, `## 요약\n\n${report.summary}\n\n`, '## 담당 기능 영역\n\n')
+  out.push(`# ${report.title}\n\n`, `- 만든 시각: ${report.createdAt}\n\n`)
+  out.push(`## 느낀 점\n\n${report.learning === null || report.learning.trim() === '' ? NONE : report.learning}\n\n## 담당 기능 영역\n\n`)
   for (const label of report.areaLabels) out.push(`- ${label}\n`)
   if (report.areaLabels.length === 0) out.push(`${NONE}\n`)
-  out.push(`\n## 내가 배운 점\n\n${report.learning === null || report.learning.trim() === '' ? NONE : report.learning}\n\n## 안건 결론\n\n`)
+  out.push('\n## 안건 결론\n\n')
   for (const r of report.agendaResults) {
     out.push(`### ${r.title}\n\n`, `- 결론: ${r.conclusion}\n`)
     if (r.learning !== null) out.push(`- 배운 점: ${r.learning}\n`)
@@ -220,7 +259,8 @@ export function reportMarkdown(report: RetroReportDto): string {
   if (report.activityDistribution.length === 0) out.push(`${NONE}\n`)
   out.push('\n## 기술 결정 카드\n\n')
   for (const card of report.decisionCards) {
-    out.push(`### 확인한 카드 — ${card.confirmedAt}\n\n`)
+    const pr = prById.get(card.submissionId)
+    out.push(`### ${pr ? prTitle(pr) : `PR ${card.submissionId}`}\n\n`)
     for (const [key, label] of CELL_LABELS) {
       const value = card.cells[key]
       if (value !== null && value.trim() !== '') out.push(`- ${label}: ${value.replaceAll('\n', '\n  ')}\n`)

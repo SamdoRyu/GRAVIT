@@ -194,9 +194,9 @@ export const timelinePageExample = {
 export const retroReportExample = {
   id: '3',
   kind: 'final',
+  title: '1차 스프린트 회고',
   createdAt: '2026-11-17T09:00:00Z',
   memberId: '2',
-  summary: '맡은 이슈 4개(닫힘 3) · 작성한 PR 5개(머지 4) · 올린 안건 2건(결론 1)',
   areaLabels: ['area:auth', 'area:sync'],
   learning: '에러 응답 모양은 처음부터 한 곳에서 정하는 게 덜 고친다',
   agendaResults: [
@@ -234,8 +234,6 @@ export const retroReportExample = {
         learning: '에러 응답 모양은 한 곳에서 정한다',
         source: 'https://github.com/team-samdo/gitvillage/pull/15',
       },
-      confirmed: true,
-      confirmedAt: '2026-11-06T01:00:00Z',
       followUpRequested: false,
       followUpRequestedAt: null,
       followUpQuestions: [],
@@ -249,6 +247,7 @@ export const retroReportExample = {
 export const retroReportSummaryExample = {
   id: '2',
   kind: 'midterm',
+  title: '중간 회고 리포트 · 2026-11-10',
   createdAt: '2026-11-10T09:00:00Z',
 } satisfies RetroReportSummary
 

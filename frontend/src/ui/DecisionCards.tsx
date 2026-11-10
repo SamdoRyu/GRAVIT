@@ -1,16 +1,17 @@
 // 관리 패널 "회고" 탭의 "기술 결정 카드" (#218 — FR-REP-07 · 10 · 11, CONTRACTS_API.md 「15」 decision-cards). 소유: A (리뷰 D).
 // 개인 API라 Snapshot · SSE에 없다 — 열 때 읽고, 쓴 뒤에는 응답으로 바꾼다. 학생은 본인 카드만 만들고 고치고 꼬리질문을 요청한다.
 // 강사는 고른 팀원의 카드를 읽고, 꼬리질문을 요청한 카드에만 꼬리질문을 쓴다(AI 없음). 권한은 서버가 다시 검사한다. 평가자는 없다.
+// 「확인함」 단계는 없다(#335) — 저장만 하고, 「내가 배운 점」이 있는 카드는 회고 리포트를 만들 때 고를 수 있다.
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   CARD_CELL_MAX,
   CARD_CELLS,
   CARD_MSG,
   FOLLOW_UP_QUESTION_MAX,
-  cardConfirmError,
   cardUpdateError,
   followUpQuestionError,
 } from '../data/rules/decisionCard'
+import { isSelectableForReport } from '../data/rules/report'
 import type { DecisionCardCells, DecisionCardDto, Id, SubmissionDto } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
@@ -80,7 +81,7 @@ export function DecisionCardsView({ memberId, canWrite, instructor }: { memberId
             <li key={card.id}>
               <button type="button" className="help-item" aria-label={`기술 결정 카드: ${prLabel(prById.get(card.submissionId))}`} onClick={() => setOpenId(card.id)}>
                 <span className="help-chips">
-                  <span className={`help-status${card.confirmed ? ' help-status-resolved' : ''}`}>{card.confirmed ? '확인함' : '초안'}</span>
+                  <ReportReadyChip card={card} />
                   {card.followUpRequested && <span className="help-tag">꼬리질문 요청</span>}
                   {card.followUpQuestions.length > 0 && <span className="help-tag">꼬리질문 {card.followUpQuestions.length}</span>}
                 </span>
@@ -94,6 +95,12 @@ export function DecisionCardsView({ memberId, canWrite, instructor }: { memberId
       )}
     </>
   )
+}
+
+/** 리포트에 넣을 수 있는가 — 「내가 배운 점」이 있으면 고를 수 있다 (P11 · #335) */
+function ReportReadyChip({ card }: { card: DecisionCardDto }) {
+  const ready = isSelectableForReport(card)
+  return <span className={`help-status${ready ? ' help-status-resolved' : ''}`}>{ready ? '리포트에 넣을 수 있음' : '배운 점 비어 있음'}</span>
 }
 
 function CreateCard({ memberId, candidates, onCreated }: { memberId: Id; candidates: SubmissionDto[]; onCreated: (card: DecisionCardDto) => void }) {
@@ -163,7 +170,7 @@ function CardDetail(props: {
       <header className="help-head">
         <h3 className="retro-heading">{prLabel(pr)}</h3>
         <span className="help-item-foot">
-          <span className={`help-status${card.confirmed ? ' help-status-resolved' : ''}`}>{card.confirmed ? '확인함' : '초안'}</span>
+          <ReportReadyChip card={card} />
           <span className="dim" title={card.updatedAt}>
             · {relativeTime(card.updatedAt, now)} 고침
           </span>
@@ -232,10 +239,9 @@ const toCells = (draft: Record<keyof DecisionCardCells, string>): DecisionCardCe
 
 function CardForm({ memberId, card, onSaved }: { memberId: Id; card: DecisionCardDto; onSaved: (card: DecisionCardDto) => void }) {
   const [draft, setDraft] = useState(() => Object.fromEntries(CARD_CELLS.map(({ key }) => [key, card.cells[key] ?? ''])) as Record<keyof DecisionCardCells, string>)
-  const [confirmed, setConfirmed] = useState(card.confirmed)
   const [busy, setBusy] = useState(false)
-  const request = { cells: toCells(draft), confirmed }
-  const error = cardUpdateError(request) ?? cardConfirmError(request)
+  const request = { cells: toCells(draft) }
+  const error = cardUpdateError(request)
   const over = (key: keyof DecisionCardCells) => Array.from(draft[key]).length > CARD_CELL_MAX
 
   const submit = async (e: FormEvent) => {
@@ -245,7 +251,7 @@ function CardForm({ memberId, card, onSaved }: { memberId: Id; card: DecisionCar
     const saved = await useOffice.getState().updateDecisionCard(memberId, card.id, request)
     setBusy(false)
     if (!saved) return
-    useOffice.getState().toast('good', saved.confirmed ? '카드를 확인했어요 — 회고 리포트에 들어가요' : '카드를 저장했어요')
+    useOffice.getState().toast('good', isSelectableForReport(saved) ? '카드를 저장했어요 — 회고 리포트를 만들 때 고를 수 있어요' : '카드를 저장했어요 — 내가 배운 점을 쓰면 리포트에 넣을 수 있어요')
     onSaved(saved)
   }
 
@@ -259,14 +265,10 @@ function CardForm({ memberId, card, onSaved }: { memberId: Id; card: DecisionCar
           max={CARD_CELL_MAX}
           rows={key === 'learning' ? 4 : 3}
           error={over(key) ? CARD_MSG.cells : null}
-          placeholder={key === 'learning' ? '이 결정에서 배운 점 — 확인하려면 꼭 써야 해요' : '재료가 없으면 비어 있어요. 직접 고칠 수 있어요'}
+          placeholder={key === 'learning' ? '이 결정에서 배운 점 — 써야 회고 리포트에 넣을 수 있어요' : '재료가 없으면 비어 있어요. 직접 고칠 수 있어요'}
           onChange={(v) => setDraft((d) => ({ ...d, [key]: v }))}
         />
       ))}
-      <label className="retro-check">
-        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-        <span>확인함 — 회고 리포트에 이 카드를 넣어요</span>
-      </label>
       {error && error !== CARD_MSG.cells && (
         <em className="fld-error" role="alert">
           {error}
@@ -298,7 +300,7 @@ function QuestionForm({ memberId, card, onAdded }: { memberId: Id; card: Decisio
     useOffice.getState().toast('good', '꼬리질문을 남겼어요')
     setBody('')
     setTried(false)
-    // 꼬리질문은 9칸과 따로 붙는다 — 카드의 수정 시각 · 확인 여부는 그대로
+    // 꼬리질문은 9칸과 따로 붙는다 — 카드의 수정 시각은 그대로
     onAdded({ ...card, followUpQuestions: [...card.followUpQuestions, question] })
   }
 

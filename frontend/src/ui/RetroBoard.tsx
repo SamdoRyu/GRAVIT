@@ -1,22 +1,25 @@
 // 관리 패널 "회고" 탭 (#209 — FR-LRN-08 · FR-REP-01 · 02 · 03 · 05 · 06, CONTRACTS_API.md 「15」). 소유: B (A 요청 — 리뷰 D). 기술 결정 카드 보기는 DecisionCards.tsx (#218, A).
 // 개인 API라 Snapshot · SSE에 없다 — 탭을 열 때 읽고, 쓴 뒤에는 응답으로 바꾼다. 학생은 본인 것만 본다(다른 팀원을 고르는 UI 없음).
-// 강사는 팀원을 골라 읽기만 한다(만들기 · 배운 점 쓰기 없음). 권한은 서버가 다시 검사한다(403). 평가자 · 사람별 합계 · 순위는 없다.
+// 강사는 팀원을 골라 읽기만 한다(만들기 · 느낀 점 쓰기 없음). 권한은 서버가 다시 검사한다(403). 평가자 · 사람별 합계 · 순위는 없다.
+// 보기 순서는 기록 → 카드 → 리포트(#336). 리포트는 만들 때 제목 · 느낀 점 · 넣을 기술 결정 카드(PR 단위)를 고른다(#335).
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { CARD_CELLS } from '../data/rules/decisionCard'
 import { panelProblem, type PanelProblem } from '../data/rules/errors'
 import { kstToday } from '../data/rules/period'
 import {
   ACTIVITY_KIND_LABEL,
-  REPORT_KIND_LABEL,
-  REPORT_KINDS,
   REPORT_LEARNING_MAX,
+  REPORT_MSG,
+  REPORT_TITLE_MAX,
   TIMELINE_KIND_LABEL,
   TIMELINE_PAGE_SIZE,
+  defaultReportTitle,
+  isSelectableForReport,
+  reportCreateError,
   reportFileName,
   reportLearningError,
-  type ReportKind,
 } from '../data/rules/report'
-import type { DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, RetroReportSummary, TimelineEntry } from '../data/types'
+import type { DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, RetroReportSummary, SubmissionDto, TimelineEntry } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
 import { DecisionCardsView } from './DecisionCards'
@@ -60,16 +63,16 @@ export function RetroPanel() {
         <button type="button" className={`btn btn-sm${view === 'timeline' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'timeline'} onClick={() => setView('timeline')}>
           학습 타임라인
         </button>
-        <button type="button" className={`btn btn-sm${view === 'reports' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'reports'} onClick={() => setView('reports')}>
-          회고 리포트
-        </button>
         <button type="button" className={`btn btn-sm${view === 'cards' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'cards'} onClick={() => setView('cards')}>
           기술 결정 카드
+        </button>
+        <button type="button" className={`btn btn-sm${view === 'reports' ? ' is-on' : ' btn-ghost'}`} aria-pressed={view === 'reports'} onClick={() => setView('reports')}>
+          회고 리포트
         </button>
       </div>
       {memberId === null ? (
         instructor ? (
-          <Empty icon="users" title="팀원을 골라 주세요" hint="이 사무실 팀원의 학습 타임라인 · 회고 리포트 · 기술 결정 카드를 읽을 수 있어요." />
+          <Empty icon="users" title="팀원을 골라 주세요" hint="이 사무실 팀원의 학습 타임라인 · 기술 결정 카드 · 회고 리포트를 읽을 수 있어요." />
         ) : (
           <Empty icon="user" title="이 사무실의 팀원만 볼 수 있어요" />
         )
@@ -202,7 +205,7 @@ function ReportsView({ memberId, canWrite }: { memberId: Id; canWrite: boolean }
 
 function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: boolean; onOpen: (id: Id) => void }) {
   const [reload, setReload] = useState(0)
-  const [busy, setBusy] = useState(false)
+  const [creating, setCreating] = useState(false)
   const key = `${memberId}|${reload}`
   const [loaded, setLoaded] = useState<Loaded<RetroReportSummary[]> | null>(null)
 
@@ -219,27 +222,17 @@ function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: bo
     }
   }, [memberId, key])
 
-  const create = async (kind: ReportKind) => {
-    setBusy(true)
-    const created = await useOffice.getState().createReport(memberId, { kind })
-    setBusy(false)
-    if (!created) return
-    useOffice.getState().toast('good', `${REPORT_KIND_LABEL[kind]} 회고 리포트를 만들었어요`)
-    onOpen(created.id)
-  }
-
+  if (creating) return <CreateReportForm memberId={memberId} onCreated={onOpen} onCancel={() => setCreating(false)} />
   const current = loaded?.key === key ? loaded : null
   return (
     <>
       {canWrite && (
-        <div className="retro-bar" role="group" aria-label="회고 리포트 만들기">
-          <span className="small">지금 데이터로 리포트를 만들어요</span>
+        <div className="retro-bar">
+          <span className="small">제목 · 느낀 점을 쓰고 넣을 기술 결정 카드를 골라요</span>
           <span className="grow" />
-          {REPORT_KINDS.map((kind) => (
-            <button key={kind} type="button" className={`btn btn-sm${kind === 'final' ? ' btn-primary' : ''}`} disabled={busy} onClick={() => void create(kind)}>
-              {REPORT_KIND_LABEL[kind]} 리포트 만들기
-            </button>
-          ))}
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => setCreating(true)}>
+            리포트 만들기
+          </button>
         </div>
       )}
       {current === null ? (
@@ -247,17 +240,14 @@ function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: bo
       ) : current.value === null ? (
         <Empty icon="alert" title="회고 리포트를 불러오지 못했어요" action={<button type="button" className="btn btn-sm" onClick={() => setReload((n) => n + 1)}>다시 읽기</button>} />
       ) : current.value.length === 0 ? (
-        <Empty icon="inbox" title="아직 회고 리포트가 없어요" hint={canWrite ? '중간 · 최종 리포트를 만들면 지금까지의 기록이 정리돼요.' : '학생이 리포트를 만들면 여기에 보여요.'} />
+        <Empty icon="inbox" title="아직 회고 리포트가 없어요" hint={canWrite ? '리포트를 만들면 느낀 점과 고른 기술 결정 카드가 한 곳에 정리돼요.' : '학생이 리포트를 만들면 여기에 보여요.'} />
       ) : (
         <ul className="help-list" aria-label="회고 리포트 목록">
           {current.value.map((r) => (
             <li key={r.id}>
-              <button type="button" className="help-item" aria-label={`${REPORT_KIND_LABEL[r.kind]} 회고 리포트 · ${createdDay(r.createdAt)}`} onClick={() => onOpen(r.id)}>
-                <span className="help-chips">
-                  <span className={`help-status${r.kind === 'final' ? ' help-status-open' : ''}`}>{REPORT_KIND_LABEL[r.kind]}</span>
-                </span>
+              <button type="button" className="help-item" aria-label={`${r.title} · ${createdDay(r.createdAt)}`} onClick={() => onOpen(r.id)}>
                 <span className="help-item-foot">
-                  <strong>{REPORT_KIND_LABEL[r.kind]} 회고 리포트</strong>
+                  <strong className="retro-title">{r.title}</strong>
                   <span className="grow" />
                   <span className="dim" title={r.createdAt}>
                     {createdDay(r.createdAt)}
@@ -269,6 +259,94 @@ function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: bo
         </ul>
       )}
     </>
+  )
+}
+
+const prLabel = (pr: Pick<SubmissionDto, 'githubPrNumber' | 'title'> | undefined) => (pr ? `#${pr.githubPrNumber} ${pr.title}` : 'PR')
+
+/**
+ * 리포트 만들기(#335) — 제목(기본값 "회고 리포트 · M월 D일") · 느낀 점(필수) · 넣을 기술 결정 카드(PR 번호 순). 「내가 배운 점」이 빈
+ * 카드는 고를 수 없다(P11). 화면은 늘 최종(final)을 만든다 — 중간 리포트는 보류(FR-REP-05).
+ */
+function CreateReportForm({ memberId, onCreated, onCancel }: { memberId: Id; onCreated: (id: Id) => void; onCancel: () => void }) {
+  const submissions = useOffice((s) => s.office?.snapshot?.submissions ?? null)
+  const [title, setTitle] = useState(() => defaultReportTitle(new Date()))
+  const [learning, setLearning] = useState('')
+  const [picked, setPicked] = useState<Id[]>([])
+  const [cards, setCards] = useState<DecisionCardDto[] | null | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
+  const [tried, setTried] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void useOffice
+      .getState()
+      .loadDecisionCards(memberId)
+      .then((value) => {
+        if (alive) setCards(value)
+      })
+    return () => {
+      alive = false
+    }
+  }, [memberId])
+
+  const prById = new Map((submissions ?? []).map((pr) => [pr.id, pr]))
+  const prNumber = (card: DecisionCardDto) => prById.get(card.submissionId)?.githubPrNumber ?? Number.MAX_SAFE_INTEGER
+  const sorted = [...(cards ?? [])].sort((a, b) => prNumber(a) - prNumber(b))
+  const request = { kind: 'final' as const, title, learning, decisionCardIds: picked }
+  const error = reportCreateError(request)
+  const toggle = (id: Id, on: boolean) => setPicked((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)))
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setTried(true)
+    if (error || busy) return
+    setBusy(true)
+    const created = await useOffice.getState().createReport(memberId, { ...request, title: title.trim() })
+    setBusy(false)
+    if (!created) return
+    useOffice.getState().toast('good', `"${created.title}" 리포트를 만들었어요`)
+    onCreated(created.id)
+  }
+
+  return (
+    <form className="help-form" onSubmit={submit} noValidate aria-label="회고 리포트 만들기">
+      <TextField label="제목" value={title} max={REPORT_TITLE_MAX} error={tried && error === REPORT_MSG.title ? error : null} placeholder="예: 1차 스프린트 회고" onChange={setTitle} />
+      <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} error={tried && error === REPORT_MSG.learning ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+      <fieldset className="retro-pick">
+        <legend className="fld-label">넣을 기술 결정 카드</legend>
+        {cards === undefined || submissions === null ? (
+          <p className="dim small">불러오는 중…</p>
+        ) : cards === null ? (
+          <p className="dim small">기술 결정 카드를 불러오지 못했어요</p>
+        ) : sorted.length === 0 ? (
+          <p className="dim small">아직 기술 결정 카드가 없어요 — 카드 없이도 만들 수 있어요</p>
+        ) : (
+          <ul className="retro-pick-list" aria-label="넣을 기술 결정 카드">
+            {sorted.map((card) => {
+              const selectable = isSelectableForReport(card)
+              return (
+                <li key={card.id}>
+                  <label className={`retro-check${selectable ? '' : ' is-disabled'}`}>
+                    <input type="checkbox" disabled={!selectable} checked={picked.includes(card.id)} onChange={(e) => toggle(card.id, e.target.checked)} />
+                    <span>{prLabel(prById.get(card.submissionId))}</span>
+                  </label>
+                  {!selectable && <span className="dim small retro-pick-hint">배운 점을 쓰면 고를 수 있어요</span>}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </fieldset>
+      <div className="help-actions">
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel} disabled={busy}>
+          취소
+        </button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+          만들기
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -327,10 +405,13 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
   }
 
   return (
-    <article className="retro-report" aria-label={`${REPORT_KIND_LABEL[report.kind]} 회고 리포트`}>
+    <article className="retro-report" aria-label={`회고 리포트: ${report.title}`}>
       {back}
       <header className="help-head">
-        <h3 className="retro-heading">{REPORT_KIND_LABEL[report.kind]} 회고 리포트</h3>
+        <h3 className="retro-heading">{report.title}</h3>
+        <p className="dim small retro-areas" aria-label="담당 기능 영역">
+          {report.areaLabels.length === 0 ? '담당 기능 영역 없음 — 고른 카드에 area 라벨이 없어요' : report.areaLabels.map((label) => label.slice('area:'.length)).join(' · ')}
+        </p>
         <span className="help-item-foot">
           <span className="dim" title={report.createdAt}>
             {createdDay(report.createdAt)} 만듦
@@ -342,25 +423,7 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
         </span>
       </header>
 
-      <Section title="요약">
-        <p className="help-content">{report.summary ?? <span className="dim">요약이 없어요</span>}</p>
-      </Section>
-
-      <Section title="담당 기능 영역">
-        {report.areaLabels.length === 0 ? (
-          <p className="dim small">area 라벨이 붙은 이슈 · PR이 아직 없어요</p>
-        ) : (
-          <ul className="retro-chips" aria-label="담당 기능 영역">
-            {report.areaLabels.map((label) => (
-              <li key={label} className="help-tag">
-                {label.slice('area:'.length)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="내가 배운 점">
+      <Section title="느낀 점">
         {canWrite ? (
           <LearningForm key={report.learning ?? ''} memberId={memberId} report={report} onSaved={(saved) => setLoaded({ key, value: saved })} />
         ) : (
@@ -423,11 +486,11 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
         </Section>
       )}
 
-      <Section title={`확인한 기술 결정 카드 ${report.decisionCards.length}`}>
+      <Section title={`기술 결정 카드 ${report.decisionCards.length}`}>
         {report.decisionCards.length === 0 ? (
-          <p className="dim small">확인한 기술 결정 카드가 없어요</p>
+          <p className="dim small">이 리포트에 고른 기술 결정 카드가 없어요</p>
         ) : (
-          <ul className="help-comments" aria-label="확인한 기술 결정 카드">
+          <ul className="help-comments" aria-label="기술 결정 카드">
             {report.decisionCards.map((card) => (
               <DecisionCardItem key={card.id} card={card} />
             ))}
@@ -460,13 +523,13 @@ function LearningForm({ memberId, report, onSaved }: { memberId: Id; report: Ret
     const saved = await useOffice.getState().updateReportLearning(memberId, report.id, { learning: text })
     setBusy(false)
     if (!saved) return
-    useOffice.getState().toast('good', '내가 배운 점을 저장했어요')
+    useOffice.getState().toast('good', '느낀 점을 저장했어요')
     onSaved(saved)
   }
 
   return (
-    <form className="help-form" onSubmit={submit} noValidate aria-label="내가 배운 점 쓰기">
-      <TextField label="내가 배운 점" value={text} max={REPORT_LEARNING_MAX} rows={5} error={error} placeholder="이번 프로젝트에서 배운 점을 적어 보세요" onChange={setText} />
+    <form className="help-form" onSubmit={submit} noValidate aria-label="느낀 점 쓰기">
+      <TextField label="느낀 점" value={text} max={REPORT_LEARNING_MAX} rows={5} error={dirty ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setText} />
       <div className="help-actions">
         <button type="submit" className="btn btn-sm btn-primary" disabled={busy || !!error || !dirty}>
           저장
@@ -478,9 +541,11 @@ function LearningForm({ memberId, report, onSaved }: { memberId: Id; report: Ret
 
 /** 읽기 전용 — 카드 만들기 · 고치기 · 꼬리질문은 "기술 결정 카드" 보기(DecisionCards.tsx, #218) */
 function DecisionCardItem({ card }: { card: DecisionCardDto }) {
+  const pr = useOffice((s) => s.office?.snapshot?.submissions.find((x) => x.id === card.submissionId))
   const cells = CARD_CELLS.filter(({ key }) => card.cells[key]?.trim())
   return (
     <li className="help-comment">
+      <strong className="retro-title">{prLabel(pr)}</strong>
       <dl className="retro-cells">
         {cells.map(({ key, label }) => (
           <div key={key}>

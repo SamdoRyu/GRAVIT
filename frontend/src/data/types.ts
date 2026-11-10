@@ -655,16 +655,17 @@ export interface TimelineEntry {
 
 export interface RetroReportSummary {
   id: Id
+  /** 화면은 늘 'final'을 만든다 — 중간 리포트(FR-REP-05)는 보류, 예전 'midterm'은 그대로 읽힌다 (#335) */
   kind: 'final' | 'midterm'
+  /** 1~100자 (#335) */
+  title: string
   createdAt: Instant
 }
 export interface RetroReportDto extends RetroReportSummary {
   memberId: Id
-  /** 자동 요약 — 규칙으로 조립, AI 없음 */
-  summary: string | null
-  /** 담당 기능 영역 (area:* — FR-REP-01) */
+  /** 담당 기능 영역 — 고른 카드의 PR · 연결 이슈의 area:* (FR-REP-01 · #335) */
   areaLabels: string[]
-  /** 내가 배운 점 (FR-REP-02) */
+  /** 느낀 점 (FR-REP-02) — #335 이전에 만든 리포트는 null일 수 있다 */
   learning: string | null
   /** 내가 올린 안건과 결론 · PR 결정 (FR-LRN-05 · 12) */
   agendaResults: {
@@ -679,14 +680,20 @@ export interface RetroReportDto extends RetroReportSummary {
   instructorFeedbacks: { agendaItemId: Id; instructor: UserRef; body: string; createdAt: Instant }[]
   /** 본인 것만 (FR-ACT-03). kind = ActivityRecordDto['kind'] */
   activityDistribution: { kind: 'planning' | 'research' | 'design' | 'presentation' | 'mentor_question'; totalMinutes: number }[]
-  /** 본인이 확인한 카드만 (P11) */
+  /** 리포트를 만들 때 고른 카드만, PR 번호 오름차순 (P11 · #335) */
   decisionCards: DecisionCardDto[]
 }
-/** `POST W/members/{memberId}/reports` — 본인만 */
+/** `POST W/members/{memberId}/reports` — 본인만 (#335) */
 export interface ReportCreateRequest {
   kind: RetroReportSummary['kind']
+  /** 1~100자, 앞뒤 공백은 서버가 뺀다 */
+  title: string
+  /** 느낀 점 1~5000자 */
+  learning: string
+  /** 넣을 기술 결정 카드 — 본인 카드이고 카드의 learning(내가 배운 점)이 비지 않은 것 */
+  decisionCardIds: Id[]
 }
-/** `PUT W/members/{memberId}/reports/{reportId}/learning` — 0~5000자, 통째로 바꾼다 (FR-REP-02) */
+/** `PUT W/members/{memberId}/reports/{reportId}/learning` — 느낀 점 1~5000자, 통째로 바꾼다 (FR-REP-02 · #335) */
 export interface ReportLearningRequest {
   learning: string
 }
@@ -709,8 +716,6 @@ export interface DecisionCardDto {
   memberId: Id
   submissionId: Id
   cells: DecisionCardCells
-  confirmed: boolean
-  confirmedAt: Instant | null
   followUpRequested: boolean
   followUpRequestedAt: Instant | null
   followUpQuestions: FollowUpQuestionDto[]
@@ -727,10 +732,9 @@ export interface FollowUpQuestionDto {
 export interface DecisionCardCreateRequest {
   submissionId: Id
 }
-/** `PUT W/members/{memberId}/decision-cards/{cardId}` — 9칸을 통째로 바꾼다. `confirmed: true`면 `learning` 칸 필수 (P11) */
+/** `PUT W/members/{memberId}/decision-cards/{cardId}` — 9칸을 통째로 바꾼다. 「확인함」 없음 — learning이 있으면 리포트에 고를 수 있다 (P11 · #335) */
 export interface DecisionCardUpdateRequest {
   cells: DecisionCardCells
-  confirmed: boolean
 }
 /** `POST W/members/{memberId}/decision-cards/{cardId}/follow-up-questions` — R4, 1~1000자 (FR-REP-11) */
 export interface FollowUpQuestionCreateRequest {

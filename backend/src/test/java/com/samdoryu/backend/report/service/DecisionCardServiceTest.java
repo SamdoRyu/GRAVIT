@@ -267,7 +267,6 @@ class DecisionCardServiceTest {
                 "2026-11-02: #12 에러 모양을 모르겠다",
                 null,
                 "https://github.com/samdoryu/a/pull/15\nhttps://github.com/samdoryu/a/issues/12"));
-        assertThat(saved.getValue().getConfirmedAt()).isNull();
         assertThat(saved.getValue().getFollowUpRequestedAt()).isNull();
     }
 
@@ -296,42 +295,52 @@ class DecisionCardServiceTest {
         return new DecisionCardCells("목표", null, null, null, null, null, null, learning, null);
     }
 
+    /** #335 — 「확인함」 단계가 없다. 저장만 하고, 배운 점 칸이 있으면 리포트를 만들 때 고를 수 있다. */
     @Test
-    void confirmingNeedsALearning() {
+    void theOwnerEditsCellsAndALearningMakesItSelectable() {
         DecisionCard card = existingCard();
 
-        assertError(() -> service.update(alice, ALICE, 8L, cellsWithLearning(" "), true), ErrorCode.INVALID);
-        assertError(() -> service.update(alice, ALICE, 8L, cellsWithLearning(null), true), ErrorCode.INVALID);
-        assertThat(card.getCells()).isEqualTo(DecisionCardCells.EMPTY);
+        DecisionCardDto draft = service.update(alice, ALICE, 8L, cellsWithLearning(null));
+        assertThat(draft.cells().goal()).isEqualTo("목표");
+        assertThat(draft.updatedAt()).isAfter(T0);
+        assertThat(card.isSelectableForReport()).isFalse();
+
+        service.update(alice, ALICE, 8L, cellsWithLearning(" "));
+        assertThat(card.isSelectableForReport()).isFalse();
+        service.update(alice, ALICE, 8L, cellsWithLearning("배운 점"));
+        assertThat(card.isSelectableForReport()).isTrue();
     }
 
+    /** 리포트에 넣을 카드 — 본인 카드이고 배운 점이 있어야 한다. 아니면(없음 · 남의 것 · 빈 배운 점 · 중복 · 형식) 모두 같은 invalid. */
     @Test
-    void theOwnerEditsAndConfirmsThenUnconfirms() {
-        existingCard();
+    void cardsForAReportMustBeMineWithALearning() {
+        DecisionCard mine = new DecisionCard(aliceMember, submission, cellsWithLearning("배운 점"), T0);
+        ReflectionTestUtils.setField(mine, "id", 8L);
+        DecisionCard noLearning = new DecisionCard(aliceMember, submission, cellsWithLearning(null), T0);
+        ReflectionTestUtils.setField(noLearning, "id", 9L);
+        DecisionCard bobs = new DecisionCard(member(BOB), submission, cellsWithLearning("배운 점"), T0);
+        ReflectionTestUtils.setField(bobs, "id", 10L);
+        given(cards.findAllById(List.of(8L))).willReturn(List.of(mine));
+        given(cards.findAllById(List.of(9L))).willReturn(List.of(noLearning));
+        given(cards.findAllById(List.of(10L))).willReturn(List.of(bobs));
+        given(cards.findAllById(List.of(11L))).willReturn(List.of());
 
-        DecisionCardDto draft = service.update(alice, ALICE, 8L, cellsWithLearning(null), false);
-        assertThat(draft.confirmed()).isFalse();
-        assertThat(draft.cells().goal()).isEqualTo("목표");
-
-        DecisionCardDto confirmed = service.update(alice, ALICE, 8L, cellsWithLearning("배운 점"), true);
-        assertThat(confirmed.confirmed()).isTrue();
-        assertThat(confirmed.confirmedAt()).isNotNull();
-        assertThat(confirmed.updatedAt()).isAfter(T0);
-
-        DecisionCardDto reopened = service.update(alice, ALICE, 8L, cellsWithLearning("배운 점"), false);
-        assertThat(reopened.confirmed()).isFalse();
-        assertThat(reopened.confirmedAt()).isNull();
+        assertThat(service.requireSelectableForReport(ALICE, List.of())).isEmpty();
+        assertThat(service.requireSelectableForReport(ALICE, List.of("8"))).containsExactly(mine);
+        for (List<String> bad : List.of(List.of("9"), List.of("10"), List.of("11"), List.of("8", "8"), List.of("x"))) {
+            assertError(() -> service.requireSelectableForReport(ALICE, bad), ErrorCode.INVALID);
+        }
     }
 
     @Test
     void onlyTheOwnerEditsAndAnotherMembersCardIsNotFound() {
         existingCard();
 
-        assertError(() -> service.update(bob, ALICE, 8L, cellsWithLearning(null), false), ErrorCode.FORBIDDEN_ROLE);
-        assertError(() -> service.update(instructor, ALICE, 8L, cellsWithLearning(null), false),
+        assertError(() -> service.update(bob, ALICE, 8L, cellsWithLearning(null)), ErrorCode.FORBIDDEN_ROLE);
+        assertError(() -> service.update(instructor, ALICE, 8L, cellsWithLearning(null)),
                 ErrorCode.FORBIDDEN_ROLE);
         given(cards.findByIdAndMemberId(9L, ALICE)).willReturn(Optional.empty());
-        assertError(() -> service.update(alice, ALICE, 9L, cellsWithLearning(null), false), ErrorCode.NOT_FOUND);
+        assertError(() -> service.update(alice, ALICE, 9L, cellsWithLearning(null)), ErrorCode.NOT_FOUND);
     }
 
     // ---- #59 꼬리질문 요청 · 쓰기 ----
@@ -346,9 +355,8 @@ class DecisionCardServiceTest {
         assertThat(first).isNotNull();
 
         assertThat(service.requestFollowUp(alice, ALICE, 8L).followUpRequestedAt()).isEqualTo(first);
-        // 요청은 9칸 · 확인 여부를 건드리지 않는다
+        // 요청은 9칸을 건드리지 않는다
         assertThat(card.getCells()).isEqualTo(DecisionCardCells.EMPTY);
-        assertThat(card.getConfirmedAt()).isNull();
     }
 
     @Test

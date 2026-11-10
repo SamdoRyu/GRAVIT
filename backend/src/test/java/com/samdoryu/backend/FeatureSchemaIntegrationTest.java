@@ -140,7 +140,8 @@ class FeatureSchemaIntegrationTest {
         dueDates.saveAndFlush(new TaskDueDate(task, LocalDate.of(2026, 11, 10), aliceUser, T0));
         DecisionCard card = cards.saveAndFlush(new DecisionCard(alice, pr, DecisionCardCells.EMPTY, T0));
         followUps.saveAndFlush(new FollowUpQuestion(card, instructor, "다른 방법은 없었나요?", T0));
-        reports.saveAndFlush(new RetroReport(alice, ReportKind.MIDTERM, T0));
+        reports.saveAndFlush(new RetroReport(alice, ReportKind.MIDTERM, "중간 회고", "느낀 점", java.util.List.of(card),
+                T0));
         ActivityRecord activity = activities.saveAndFlush(
                 new ActivityRecord(alice, ActivityKind.RESEARCH, "OAuth 조사", 90, T0));
         confirmations.saveAndFlush(new ActivityConfirmation(activity, bob, T0));
@@ -170,6 +171,8 @@ class FeatureSchemaIntegrationTest {
         assertThat(followUps.findByDecisionCardIdOrderByCreatedAtAsc(card.getId())).hasSize(1);
         assertThat(reports.findByMemberIdOrderByCreatedAtDesc(alice.getId())).singleElement()
                 .extracting(r -> r.getKind()).isEqualTo(ReportKind.MIDTERM);
+        assertThat(reports.findByMemberIdOrderByCreatedAtDesc(alice.getId()).get(0).getDecisionCards())
+                .extracting(c -> c.getId()).containsExactly(card.getId());
 
         assertThat(activities.findByIdAndAuthorWorkspaceId(activity.getId(), otherWs.getId())).isEmpty();
         assertThat(confirmations.existsByActivityRecordIdAndConfirmerId(activity.getId(), bob.getId())).isTrue();
@@ -183,13 +186,13 @@ class FeatureSchemaIntegrationTest {
     void decisionCardCellsRoundTrip() {
         DecisionCard card = cards.saveAndFlush(new DecisionCard(alice, pr, DecisionCardCells.EMPTY, T0));
         DecisionCardCells cells = new DecisionCardCells("목표", null, "비추천 이유", null, null, "왜", null, "배운 점", "#2");
-        card.edit(cells, true, T0.plusSeconds(60));
+        card.edit(cells, T0.plusSeconds(60));
         cards.saveAndFlush(card);
         em.clear();
 
         DecisionCard read = cards.findById(card.getId()).orElseThrow();
         assertThat(read.getCells()).isEqualTo(cells);
-        assertThat(read.getConfirmedAt()).isEqualTo(T0.plusSeconds(60));
+        assertThat(read.getUpdatedAt()).isEqualTo(T0.plusSeconds(60));
     }
 
     @Nested

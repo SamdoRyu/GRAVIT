@@ -44,8 +44,6 @@ public class DecisionCard {
     @Embedded
     private DecisionCardCells cells;
 
-    private Instant confirmedAt;
-
     private Instant followUpRequestedAt;
 
     @Column(nullable = false)
@@ -67,21 +65,17 @@ public class DecisionCard {
     }
 
     /**
-     * 본인이 9칸을 고친다({@code PUT …/decision-cards/{cardId}}). 확인하려면 배운 점 칸이 있어야 한다.
-     * 이미 확인된 카드를 다시 {@code confirmed: false}로 보내면 확인을 푼다.
+     * 본인이 9칸을 고친다({@code PUT …/decision-cards/{cardId}}). 「확인함」 단계는 없다(#335) — 배운 점 칸이 있으면 리포트를 만들 때
+     * 고를 수 있다({@link #isSelectableForReport()}).
      */
-    public void edit(DecisionCardCells cells, boolean confirmed, Instant at) {
-        Objects.requireNonNull(cells);
-        if (confirmed && !cells.hasLearning()) {
-            throw new IllegalArgumentException("확인하려면 배운 점 칸이 필요하다");
-        }
-        this.cells = cells;
-        if (!confirmed) {
-            this.confirmedAt = null;
-        } else if (this.confirmedAt == null) {
-            this.confirmedAt = Objects.requireNonNull(at);
-        }
+    public void edit(DecisionCardCells cells, Instant at) {
+        this.cells = Objects.requireNonNull(cells);
         this.updatedAt = Objects.requireNonNull(at);
+    }
+
+    /** 리포트를 만들 때 고를 수 있는가 — 본인이 쓴 「내가 배운 점」이 있다(P11). */
+    public boolean isSelectableForReport() {
+        return getCells().hasLearning();
     }
 
     /** 강사에게 꼬리질문 요청 — 이미 켜져 있으면 그대로. */

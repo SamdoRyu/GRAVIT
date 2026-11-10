@@ -1,6 +1,6 @@
 // 기술 결정 카드 · 강사 꼬리질문 규칙 (CONTRACTS_API.md 「15」, FR-REP-07 · 11 · P11). 순수 함수 — mock과 화면이 같은 규칙 · 문구를 쓴다.
 // 9칸 채우기는 서버 DecisionCardDraft와 같은 계산이다(재료를 시간순으로 옮길 뿐 — 요약 · AI 없음). 서버는 같은 검사를 다시 한다. #218.
-import type { DecisionCardCells, DecisionCardUpdateRequest, FollowUpQuestionCreateRequest, Verdict } from '../types'
+import type { DecisionCardCells, FollowUpQuestionCreateRequest, Verdict } from '../types'
 
 /** 칸 하나 — 0~2000자 */
 export const CARD_CELL_MAX = 2000
@@ -23,7 +23,6 @@ export const CARD_CELLS: readonly { key: keyof DecisionCardCells; label: string 
 export const CARD_MSG = {
   request: '카드를 만들 PR을 골라 주세요',
   cells: `카드 칸은 ${CARD_CELL_MAX}자까지 쓸 수 있어요`,
-  learningRequired: '확인하려면 내가 배운 점을 써 주세요',
   question: `꼬리질문은 1~${FOLLOW_UP_QUESTION_MAX}자로 적어 주세요`,
   submissionNotFound: 'PR을 찾을 수 없어요',
   notMyPr: '내가 작성한 PR로만 카드를 만들 수 있어요',
@@ -37,7 +36,7 @@ export const CARD_MSG = {
 const chars = (s: string) => Array.from(s).length
 const hasText = (s: string | null | undefined): s is string => typeof s === 'string' && s.trim() !== ''
 
-/** 확인할 수 있는가 — 배운 점 칸이 비어 있지 않다 (서버 DecisionCardCells.hasLearning) */
+/** 배운 점 칸이 비어 있지 않다 — 리포트에 고를 수 있는 카드 (서버 DecisionCardCells.hasLearning · #335) */
 export const hasLearning = (cells: Pick<DecisionCardCells, 'learning'>): boolean => hasText(cells.learning)
 
 /** `POST …/decision-cards` 검사 — submissionId 문자열 */
@@ -47,23 +46,18 @@ export function cardCreateError(req: unknown): string | null {
 }
 
 /**
- * `PUT …/decision-cards/{cardId}` 본문 검사 — 9칸이 모두 있고(값은 문자열 또는 null) 각 2000자 이하, confirmed는 boolean.
- * "확인하려면 배운 점"은 경로 검사 뒤에 따로 본다(서버 Service 검사) — cardConfirmError.
+ * `PUT …/decision-cards/{cardId}` 본문 검사 — 9칸이 모두 있고(값은 문자열 또는 null) 각 2000자 이하. 「확인함」(confirmed)은 없다 —
+ * 보내면 모르는 필드라 서버가 400을 준다(#335).
  */
 export function cardUpdateError(req: unknown): string | null {
   if (typeof req !== 'object' || req === null) return CARD_MSG.cells
-  const { cells, confirmed } = req as { cells?: unknown; confirmed?: unknown }
-  if (typeof confirmed !== 'boolean' || typeof cells !== 'object' || cells === null) return CARD_MSG.cells
+  const { cells, ...rest } = req as { cells?: unknown }
+  if (Object.keys(rest).length > 0 || typeof cells !== 'object' || cells === null) return CARD_MSG.cells
   for (const { key } of CARD_CELLS) {
     const value = (cells as Record<string, unknown>)[key]
     if (value === undefined || (value !== null && (typeof value !== 'string' || chars(value) > CARD_CELL_MAX))) return CARD_MSG.cells
   }
   return null
-}
-
-/** 확인 요청인데 배운 점이 비었으면 invalid (P11) */
-export function cardConfirmError(req: DecisionCardUpdateRequest): string | null {
-  return req.confirmed && !hasLearning(req.cells) ? CARD_MSG.learningRequired : null
 }
 
 /** `POST …/follow-up-questions` 검사 — 공백만이 아닌 1~1000자 */

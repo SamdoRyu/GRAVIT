@@ -76,7 +76,7 @@ import tools.jackson.databind.JsonNode;
  *   <li>만들기: 머지되거나 닫힌 내 PR → {@code 201}, 9칸은 앱이 가진 재료를 규칙대로(요구사항 · 평가 이유 · 회의 결정 · 회의 메모 ·
  *       스탠드업 막힌 것 · 링크). 내 PR 아님 {@code 403}, 열린 PR · 같은 PR 카드 {@code 409}, 다른 사무실 PR {@code 404}.</li>
  *   <li>공통 접근 규칙: 팀원 아님 {@code 404}, 읽기 본인 · 지정된 강사, 쓰기 본인만(다른 학생 · 강사 {@code 403}).</li>
- *   <li>고치기: 9칸 통째로, {@code confirmed: true}인데 배운 점이 비면 {@code 400}.</li>
+ *   <li>고치기: 9칸 통째로. 「확인함」 단계는 없다(#335) — {@code confirmed}를 보내면 모르는 필드라 {@code 400}.</li>
  *   <li>계약 ② — 실제 응답 ↔ {@code contract/examples/report/retro-report.json}의 {@code decisionCards[0]} 모양.
  *       평가자 식별 값이 응답에 없다(익명성).</li>
  *   <li>#59 FR-REP-11 꼬리질문: 요청은 본인만({@code 200}, 다시 요청해도 처음 시각). 꼬리질문은 지정된 강사만, 요청된 카드에만
@@ -206,11 +206,11 @@ class DecisionCardIntegrationTest {
                 "{\"submissionId\":\"" + Ids.toApi(submission.getId()) + "\"}");
     }
 
-    private static String updateBody(String learning, boolean confirmed) {
+    private static String updateBody(String learning) {
         String learningJson = learning == null ? "null" : "\"" + learning + "\"";
         return "{\"cells\":{\"goal\":\"고친 목표\",\"initialApproach\":\"컨트롤러마다 try-catch\",\"feedbackReceived\":null,"
                 + "\"meetingDecision\":null,\"finalChange\":\"전역 예외 처리\",\"rationale\":null,\"blockedMoment\":null,"
-                + "\"learning\":" + learningJson + ",\"source\":null},\"confirmed\":" + confirmed + "}";
+                + "\"learning\":" + learningJson + ",\"source\":null}}";
     }
 
     private DecisionCard savedCard() {
@@ -234,7 +234,7 @@ class DecisionCardIntegrationTest {
                 // 본인 스탠드업만 — 밥의 "#12 밥의 막힘"은 들어가지 않는다
                 .andExpect(jsonPath("$.cells.blockedMoment").value("2026-11-02: #12 에러 모양을 모르겠다"))
                 .andExpect(jsonPath("$.cells.source").value(endsWith("/issues/12")))
-                .andExpect(jsonPath("$.confirmed").value(false))
+                .andExpect(jsonPath("$.confirmed").doesNotExist())
                 .andExpect(jsonPath("$.followUpRequested").value(false))
                 .andExpect(jsonPath("$.followUpQuestions.length()").value(0))
                 .andReturn().getResponse().getContentAsString();
@@ -311,28 +311,27 @@ class DecisionCardIntegrationTest {
 
     // ---- 고치기 ----
 
+    /** #335 — 「확인함」 없이 저장만 한다. 배운 점이 비어도 저장되고, 예전 모양(confirmed)은 모르는 필드라 400. */
     @Test
-    void theOwnerEditsAndConfirmsWithALearning() throws Exception {
+    void theOwnerSavesCellsWithoutAConfirmStep() throws Exception {
         DecisionCard card = savedCard();
         String path = cardsPath(alice) + "/" + Ids.toApi(card.getId());
 
-        write(put(path), aliceSession, updateBody(null, true))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
-        write(put(path), aliceSession, updateBody("   ", true))
-                .andExpect(status().isBadRequest());
-
-        write(put(path), aliceSession, updateBody("에러 응답은 한 곳에서", true))
+        write(put(path), aliceSession, updateBody(null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cells.goal").value("고친 목표"))
-                .andExpect(jsonPath("$.cells.initialApproach").value("컨트롤러마다 try-catch"))
-                .andExpect(jsonPath("$.cells.learning").value("에러 응답은 한 곳에서"))
-                .andExpect(jsonPath("$.confirmed").value(true))
-                .andExpect(jsonPath("$.confirmedAt").isNotEmpty());
+                .andExpect(jsonPath("$.cells.learning").value(nullValue()))
+                .andExpect(jsonPath("$.confirmed").doesNotExist())
+                .andExpect(jsonPath("$.confirmedAt").doesNotExist());
 
-        write(put(path), aliceSession, updateBody("에러 응답은 한 곳에서", false))
+        write(put(path), aliceSession, updateBody("에러 응답은 한 곳에서"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.confirmed").value(false))
-                .andExpect(jsonPath("$.confirmedAt").value(nullValue()));
+                .andExpect(jsonPath("$.cells.initialApproach").value("컨트롤러마다 try-catch"))
+                .andExpect(jsonPath("$.cells.learning").value("에러 응답은 한 곳에서"));
+        assertThat(cards.findById(card.getId()).orElseThrow().isSelectableForReport()).isTrue();
+
+        write(put(path), aliceSession, "{\"cells\":{\"learning\":\"x\"},\"confirmed\":true}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
     }
 
     @Test
@@ -340,14 +339,14 @@ class DecisionCardIntegrationTest {
         DecisionCard card = savedCard();
         String path = cardsPath(alice) + "/" + Ids.toApi(card.getId());
 
-        write(put(path), bobSession, updateBody("배움", true))
+        write(put(path), bobSession, updateBody("배움"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
-        write(put(path), instructorSession, updateBody("배움", true))
+        write(put(path), instructorSession, updateBody("배움"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("forbidden_role"));
         // 다른 팀원 경로로 같은 카드 ID — 404
-        write(put(cardsPath(bob) + "/" + Ids.toApi(card.getId())), bobSession, updateBody("배움", true))
+        write(put(cardsPath(bob) + "/" + Ids.toApi(card.getId())), bobSession, updateBody("배움"))
                 .andExpect(status().isNotFound());
-        write(put(path), aliceSession, updateBody("a".repeat(2001), false))
+        write(put(path), aliceSession, updateBody("a".repeat(2001)))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("invalid"));
 
         assertThat(cards.findById(card.getId()).orElseThrow().getCells()).isEqualTo(DecisionCardCells.EMPTY);

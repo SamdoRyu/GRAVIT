@@ -21,9 +21,6 @@ import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository
 import com.samdoryu.backend.meeting.domain.AgendaItem;
 import com.samdoryu.backend.meeting.domain.PrDecision;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
-import com.samdoryu.backend.report.domain.ReportKind;
-import com.samdoryu.backend.report.domain.RetroReport;
-import com.samdoryu.backend.report.repository.RetroReportRepository;
 import com.samdoryu.backend.sync.domain.Submission;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
@@ -87,7 +84,6 @@ class EvaluatorAnonymityIntegrationTest {
     @Autowired SubmissionRepository submissions;
     @Autowired EvaluationRoundRepository rounds;
     @Autowired AgendaItemRepository agendaItems;
-    @Autowired RetroReportRepository reports;
 
     private Workspace ws;
     private Member alice;
@@ -153,11 +149,10 @@ class EvaluatorAnonymityIntegrationTest {
         agenda.decide("세션 만료를 고친 뒤 머지", "만료 처리를 먼저 정한다", PrDecision.MERGE_AS_IS, null, null, null, alice,
                 T0.plusSeconds(120));
         agendaItems.saveAndFlush(agenda);
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0.plusSeconds(180)));
         em.flush();
         em.clear();
 
-        // 앨리스가 카드를 만들면 받은 평가 칸에 이유가 옮겨지고(평가자 없음), 배운 점을 써서 확인하면 리포트에도 실린다
+        // 앨리스가 카드를 만들면 받은 평가 칸에 이유가 옮겨지고(평가자 없음), 배운 점을 써서 리포트에 고르면 리포트에도 실린다
         String cardsPath = workspacePath + "/members/" + Ids.toApi(alice.getId()) + "/decision-cards";
         ObjectNode card = (ObjectNode) ContractShape.readTree(send(post(cardsPath), aliceSession, token,
                 "{\"submissionId\":\"" + Ids.toApi(pr.getId()) + "\"}")
@@ -167,14 +162,19 @@ class EvaluatorAnonymityIntegrationTest {
         assertNoEvaluator(card);
         ((ObjectNode) card.get("cells")).put("learning", "만료 처리를 먼저 정한다");
         send(put(cardsPath + "/" + card.get("id").asString()), aliceSession, token,
-                "{\"cells\":" + card.get("cells") + ",\"confirmed\":true}")
+                "{\"cells\":" + card.get("cells") + "}")
                 .andExpect(status().isOk());
+        String reportsPath = workspacePath + "/members/" + Ids.toApi(alice.getId()) + "/reports";
+        String reportId = ContractShape.readTree(send(post(reportsPath), aliceSession, token,
+                "{\"kind\":\"final\",\"title\":\"최종 회고\",\"learning\":\"느낀 점\",\"decisionCardIds\":[\""
+                        + card.get("id").asString() + "\"]}")
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8)).get("id").asString();
         em.flush();
         em.clear();
 
         String roundsPath = workspacePath + "/submissions/" + Ids.toApi(pr.getId()) + "/rounds";
-        String reportPath = workspacePath + "/members/" + Ids.toApi(alice.getId()) + "/reports/"
-                + Ids.toApi(report.getId());
+        String reportPath = reportsPath + "/" + reportId;
         for (MockHttpSession reader : List.of(aliceSession, bobSession, instructorSession)) {
             String roundsJson = read(roundsPath, reader);
             assertThat(roundsJson).contains("세션 만료 처리가 빠졌어요"); // 이유는 실리고 평가자는 없다
