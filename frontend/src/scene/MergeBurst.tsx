@@ -7,6 +7,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { AdditiveBlending, BufferGeometry, Color, Float32BufferAttribute, PointsMaterial } from 'three'
 import { glowTex } from '../theme/station/parts'
+import { glowGain } from './bloom'
 import { installDevMergeDemo } from './devMergeDemo'
 import { mergeFx } from './mergeFx'
 import { boxLive, noRaycast } from './runtime'
@@ -28,7 +29,8 @@ export function MergeBurst() {
     // 속성은 넘긴 배열을 복사해 쓰므로, 고칠 때는 속성 자신의 배열에 쓴다
     const pos = geo.attributes.position.array as Float32Array
     const col = geo.attributes.color.array as Float32Array
-    const mat = new PointsMaterial({ size: 2.2, map: glowTex(), vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending, fog: false })
+    // 빛 번짐(#305)에는 약하게만 — 반짝이가 많아 그대로 번지면 하얗게 날아간다
+    const mat = glowGain(new PointsMaterial({ size: 2.2, map: glowTex(), vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending, fog: false }), 0.35)
     // 입자마다 속도 · 남은 수명 · 처음 수명 · 바탕색
     return { geo, mat, pos, col, vel: new Float32Array(N * 3), life: new Float32Array(N), max: new Float32Array(N), base: new Float32Array(N * 3), next: 0 }
   }, [])

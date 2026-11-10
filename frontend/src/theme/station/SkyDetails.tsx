@@ -20,6 +20,7 @@ import {
   Vector3,
   type Mesh,
 } from 'three'
+import { noGlow } from '../../scene/bloom'
 import { noRaycast } from '../../scene/runtime'
 
 /** StationSky가 지금 칠하고 있는 색(섞는 중이면 중간 색) */
@@ -225,7 +226,8 @@ export function StarDetails({ radius }: { radius: number }) {
         mat: new PointsMaterial({ color: 0xfff1de, size: 3, sizeAttenuation: false, transparent: true, opacity: 0.9, fog: false, depthWrite: false }),
       })),
       streakGeo: new PlaneGeometry(1, 1),
-      streakMat: new MeshBasicMaterial({ map: streakTexture(), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, fog: false }),
+      // 별똥별은 하늘이라 번지지 않는다(#305)
+      streakMat: noGlow(new MeshBasicMaterial({ map: streakTexture(), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, fog: false })),
     }
   }, [radius])
   useEffect(

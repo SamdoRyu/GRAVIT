@@ -9,6 +9,7 @@ import { COLORS, glowTex, lam } from '../theme/station/parts'
 import { WORLD_SCALE } from '../theme/station/geometry'
 import { CARGO_LAND, CARGO_T, cargoFx, capsuleEnd } from './cargoFx'
 import { installDevCargoDemo } from './devCargoDemo'
+import { glowGain } from './bloom'
 import { noRaycast } from './runtime'
 
 const S = WORLD_SCALE
@@ -34,8 +35,9 @@ function CapsuleView({ slot }: { slot: number }) {
   const mats = useMemo(
     () => ({
       flame: new MeshBasicMaterial({ color: COLORS.teal, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }),
-      flash: new SpriteMaterial({ map: glowTex(), color: 0xfff4d8, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }),
-      inner: new SpriteMaterial({ map: glowTex(), color: COLORS.lamp, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }),
+      // 빛 번짐(#305)에는 약하게 — 번쩍임이 하얗게 날아가지 않게
+      flash: glowGain(new SpriteMaterial({ map: glowTex(), color: 0xfff4d8, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }), 0.5),
+      inner: glowGain(new SpriteMaterial({ map: glowTex(), color: COLORS.lamp, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }), 0.6),
     }),
     [],
   )

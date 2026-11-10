@@ -15,8 +15,8 @@ import {
   TorusGeometry,
   Vector3,
   type Group,
-  type Mesh,
 } from 'three'
+import { glowGain } from '../../scene/bloom'
 import { noRaycast } from '../../scene/runtime'
 import { ConsoleScreen } from './ambient'
 import { HULL_Y, type Axis } from './geometry'
@@ -89,8 +89,9 @@ export function glowTex(): CanvasTexture {
   glowTexture = new CanvasTexture(c)
   return glowTexture
 }
-export function Glow({ color, size, p, opacity = 0.8, fog = true }: { color: number; size: number; p: V3; opacity?: number; fog?: boolean }) {
-  const mat = useMemo(() => new SpriteMaterial({ map: glowTex(), color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, fog }), [color, opacity, fog])
+/** bloom: 빛 번짐(#305)에 들어가는 세기(0~1, 기본 1) */
+export function Glow({ color, size, p, opacity = 0.8, fog = true, bloom = 1 }: { color: number; size: number; p: V3; opacity?: number; fog?: boolean; bloom?: number }) {
+  const mat = useMemo(() => glowGain(new SpriteMaterial({ map: glowTex(), color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, fog }), bloom), [color, opacity, fog, bloom])
   useEffect(() => () => mat.dispose(), [mat]) // glows on agenda shapes come and go (the shared texture stays)
   return <sprite material={mat} position={p} scale={[size, size, 1]} raycast={noRaycast} />
 }
@@ -131,7 +132,8 @@ export function Thruster({ p, size = 1 }: { p: V3; size?: number }) {
       <mesh rotation={[Math.PI, 0, 0]} material={lam(COLORS.metal)} raycast={noRaycast}>
         <coneGeometry args={[0.55 * size, 0.8 * size, 12]} />
       </mesh>
-      <Glow color={COLORS.teal} size={2.6 * size} p={[0, -0.7 * size, 0]} opacity={0.6} />
+      {/* 모듈 아래 분사구 빛은 선체 가장자리 너머로 번지기 쉬워 번짐은 약하게(#305) */}
+      <Glow color={COLORS.teal} size={2.6 * size} p={[0, -0.7 * size, 0]} opacity={0.6} bloom={0.35} />
     </group>
   )
 }
@@ -176,7 +178,7 @@ export interface ModuleProps {
 export function CutawayModule({ x, z, axis, length, radius, cut = 150, armor = false }: ModuleProps) {
   const root = useRef<Group>(null)
   const shell = useRef<Group>(null)
-  const caps = useRef<(Mesh | null)[]>([])
+  const caps = useRef<(Group | null)[]>([])
   const beta = useRef<number | null>(null)
   const geo = useMemo(() => {
     const c = (cut * Math.PI) / 180
@@ -223,10 +225,13 @@ export function CutawayModule({ x, z, axis, length, radius, cut = 150, armor = f
       </group>
       {[1, -1].map((side, i) => (
         <group key={side} position={[(side * length) / 2, 0, 0]}>
-          <mesh
+          {/* 끝 캡과 캡 끝의 항법등은 함께 숨는다 — 캡만 숨으면 등이 허공(안쪽 벽 앞)에 떠 벽에 붙은 빛처럼 보인다 */}
+          <group
             ref={(m) => {
               caps.current[i] = m
             }}
+          >
+          <mesh
             geometry={geo.cap}
             rotation={[0, 0, (-side * Math.PI) / 2]}
             scale={[1, 0.42, 1]}
@@ -234,8 +239,9 @@ export function CutawayModule({ x, z, axis, length, radius, cut = 150, armor = f
             castShadow
             raycast={noRaycast}
           />
-          <mesh geometry={geo.ring} material={lam(COLORS.band, { side: DoubleSide })} castShadow raycast={noRaycast} />
           <Glow color={side > 0 ? 0xff8f7a : 0x8ff0e0} size={1.2} p={[side * (radius * 0.42 + 0.1), 0, 0]} opacity={0.9} />
+          </group>
+          <mesh geometry={geo.ring} material={lam(COLORS.band, { side: DoubleSide })} castShadow raycast={noRaycast} />
         </group>
       ))}
       <Bx s={[length + 0.3, 0.16, deckW]} p={[0, deckY, 0]} c={lam(COLORS.floor)} />
