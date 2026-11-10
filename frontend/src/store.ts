@@ -35,6 +35,8 @@ export type Dialog =
   | { kind: 'conventionLibrary' }
   /** 활동 기록 (#173) — 상단 바 더보기에서. 처음 입장 때는 수집 동의(consent)부터 */
   | { kind: 'activities'; consent?: boolean }
+  /** 도움 요청 삭제 범위 고르기 (#316) — 도움 요청 상세의 「삭제」에서 */
+  | { kind: 'deleteHelp'; helpRequestId: Id }
 
 export interface Toast {
   id: number
@@ -231,6 +233,14 @@ interface OfficeState {
   convertHelpRequestToAgenda: (helpRequestId: Id, title: string) => Promise<AgendaItemDto | null>
   /** POST W/help-requests/{id}/instructor-request — 요청자만 */
   requestInstructorHelp: (helpRequestId: Id) => Promise<HelpRequestSummary | null>
+  /** PUT W/help-requests/{id}/hidden — "나에게서만 삭제"(#316). 성공하면 내 목록에서 바로 뺀다 */
+  hideHelpRequest: (helpRequestId: Id, onError?: OnDataError) => Promise<boolean>
+  /** DELETE W/help-requests/{id}/hidden — 숨김 해제. 알림이 없으므로 성공하면 Snapshot을 다시 읽는다 */
+  unhideHelpRequest: (helpRequestId: Id) => Promise<boolean>
+  /** GET W/help-requests/hidden — 내가 숨긴 요청(숨긴 시각 내림차순) */
+  listHiddenHelpRequests: () => Promise<HelpRequestSummary[] | null>
+  /** DELETE W/help-requests/{id} — "모두에게서 영구 삭제"(요청자만). 성공하면 목록에서 빼고, 연결 안건 처리를 보려고 Snapshot을 다시 읽는다 */
+  deleteHelpRequest: (helpRequestId: Id, onError?: OnDataError) => Promise<boolean>
   /**
    * 강사 답변 확인 결과(#290 — rules/help `awaitingInstructor`가 읽는다). Snapshot 요약에는 강사 답변 여부가 없어, "강사에게
    * 요청"이 켜진 열린 글의 상세를 읽어 채운다. 사무실을 열고 닫을 때 비운다.
@@ -667,6 +677,47 @@ export const useOffice = create<OfficeState>((set, get) => {
         (src, ws) => src.requestInstructorHelp(ws, helpRequestId),
         (snap, help) => ({ ...snap, helpRequests: upsert(snap.helpRequests, help) }),
       ),
+    // ---- 도움 요청 삭제 두 방식 (#316 — 「11」 도움 요청 삭제) ----
+    hideHelpRequest: async (helpRequestId, onError) =>
+      (await officeWrite(
+        async (src, ws) => {
+          await src.hideHelpRequest(ws, helpRequestId)
+          return true as const
+        },
+        // 숨김은 이벤트가 없다 — 내 Snapshot에서 바로 뺀다(다시 읽어도 서버가 뺀 값이다)
+        (snap) => ({ ...snap, helpRequests: snap.helpRequests.filter((h) => h.id !== helpRequestId) }),
+        onError,
+      )) !== null,
+    unhideHelpRequest: async (helpRequestId) => {
+      const gen = officeGen
+      const ok =
+        (await officeWrite(
+          async (src, ws) => {
+            await src.unhideHelpRequest(ws, helpRequestId)
+            return true as const
+          },
+          (snap) => snap,
+        )) !== null
+      // 숨김 해제도 이벤트가 없다 — 지금 값으로 다시 보이게 Snapshot을 바로 다시 읽는다
+      if (ok && gen === officeGen) await loadOffice(gen)
+      return ok
+    },
+    listHiddenHelpRequests: () => officeRead((src, ws) => src.listHiddenHelpRequests(ws)),
+    deleteHelpRequest: async (helpRequestId, onError) => {
+      const gen = officeGen
+      const ok =
+        (await officeWrite(
+          async (src, ws) => {
+            await src.deleteHelpRequest(ws, helpRequestId)
+            return true as const
+          },
+          (snap) => ({ ...snap, helpRequests: snap.helpRequests.filter((h) => h.id !== helpRequestId) }),
+          onError,
+        )) !== null
+      // 연결 안건이 거둬지거나 제목이 "삭제된 도움 요청"으로 바뀌었을 수 있다 — changed를 기다리지 않고 다시 읽는다
+      if (ok && gen === officeGen) await loadOffice(gen)
+      return ok
+    },
     instructorAnswers: {},
     seenInstructorAnswers: {},
     markInstructorAnswerSeen: (helpRequestId, answerId) => {

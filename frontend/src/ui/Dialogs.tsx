@@ -10,6 +10,7 @@ import { InstructorDialog } from './InstructorDialog'
 import { InstructorInboxDialog } from './InstructorInbox'
 import { ConventionLibraryDialog } from './ConventionLibraryDialog'
 import { ActivityDialog } from './ActivityDialog'
+import { HelpDeleteDialog } from './HelpDeleteDialog'
 import { useActivityConsentPrompt } from './activityConsent'
 import { useUi } from './uiState'
 
@@ -103,5 +104,7 @@ function DialogSwitch({ dialog }: { dialog: Dialog }) {
       return <ActivityDialog consent={dialog.consent} />
     case 'requirementWaiting':
       return <RequirementWaitingDialog linkTaskId={dialog.linkTaskId} />
+    case 'deleteHelp':
+      return <HelpDeleteDialog helpRequestId={dialog.helpRequestId} />
   }
 }

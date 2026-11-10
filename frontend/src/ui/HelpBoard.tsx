@@ -114,6 +114,7 @@ function HelpList({ data }: { data: { helpRequests: HelpRequestSummary[]; member
           ))}
         </ul>
       )}
+      <HiddenHelpRequests />
     </div>
   )
 }
@@ -211,9 +212,15 @@ function HelpDetailView({ summary, members, viewer, workspaceKind }: { summary: 
 
   return (
     <section className="help help-detail" aria-label="도움 요청 상세">
-      <button type="button" className="btn btn-sm btn-ghost help-back" onClick={back}>
-        <Icon name="chevronLeft" size={14} /> 목록
-      </button>
+      <div className="help-detail-bar">
+        <button type="button" className="btn btn-sm btn-ghost help-back" onClick={back}>
+          <Icon name="chevronLeft" size={14} /> 목록
+        </button>
+        {/* 삭제 범위는 대화상자(HelpDeleteDialog)에서 고른다 — 요청자는 두 방식, 그 밖의 사람은 나에게서만(#316) */}
+        <button type="button" className="btn btn-sm btn-ghost btn-danger" aria-haspopup="dialog" onClick={() => useOffice.getState().openDialog({ kind: 'deleteHelp', helpRequestId: summary.id })}>
+          <Icon name="trash" size={14} /> 삭제
+        </button>
+      </div>
       <header className="help-head">
         <StatusChip help={summary} />
         <span className="help-item-foot">
@@ -263,6 +270,71 @@ function HelpDetailView({ summary, members, viewer, workspaceKind }: { summary: 
         <p className="dim small dnote">불러오는 중…</p>
       )}
       {canComment && <CommentForm helpRequestId={summary.id} instructor={isInstructor} onAdded={(c) => setDetail((d) => (d ? { ...d, comments: [...d.comments, c] } : d))} />}
+    </section>
+  )
+}
+
+/** 「숨긴 도움 요청」 — 내가 "나에게서만 삭제"한 요청을 펼쳐 보고 숨김을 푼다(#316). 목록은 펼칠 때 읽는다 */
+function HiddenHelpRequests() {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<HelpRequestSummary[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busyId, setBusyId] = useState<Id | null>(null)
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    void useOffice
+      .getState()
+      .listHiddenHelpRequests()
+      .then((got) => {
+        if (!alive) return
+        if (got) setItems(got)
+        else setFailed(true)
+      })
+    return () => {
+      alive = false
+    }
+  }, [open])
+  const unhide = async (id: Id) => {
+    setBusyId(id)
+    const ok = await useOffice.getState().unhideHelpRequest(id)
+    setBusyId(null)
+    if (ok) {
+      setItems((list) => list?.filter((h) => h.id !== id) ?? null)
+      useOffice.getState().toast('good', '숨김을 풀었어요. 다시 목록에 보여요')
+    }
+  }
+  return (
+    <section className="help-hidden" aria-label="숨긴 도움 요청">
+      <button type="button" className="btn btn-sm btn-ghost help-hidden-toggle" aria-expanded={open}
+        onClick={() => {
+          // 펼칠 때마다 새로 읽는다 — 다른 탭에서 숨기거나 풀었을 수 있다
+          setItems(null)
+          setFailed(false)
+          setOpen((v) => !v)
+        }}
+      >
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} /> 숨긴 도움 요청
+      </button>
+      {open &&
+        (failed ? (
+          <p className="dim small dnote">숨긴 도움 요청을 불러오지 못했어요.</p>
+        ) : items === null ? (
+          <p className="dim small dnote">불러오는 중…</p>
+        ) : items.length === 0 ? (
+          <p className="dim small dnote">숨긴 도움 요청이 없어요.</p>
+        ) : (
+          <ul className="help-hidden-list" aria-label="숨긴 도움 요청 목록">
+            {items.map((h) => (
+              <li key={h.id}>
+                <span className="help-item-text">{h.content}</span>
+                <button type="button" className="btn btn-sm" disabled={busyId === h.id} aria-label={`숨김 해제: ${h.content}`} onClick={() => void unhide(h.id)}>
+                  숨김 해제
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
     </section>
   )
 }

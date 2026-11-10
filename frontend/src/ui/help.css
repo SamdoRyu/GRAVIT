@@ -54,3 +54,18 @@
 .standup-blockers { margin: 2px 0 0; }
 .standup-blockers strong { margin-right: 4px; }
 .standup-actions { flex-wrap: wrap; align-items: center; }
+
+/* 도움 요청 삭제 두 방식 (#316) — 상세 위 막대 · 범위 고르기 대화상자 · 숨긴 도움 요청 */
+.help-detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.help-delete-scopes { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.help-delete-scopes legend { margin-bottom: 4px; padding: 0; }
+.help-delete-scope { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; cursor: pointer; box-shadow: 0 0 0 1px var(--line); }
+.help-delete-scope:has(input:checked) { box-shadow: 0 0 0 2px var(--accent); }
+.help-delete-scope input { margin-top: 3px; }
+.help-delete-scope > span { display: grid; gap: 2px; line-height: 1.45; }
+.help-delete-warn ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.help-hidden { display: grid; gap: 6px; }
+.help-hidden-toggle { justify-self: start; }
+.help-hidden-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.help-hidden-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--soft); }
+.help-hidden-list .help-item-text { flex: 1 1 auto; min-width: 0; }

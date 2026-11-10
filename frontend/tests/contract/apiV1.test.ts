@@ -134,7 +134,16 @@ async function startFake(): Promise<Fake> {
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items$/.test(path)) return sendJson(res, 201, agendaItemExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/(withdraw|decision|feedback-request)$/.test(path)) return sendJson(res, 200, agendaItemExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/agenda-items\/[^/]+\/instructor-feedback$/.test(path)) return sendJson(res, 201, agendaItemExample.instructorFeedbacks[0])
-    // 「11」 도움 요청 (#183)
+    // 「11」 도움 요청 (#183) — 숨김 목록은 상세 경로보다 먼저 본다(#316)
+    if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/help-requests\/hidden$/.test(path)) return sendJson(res, 200, [helpRequestSummaryExample])
+    if ((r.method === 'PUT' || r.method === 'DELETE') && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/hidden$/.test(path)) {
+      res.writeHead(204)
+      return res.end()
+    }
+    if (r.method === 'DELETE' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+$/.test(path)) {
+      res.writeHead(204)
+      return res.end()
+    }
     if (r.method === 'GET' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+$/.test(path)) return sendJson(res, 200, helpRequestDetailExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests$/.test(path)) return sendJson(res, 201, helpRequestSummaryExample)
     if (r.method === 'POST' && /^\/api\/workspaces\/[^/]+\/help-requests\/[^/]+\/comments$/.test(path)) return sendJson(res, 201, helpRequestDetailExample.comments[0])
@@ -506,6 +515,29 @@ describe('v1 api — 쓰기 · CSRF', () => {
     await rejectsWith(api.closeHelpRequest('3', '12', close), 'forbidden_role', '요청한 사람만 할 수 있어요')
     fake.next.push((_r, res) => sendError(res, 409, 'conflict', '해결됐거나 끝난 도움 요청이에요'))
     await rejectsWith(api.addHelpComment('3', '12', { content: '늦은 코멘트' }), 'conflict', '해결됐거나 끝난 도움 요청이에요')
+  })
+
+  it('도움 요청 삭제 두 방식 — 숨김 PUT · 해제 DELETE · 영구 삭제 DELETE는 204 + CSRF, 숨김 목록 GET은 CSRF 없이, 403 · 404를 그대로 (#316)', async () => {
+    fake = await startFake()
+    fake.cookie = fake.serverToken
+    const api = make()
+    assert.equal(await api.hideHelpRequest('3', '12'), undefined)
+    assert.equal(await api.unhideHelpRequest('3', '12'), undefined)
+    assert.deepEqual(await api.listHiddenHelpRequests('3'), [helpRequestSummaryExample])
+    assert.equal(await api.deleteHelpRequest('3', '12'), undefined)
+    assert.deepEqual(
+      fake.requests.map((r) => `${r.method} ${r.path} ${r.csrf ?? '-'} ${r.body || '-'}`),
+      [
+        'PUT /api/workspaces/3/help-requests/12/hidden tok-1 -',
+        'DELETE /api/workspaces/3/help-requests/12/hidden tok-1 -',
+        'GET /api/workspaces/3/help-requests/hidden - -',
+        'DELETE /api/workspaces/3/help-requests/12 tok-1 -',
+      ],
+    )
+    fake.next.push((_r, res) => sendError(res, 403, 'forbidden_role', '요청한 사람만 할 수 있어요'))
+    await rejectsWith(api.deleteHelpRequest('3', '12'), 'forbidden_role', '요청한 사람만 할 수 있어요')
+    fake.next.push((_r, res) => sendError(res, 404, 'not_found', '도움 요청을 찾을 수 없어요'))
+    await rejectsWith(api.hideHelpRequest('3', '12'), 'not_found', '도움 요청을 찾을 수 없어요')
   })
 
   it('강사 피드백 — 요청 POST(본문 없음) · 쓰기 POST(JSON 본문), 둘 다 CSRF, 403 · 409를 그대로 (#212)', async () => {

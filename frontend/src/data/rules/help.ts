@@ -9,6 +9,7 @@ import type {
   HelpRequestStatus,
   HelpRequestSummary,
   HelpRequestToAgendaRequest,
+  Id,
 } from '../types'
 import { AGENDA_TITLE_MAX } from './meeting'
 
@@ -138,4 +139,27 @@ export function awaitingInstructor(helpRequests: readonly HelpRequestSummary[], 
 export function afterComment(help: HelpRequestSummary, comment: HelpCommentDto): HelpRequestSummary {
   const opensDiscussion = help.status === 'open' && comment.authorMemberId !== null && comment.authorMemberId !== help.requesterMemberId
   return { ...help, commentCount: help.commentCount + 1, status: opensDiscussion ? 'discussing' : help.status }
+}
+
+// ---- 도움 요청 삭제 두 방식 (#315 · #316 — CONTRACTS_API.md 「11」 도움 요청 삭제) ----
+
+/** 원본 도움 요청이 영구 삭제된 안건에 남기는 제목 — 복사된 원문(본문 첫 줄로 미리 채운 제목)을 남기지 않는다 */
+export const DELETED_HELP_REQUEST_TITLE = '삭제된 도움 요청'
+
+/** 삭제 범위 — me = 나에게서만 삭제(숨김, 해제 가능) · everyone = 모두에게서 영구 삭제(복원 불가) */
+export type HelpDeleteScope = 'me' | 'everyone'
+
+/**
+ * 고를 수 있는 범위 — 요청자는 둘 다, 그 밖의 사람(다른 팀원 · 강사)은 나에게서만. 상태와 상관없다.
+ * 버튼을 숨기는 것은 권한 검사가 아니다 — 서버가 고른 범위(엔드포인트)대로 다시 검사한다.
+ */
+export function helpDeleteScopes(help: Pick<HelpRequestSummary, 'requesterMemberId'>, viewerMemberId: Id | null): HelpDeleteScope[] {
+  return viewerMemberId !== null && viewerMemberId === help.requesterMemberId ? ['me', 'everyone'] : ['me']
+}
+
+/** 영구 삭제 경고에 보일 개수 — 요청자가 아닌 사람이 쓴 코멘트(강사 답변 제외) · 강사 답변. 둘 다 함께 지워진다 */
+export function helpDeleteLoss(detail: Pick<HelpRequestDetail, 'requesterMemberId' | 'comments'>): { otherComments: number; instructorAnswers: number } {
+  const instructorAnswers = detail.comments.filter((c) => c.isInstructorAnswer).length
+  const otherComments = detail.comments.filter((c) => !c.isInstructorAnswer && c.authorMemberId !== detail.requesterMemberId).length
+  return { otherComments, instructorAnswers }
 }
