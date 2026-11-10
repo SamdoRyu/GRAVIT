@@ -10,6 +10,7 @@ import type {
   EvaluationRoundDto,
   FlowSummary,
   HelpCommentDto,
+  HelpRequestStatus,
   HelpRequestSummary,
   StandupDto,
   Id,
@@ -67,6 +68,11 @@ export interface MockHelpThread {
   comments: HelpCommentDto[]
   helpfulCommentId: Id | null
   learning: string | null
+  /**
+   * 안건으로 전환하기 직전 상태(#313 · #314) — on_agenda인 동안만 값이 있고, 거두면 이 값으로 되돌린 뒤 비운다.
+   * 서버 help_request.status_before_agenda(V6)와 같다. 응답에는 내보내지 않는다. 이 칸이 생기기 전 저장값은 없을 수 있다.
+   */
+  statusBeforeAgenda?: Extract<HelpRequestStatus, 'open' | 'discussing'> | null
 }
 
 export interface MockEvaluation {

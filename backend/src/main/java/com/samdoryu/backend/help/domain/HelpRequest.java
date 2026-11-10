@@ -51,6 +51,14 @@ public class HelpRequest {
     @Column(nullable = false, length = 16)
     private HelpRequestStatus status;
 
+    /**
+     * 안건으로 전환하기 직전 상태({@code open} · {@code discussing}) — {@code on_agenda}인 동안만 값이 있다(#313). 안건을 거두면
+     * 이 상태로 그대로 돌아간다. 응답에는 내보내지 않는다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private HelpRequestStatus statusBeforeAgenda;
+
     /** 스탠드업 "막힌 것"에서 넘어온 경우(FR-MTG-02). 요청자 본인의 스탠드업이다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "from_standup_id")
@@ -72,7 +80,8 @@ public class HelpRequest {
 
     private Instant closedAt;
 
-    @Formula("(select a.id from agenda_item a where a.source_help_request_id = id)")
+    /** 거두지 않은 전환 안건(도움 요청당 하나 — V6). 거둔 안건은 가리키지 않는다. */
+    @Formula("(select a.id from agenda_item a where a.source_help_request_id = id and a.status <> 'WITHDRAWN')")
     private Long agendaItemId;
 
     @Formula("(select count(*) from help_comment c where c.help_request_id = id)")
@@ -116,12 +125,25 @@ public class HelpRequest {
         this.closedAt = Objects.requireNonNull(closedAt);
     }
 
-    /** 안건으로 전환(FR-LRN-19) → {@code on_agenda}. 요청자 · 상태 검사는 부르는 쪽이 먼저 한다. */
+    /** 안건으로 전환(FR-LRN-19) → {@code on_agenda}. 직전 상태를 기록해 둔다. 요청자 · 상태 검사는 부르는 쪽이 먼저 한다. */
     public void moveToAgenda() {
         if (!status.isOpenForDiscussion()) {
             throw new IllegalStateException("open · discussing 도움 요청만 안건으로 옮긴다");
         }
+        this.statusBeforeAgenda = status;
         this.status = HelpRequestStatus.ON_AGENDA;
+    }
+
+    /**
+     * 전환된 안건을 거둠(#313) — {@code on_agenda} → 전환 직전 상태 그대로. {@code on_agenda} 동안 달린 코멘트로 다시 계산하지
+     * 않는다. 본문 · 코멘트 · "강사에게 요청"은 그대로 둔다.
+     */
+    public void returnFromAgenda() {
+        if (status != HelpRequestStatus.ON_AGENDA || statusBeforeAgenda == null) {
+            throw new IllegalStateException("전환 직전 상태가 기록된 on_agenda 도움 요청만 되돌린다");
+        }
+        this.status = statusBeforeAgenda;
+        this.statusBeforeAgenda = null;
     }
 
     /** 전환된 안건의 결정이 기록됨(CONTRACTS_API 「10」 decision) — {@code on_agenda} → {@code ended}. */
@@ -130,6 +152,7 @@ public class HelpRequest {
             throw new IllegalStateException("안건으로 옮긴 도움 요청만 회의 결정으로 끝난다");
         }
         this.status = HelpRequestStatus.ENDED;
+        this.statusBeforeAgenda = null;
         this.closedAt = Objects.requireNonNull(decidedAt);
     }
 }

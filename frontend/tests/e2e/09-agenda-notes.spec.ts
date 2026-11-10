@@ -1,8 +1,9 @@
-// 9. Learning · other agenda items (#31 · FR-LRN-11): written in the meeting dialog with no source, they join the agenda list
-// and sit on the bridge table as the design's octahedron (learning) and memo pad (other). Hovering names the kind and title;
-// they open nothing (there is no original to open).
+// 9. Other agenda items (#31 · FR-LRN-11): written in the meeting dialog with no source, they join the agenda list and sit on
+// the bridge table as the design's memo pad. Hovering names the kind and title; they open nothing (there is no original to
+// open). Lessons are no longer written as agenda items or per decision — they go in the meeting notes (#318) — but learning
+// items already saved still show as the octahedron.
 import type { Page } from '@playwright/test'
-import { expect, hoverBox, openApp, readStore, test } from './fixtures'
+import { callStore, expect, hoverBox, openApp, readStore, test } from './fixtures'
 
 type Item = { id: string; kind: string; status: string; title: string; source: unknown; background: string | null; tried: string | null; unresolvedReason: string | null }
 
@@ -20,37 +21,34 @@ function drawn(page: Page, key: string) {
   }, key)
 }
 
-test('write a learning item and an other item in the meeting dialog; they sit on the bridge table', async ({ page, source }) => {
+test('write an other item in the meeting dialog (no lesson inputs); it and an existing learning item sit on the bridge table', async ({ page, source }) => {
   await openApp(page, source)
+
+  // A learning item saved before #318 (the API still takes the kind) — it keeps showing.
+  await callStore(page, 'raiseAgendaItem', { kind: 'learning', sourceId: null, title: 'E2E 예전 배운 점', background: '리뷰에서 알게 됨', tried: null, unresolvedReason: null })
+  await expect.poll(() => itemTitled(page, 'E2E 예전 배운 점')).toMatchObject({ kind: 'learning', status: 'confirmed' })
 
   await page.getByRole('button', { name: /^회의/ }).click()
   const start = page.getByRole('dialog', { name: '회의 시작' })
-  await start.getByRole('button', { name: '배운 점 · 기타 안건 쓰기' }).click()
-  const form = start.getByRole('form', { name: '배운 점 · 기타 안건 쓰기' })
+  // Only the other form — no "배운 점" entry and no kind choice.
+  await expect(start.getByRole('button', { name: '배운 점 · 기타 안건 쓰기' })).toHaveCount(0)
+  await start.getByRole('button', { name: '기타 안건 쓰기' }).click()
+  const form = start.getByRole('form', { name: '기타 안건 쓰기' })
+  await expect(form.getByRole('radiogroup', { name: '안건 종류' })).toHaveCount(0)
 
-  // Learning is the default kind; a title is required.
-  await expect(form.getByRole('radio', { name: '배운 점' })).toHaveAttribute('aria-checked', 'true')
+  // A title is required.
   await form.getByRole('button', { name: '안건 올리기' }).click()
   await expect(form.getByText('안건 제목은 1~100자로 적어 주세요')).toBeVisible()
-  await form.getByRole('textbox', { name: '무엇을 배웠나요' }).fill('E2E 배운 점')
-  await form.getByRole('textbox', { name: '배경 (선택)' }).fill('리뷰에서 알게 됨')
-  await expect(form.getByRole('textbox', { name: '해 본 것 (선택)' })).toHaveCount(0)
-  await form.getByRole('button', { name: '안건 올리기' }).click()
-  await expect(page.getByText('배운 점 안건을 올렸어요')).toBeVisible()
-  const agenda = start.getByRole('list', { name: '안건' })
-  await expect(agenda).toContainText('E2E 배운 점')
-
-  // Other: the discussion fields come back.
-  await start.getByRole('button', { name: '배운 점 · 기타 안건 쓰기' }).click()
-  await form.getByRole('radio', { name: '기타' }).click()
   await form.getByRole('textbox', { name: '무엇을 이야기할까요' }).fill('E2E 기타 안건')
   await form.getByRole('textbox', { name: '해 본 것 (선택)' }).fill('규칙 문서 다시 읽기')
   await form.getByRole('button', { name: '안건 올리기' }).click()
+  await expect(page.getByText('기타 안건을 올렸어요')).toBeVisible()
+  const agenda = start.getByRole('list', { name: '안건' })
   await expect(agenda).toContainText('E2E 기타 안건')
+  await expect(agenda).toContainText('E2E 예전 배운 점')
 
-  await expect.poll(() => itemTitled(page, 'E2E 배운 점')).toMatchObject({ kind: 'learning', status: 'confirmed', source: null, background: '리뷰에서 알게 됨', tried: null })
   await expect.poll(() => itemTitled(page, 'E2E 기타 안건')).toMatchObject({ kind: 'other', status: 'confirmed', source: null, tried: '규칙 문서 다시 읽기' })
-  const learning = (await itemTitled(page, 'E2E 배운 점'))!
+  const learning = (await itemTitled(page, 'E2E 예전 배운 점'))!
   const other = (await itemTitled(page, 'E2E 기타 안건'))!
 
   await start.getByRole('button', { name: '취소' }).click()

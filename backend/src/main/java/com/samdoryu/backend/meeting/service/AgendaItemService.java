@@ -111,7 +111,8 @@ public class AgendaItemService {
 
     /**
      * 회의 전 거두기(FR-LRN-14) → {@code withdrawn}. 검사 순서는 대상(404 — 같은 사무실 것만) → 올린 사람(403) →
-     * {@code confirmed}가 아님(409). 행은 지우지 않는다.
+     * {@code confirmed}가 아님(409). 행은 지우지 않는다. 도움 요청 안건이면 같은 트랜잭션에서 그 도움 요청을 안건 전 상태로
+     * 되돌린다(#313) — 다시 안건으로 올릴 수 있다.
      */
     @Transactional
     public AgendaItemDto withdraw(WorkspaceAccess access, Long agendaItemId) {
@@ -124,7 +125,13 @@ public class AgendaItemService {
             throw new ApiException(ErrorCode.CONFLICT);
         }
         item.withdraw();
-        eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.AGENDA_ITEMS);
+        if (item.getKind() == AgendaKind.HELP_REQUEST) {
+            helpRequestService.returnFromAgenda(access.workspaceId(), item.getSourceHelpRequestId());
+            eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.AGENDA_ITEMS,
+                    SnapshotResource.HELP_REQUESTS);
+        } else {
+            eventHub.publishChangeAfterCommit(access.workspaceId(), SnapshotResource.AGENDA_ITEMS);
+        }
         return AgendaItemDto.of(item, List.of());
     }
 
@@ -260,7 +267,8 @@ public class AgendaItemService {
     /**
      * 도움 요청 → 안건 전환(CONTRACTS_API 「11」 to-agenda, FR-LRN-18 · 19) → {@code help_request} 종류 {@code confirmed} 안건.
      * 도움 요청의 검사(404 → 요청자 403 → 상태 409)와 {@code on_agenda} 전환이 안건 생성과 한 트랜잭션이다.
-     * 동시에 두 번 전환하면 안건 유일 제약(도움 요청당 하나)이 막는다 → {@code conflict}.
+     * 동시에 두 번 전환하면 안건 유일 제약(도움 요청당 거두지 않은 안건 하나 — V6)이 막는다 → {@code conflict}.
+     * 거둔 뒤 다시 전환하면 새 안건이 생긴다(거둔 행은 남는다).
      */
     @Transactional
     public AgendaItemDto createFromHelpRequest(WorkspaceAccess access, Long helpRequestId, String title) {

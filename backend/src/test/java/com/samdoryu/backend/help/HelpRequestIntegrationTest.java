@@ -1,6 +1,7 @@
 package com.samdoryu.backend.help;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,6 +24,7 @@ import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.instructor.domain.InstructorAssignment;
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
 import com.samdoryu.backend.meeting.domain.AgendaItem;
+import com.samdoryu.backend.meeting.domain.AgendaStatus;
 import com.samdoryu.backend.meeting.domain.Standup;
 import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.StandupRepository;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
@@ -734,5 +737,170 @@ class HelpRequestIntegrationTest {
         toAgenda(ws, elsewhere, aliceSession, "남의 사무실").andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("not_found"));
         assertThat(agendaItems.count()).isZero();
+    }
+
+    // ---- #313 전환된 안건 거두기 → 도움 요청 복구 · 다시 올리기 ------------------------------------------
+
+    private ResultActions withdraw(String agendaItemId, MockHttpSession session) throws Exception {
+        String token = csrfToken();
+        return mvc.perform(post("/api/workspaces/" + Ids.toApi(ws.getId()) + "/agenda-items/" + agendaItemId
+                + "/withdraw").session(session)
+                .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
+                .header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON).content(""));
+    }
+
+    private String raise(HelpRequest helpRequest, String title) throws Exception {
+        String response = toAgenda(ws, helpRequest, aliceSession, title).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return ContractShape.readTree(response).get("id").asString();
+    }
+
+    private List<AgendaStatus> agendaStatusesOf(HelpRequest helpRequest) {
+        flushAndClear();
+        return agendaItems.findByWorkspaceIdOrderByRaisedAtAscIdAsc(ws.getId()).stream()
+                .filter(item -> helpRequest.getId().equals(item.getSourceHelpRequestId()))
+                .map(AgendaItem::getStatus).toList();
+    }
+
+    /** 거두면 안건은 withdrawn(행은 남음), 도움 요청은 open · 안건 없음. 다시 올리고 거두기를 반복할 수 있다. */
+    @Test
+    void withdrawingRestoresOpenAndTheHelpRequestCanBeRaisedAgain() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "세션이 끊겨요", null, T0));
+        String first = raise(helpRequest, "세션 끊김");
+
+        withdraw(first, aliceSession).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("withdrawn"));
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.status").value("open"))
+                .andExpect(jsonPath("$.agendaItemId").value(nullValue()));
+
+        String second = raise(helpRequest, "세션 끊김 다시");
+        assertThat(second).isNotEqualTo(first);
+        flushAndClear(); // 테스트 트랜잭션은 요청 사이에 영속성 컨텍스트를 나눠 쓴다 — 계산 열(agendaItemId)을 DB에서 다시 읽게
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.status").value("on_agenda"))
+                .andExpect(jsonPath("$.agendaItemId").value(second));
+
+        withdraw(second, aliceSession).andExpect(status().isOk());
+        String third = raise(helpRequest, "세 번째");
+        assertThat(agendaStatusesOf(helpRequest))
+                .containsExactly(AgendaStatus.WITHDRAWN, AgendaStatus.WITHDRAWN, AgendaStatus.CONFIRMED);
+        assertThat(helpRequestService.listSummaries(ws.getId(), Instant.now()))
+                .filteredOn(summary -> summary.id().equals(Ids.toApi(helpRequest.getId())))
+                .extracting(HelpRequestSummary::agendaItemId).containsExactly(third);
+    }
+
+    /**
+     * 거두면 전환 직전 상태 그대로 — on_agenda 동안 다른 팀원 코멘트가 달려도 open에서 올렸으면 open(다시 계산하지 않음).
+     * 거두기와 다시 올리기를 되풀이해도 그때마다 그 직전 상태로 돌아온다.
+     */
+    @Test
+    void withdrawingReturnsToTheStatusRightBeforeEachConversion() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "테스트가 깨져요", null, T0));
+        String fromOpen = raise(helpRequest, "테스트 실패");
+        comment(ws, helpRequest, bobSession, "안건 전에 볼게요").andExpect(status().isCreated());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.ON_AGENDA);
+        withdraw(fromOpen, aliceSession).andExpect(status().isOk());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+
+        comment(ws, helpRequest, bobSession, "이제 같이 봐요").andExpect(status().isCreated());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+        withdraw(raise(helpRequest, "테스트 실패 다시"), aliceSession).andExpect(status().isOk());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+
+        withdraw(raise(helpRequest, "세 번째"), aliceSession).andExpect(status().isOk());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.DISCUSSING);
+        assertThat(helpRequests.findById(helpRequest.getId()).orElseThrow().getStatusBeforeAgenda()).isNull();
+    }
+
+    /**
+     * 기준 사례 — discussing · 48시간 지남 · 강사 요청 안 함 → 안건 후보 확정 → 거두기. Snapshot · 상세가 다시 안건 후보로 보인다
+     * (화면의 「논의 중」 · 「안건 후보」 라벨과 「강사에게 요청」 · 「안건 후보 확정」 · 「해결로 닫기」 버튼은 이 값을 따른다 — #314).
+     */
+    @Test
+    void agendaCandidateComesBackAsACandidateAfterWithdrawing() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "배포가 안 돼요", null,
+                Instant.now().minus(Duration.ofHours(49))));
+        comment(ws, helpRequest, bobSession, "로그 볼게요").andExpect(status().isCreated());
+        String agendaItemId = raise(helpRequest, "배포 실패");
+
+        withdraw(agendaItemId, aliceSession).andExpect(status().isOk());
+
+        flushAndClear();
+        mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andExpect(jsonPath("$.status").value("discussing"))
+                .andExpect(jsonPath("$.isAgendaCandidate").value(true))
+                .andExpect(jsonPath("$.instructorRequested").value(false))
+                .andExpect(jsonPath("$.agendaItemId").value(nullValue()));
+        HelpRequestSummary summary = helpRequestService.listSummaries(ws.getId(), Instant.now()).stream()
+                .filter(s -> s.id().equals(Ids.toApi(helpRequest.getId()))).findFirst().orElseThrow();
+        assertThat(summary.status()).isEqualTo(HelpRequestStatus.DISCUSSING);
+        assertThat(summary.isAgendaCandidate()).isTrue();
+        assertThat(summary.instructorRequested()).isFalse();
+        assertThat(summary.agendaItemId()).isNull();
+    }
+
+    /**
+     * 거두기 전후로 본문 · 코멘트(강사 답변 포함) · commentCount · createdAt · "강사에게 요청"이 같다. 안건으로 올린 뒤 켠
+     * "강사에게 요청"도 켜진 채 남는다. agendaItemId만 null이 된다.
+     */
+    @Test
+    void withdrawingKeepsContentCommentsAndInstructorRequest() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "빌드가 느려요", null, T0));
+        comment(ws, helpRequest, aliceSession, "캐시를 꺼 봤어요").andExpect(status().isCreated());
+        String agendaItemId = raise(helpRequest, "빌드 속도");
+        requestInstructor(ws, helpRequest, aliceSession).andExpect(status().isOk());
+        comment(ws, helpRequest, instructorSession, "강사 답변").andExpect(status().isCreated());
+        comment(ws, helpRequest, bobSession, "저도 느려요").andExpect(status().isCreated());
+
+        flushAndClear();
+        var before = ContractShape.readTree(mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andReturn().getResponse().getContentAsString());
+        withdraw(agendaItemId, aliceSession).andExpect(status().isOk());
+        flushAndClear();
+        var after = ContractShape.readTree(mvc.perform(get(base(ws) + "/" + helpRequest.getId()).session(aliceSession))
+                .andReturn().getResponse().getContentAsString());
+
+        for (String field : List.of("content", "comments", "commentCount", "createdAt", "instructorRequested",
+                "instructorRequestedAt")) {
+            assertThat(after.get(field)).as(field).isEqualTo(before.get(field));
+        }
+        assertThat(after.get("commentCount").asInt()).isEqualTo(3);
+        assertThat(after.get("instructorRequested").asBoolean()).isTrue();
+        assertThat(before.get("agendaItemId").asString()).isEqualTo(agendaItemId);
+        assertThat(after.get("agendaItemId").isNull()).isTrue();
+        assertThat(after.get("status").asString()).isEqualTo("open");
+    }
+
+    /** 기존 검사 순서 그대로 — 올린 사람이 아니면 403, 이미 거둔 안건은 409. 도움 요청은 바뀌지 않는다. */
+    @Test
+    void withdrawErrorsLeaveTheHelpRequestAlone() throws Exception {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        String agendaItemId = raise(helpRequest, "질문");
+
+        withdraw(agendaItemId, bobSession).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("forbidden_role"));
+        withdraw(agendaItemId, instructorSession).andExpect(status().isForbidden());
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.ON_AGENDA);
+
+        withdraw(agendaItemId, aliceSession).andExpect(status().isOk());
+        withdraw(agendaItemId, aliceSession).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("conflict"));
+        assertThat(statusOf(helpRequest)).isEqualTo(HelpRequestStatus.OPEN);
+    }
+
+    /** DB 유일 규칙(V6) — 도움 요청당 거두지 않은 안건은 하나. 거둔 행은 몇 개든 남는다. */
+    @Test
+    void onlyOneNotWithdrawnAgendaItemPerHelpRequest() {
+        HelpRequest helpRequest = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "질문", null, T0));
+        AgendaItem withdrawn = AgendaItem.forHelpRequest(ws, helpRequest.getId(), "첫 번째", alice, T0);
+        withdrawn.withdraw();
+        agendaItems.saveAndFlush(withdrawn);
+        agendaItems.saveAndFlush(AgendaItem.forHelpRequest(ws, helpRequest.getId(), "두 번째", alice, T0));
+
+        assertThatThrownBy(() -> agendaItems.saveAndFlush(
+                AgendaItem.forHelpRequest(ws, helpRequest.getId(), "세 번째", alice, T0)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

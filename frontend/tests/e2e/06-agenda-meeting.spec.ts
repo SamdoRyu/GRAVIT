@@ -73,7 +73,8 @@ test('a v1 meeting: decide the PR item, leave the issue for next time, end with 
   await form.getByRole('button', { name: '결정 기록' }).click()
   await expect(form.getByText('PR 안건은 PR 결정을 골라 주세요')).toBeVisible()
   await form.getByRole('radiogroup', { name: 'E2E PR 안건 PR 결정' }).getByRole('radio', { name: '고쳐서 다시 평가' }).click()
-  await form.getByPlaceholder('팀이 이번에 배운 것').fill('작은 PR이 리뷰가 빠르다')
+  // 배운 점은 결정마다 받지 않고 회의록에 적는다(#318)
+  await expect(form.getByText('배운 점 (선택)')).toHaveCount(0)
   await form.getByRole('button', { name: '결정 기록' }).click()
 
   // The PR item leaves the list and shows as decided; a new evaluation round opened.
@@ -81,7 +82,8 @@ test('a v1 meeting: decide the PR item, leave the issue for next time, end with 
   await expect(toDecide).not.toContainText('E2E PR 안건')
   await expect.poll(async () => (await state(page, ids)).round).toEqual({ number: prRound + 1, reason: 'meeting_reevaluate' })
 
-  // End with notes, the issue undecided.
+  // End with notes, the issue undecided. The notes field says lessons go here (#318).
+  await expect(end.getByText('배운 점과 회의 내용은 회의록 한 곳에 적어요. 비워 두어도 회의는 끝나요.')).toBeVisible()
   await end.getByLabel('회의록 (선택)').fill('E2E 회의 메모')
   await end.getByRole('button', { name: '회의 종료' }).click()
   await expect(end).toBeHidden()

@@ -175,6 +175,17 @@ public class HelpRequestService {
                 .endByAgendaDecision(decidedAt);
     }
 
+    /**
+     * 전환된 안건을 거둔 것과 같은 트랜잭션에서 부른다(meeting 패키지, #313) → 전환 직전 상태({@code open} / {@code discussing})
+     * 그대로. 안건은 이미 같은 사무실 것으로 찾았고 올린 사람 · 상태 검사도 끝났다. 본문 · 코멘트 · "강사에게 요청"은 그대로 둔다.
+     */
+    @Transactional
+    public void returnFromAgenda(Long workspaceId, Long helpRequestId) {
+        helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, workspaceId)
+                .orElseThrow(() -> new IllegalStateException("안건의 도움 요청이 이 사무실에 없음"))
+                .returnFromAgenda();
+    }
+
     /** 도움이 된 코멘트 — 이 글의 코멘트이고, 강사 답변 · 요청자 본인 코멘트가 아니어야 한다. 아니면 {@code invalid}. */
     private HelpComment requireHelpfulComment(HelpRequest helpRequest, Long commentId) {
         HelpComment comment = helpCommentRepository.findByIdAndHelpRequestId(commentId, helpRequest.getId())
