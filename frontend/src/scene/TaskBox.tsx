@@ -593,8 +593,8 @@ async function linkToRequirement(requirementId: string, taskId: string) {
 
 /**
  * An agenda shape let go over the bridge trash can (#291 · FR-LRN-14): withdraw the agenda item with the same store action as
- * the meeting dialog's "안건 거두기" button. Only the agenda item changes (`withdrawn`) — the original issue · PR · help request
- * stays. The rules are checked again first (the item may have been decided meanwhile); a refusal or a failed request leaves the
+ * the meeting dialog's "안건 거두기" button. The agenda item becomes `withdrawn`; the original issue · PR stays, and a help request
+ * goes back to its state right before it was raised (#313 · #314 — the store re-reads the Snapshot). The rules are checked again first (the item may have been decided meanwhile); a refusal or a failed request leaves the
  * shape on the table (it has already flown back) and says why — for a failed request the store shows the server's reason.
  */
 async function withdrawByDrop(agendaItemId: string) {

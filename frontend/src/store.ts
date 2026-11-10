@@ -158,7 +158,7 @@ interface OfficeState {
   endOfficeMeeting: (meetingId: Id, notes: string | null) => Promise<MeetingDto | null>
   /** POST W/agenda-items — 이슈 · PR · 배운 점 · 기타 안건 올리기 */
   raiseAgendaItem: (request: AgendaItemCreateRequest, onError?: OnDataError) => Promise<AgendaItemDto | null>
-  /** POST W/agenda-items/{id}/withdraw — 올린 사람만, 결정 전만 */
+  /** POST W/agenda-items/{id}/withdraw — 올린 사람만, 결정 전만. 도움 요청 안건이면 되돌아온 도움 요청을 Snapshot으로 다시 읽은 뒤 끝난다(#314) */
   withdrawAgendaItem: (agendaItemId: Id) => Promise<AgendaItemDto | null>
   /** POST W/agenda-items/{id}/decision — 결론 · 배운 점 · PR 결정 · 후속 담당 */
   recordAgendaDecision: (agendaItemId: Id, request: DecisionRequest) => Promise<AgendaItemDto | null>
@@ -564,11 +564,17 @@ export const useOffice = create<OfficeState>((set, get) => {
         (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
         onError,
       ),
-    withdrawAgendaItem: (agendaItemId) =>
-      officeWrite(
+    withdrawAgendaItem: async (agendaItemId) => {
+      const gen = officeGen
+      const item = await officeWrite(
         (src, ws) => src.withdrawAgendaItem(ws, agendaItemId),
         (snap, item) => ({ ...snap, agendaItems: upsert(snap.agendaItems, item) }),
-      ),
+      )
+      // 도움 요청 안건이면 서버가 그 도움 요청을 전환 직전 상태로 되돌렸다(#313 · #314). 응답은 안건뿐이고 되돌린 상태는
+      // 화면이 계산하지 않으므로, changed 알림을 기다리지 않고 Snapshot을 바로 다시 읽어 카드 라벨 · 버튼을 서버 값으로 맞춘다.
+      if (item?.kind === 'help_request' && gen === officeGen) await loadOffice(gen)
+      return item
+    },
     recordAgendaDecision: (agendaItemId, request) =>
       officeWrite(
         (src, ws) => src.recordDecision(ws, agendaItemId, request),

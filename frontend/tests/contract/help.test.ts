@@ -177,6 +177,89 @@ describe('mock v1 — 도움 요청', () => {
     await rejectsCode(source.convertHelpRequestToAgenda(TEAM_WS, 'hr_2', { title: '  ' }), 'invalid', HELP_MSG.agendaTitle)
   })
 
+  it('안건 철회 (#313 · #314) — 기준 사례: discussing · 48시간 지남 · 강사 요청 안 함 → 올렸다 거두면 그대로 돌아오고, 다시 올리기를 되풀이할 수 있다', async () => {
+    const source = make()
+    const before = await source.getHelpRequest(TEAM_WS, 'hr_1')
+    assert.deepEqual([before.status, before.isAgendaCandidate, before.instructorRequested], ['discussing', true, false])
+
+    for (const round of [1, 2, 3]) {
+      const { changes, off } = listen(source)
+      const item = await source.convertHelpRequestToAgenda(TEAM_WS, 'hr_1', { title: `세션 원인 ${round}` })
+      await source.addHelpComment(TEAM_WS, 'hr_1', { content: `안건인 동안 덧붙임 ${round}` })
+      const withdrawn = await source.withdrawAgendaItem(TEAM_WS, item.id)
+      off()
+      assert.equal(withdrawn.status, 'withdrawn')
+      assert.deepEqual(changes.at(-1), { type: 'changed', resources: ['agenda_items', 'help_requests'] })
+
+      const after = await source.getHelpRequest(TEAM_WS, 'hr_1')
+      // 라벨 · 버튼을 정하는 서버 값: 「논의 중」 · 「안건 후보」, 「강사에게 요청」 · 「안건 후보 확정」 · 「해결로 닫기」
+      assert.deepEqual([after.status, after.isAgendaCandidate, after.instructorRequested, after.agendaItemId], ['discussing', true, false, null])
+      // 본문 · 코멘트(이전 코멘트 + 안건인 동안 단 코멘트)는 그대로
+      assert.equal(after.content, before.content)
+      assert.deepEqual(after.comments.map((c) => c.id).slice(0, before.comments.length), before.comments.map((c) => c.id))
+      assert.equal(after.comments.length, before.comments.length + round)
+      const snap = await source.load(TEAM_WS)
+      assert.equal(snap.helpRequests.find((h) => h.id === 'hr_1')!.status, 'discussing')
+      // 거둔 안건 행은 지우지 않고 withdrawn으로 남는다
+      assert.equal(snap.agendaItems.filter((a) => a.source?.type === 'help_request' && a.source.id === 'hr_1' && a.status === 'withdrawn').length, round)
+    }
+  })
+
+  it('안건 철회 (#313) — open에서 올렸으면 안건인 동안 팀원 코멘트가 달려도 open으로 돌아온다(코멘트로 다시 계산하지 않음, 저장값에 남음)', async () => {
+    const storage = createMemoryStorage()
+    const first = createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], now: () => NOW })
+    const created = await first.createHelpRequest(TEAM_WS, { content: '새로 막힌 것', fromStandupId: null })
+    const item = await first.convertHelpRequestToAgenda(TEAM_WS, created.id, { title: '새 안건' })
+    // 다른 팀원(m_2)이 안건인 동안 코멘트를 단 상태를 저장값에 넣는다 — mock 세션은 한 사람이라 저장값으로 만든다
+    const state = JSON.parse(storage.getItem(V1_STORAGE_KEY)!)
+    const team = state.workspaces.find((w: { snapshot: { workspace: { id: string } } }) => w.snapshot.workspace.id === TEAM_WS)
+    const thread = team.helpThreads.find((t: { helpRequestId: string }) => t.helpRequestId === created.id)
+    assert.equal(thread.statusBeforeAgenda, 'open')
+    thread.comments.push({ id: 'hc_mid', author: { userId: 'u_2', githubLogin: 'm2', displayName: '팀원 2', avatarUrl: null }, authorMemberId: 'm_2', isInstructorAnswer: false, content: '같이 봐요', createdAt: NOW.toISOString() })
+    team.snapshot.helpRequests.find((h: { id: string }) => h.id === created.id).commentCount = 1
+    storage.setItem(V1_STORAGE_KEY, JSON.stringify(state))
+
+    const source = createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], now: () => NOW })
+    await source.withdrawAgendaItem(TEAM_WS, item.id)
+    const after = await source.getHelpRequest(TEAM_WS, created.id)
+    assert.deepEqual([after.status, after.agendaItemId, after.comments.map((c) => c.id)], ['open', null, ['hc_mid']])
+  })
+
+  it('안건 철회 (#313) — 강사에게 요청은 끄지 않는다: 안건인 동안 켰으면 거둔 뒤에도 켜진 채', async () => {
+    const source = make()
+    const item = await source.convertHelpRequestToAgenda(TEAM_WS, 'hr_1', { title: '세션 원인' })
+    const on = await source.requestInstructorHelp(TEAM_WS, 'hr_1')
+    await source.withdrawAgendaItem(TEAM_WS, item.id)
+    const after = await source.getHelpRequest(TEAM_WS, 'hr_1')
+    assert.deepEqual([after.status, after.instructorRequested, after.instructorRequestedAt], ['discussing', true, on.instructorRequestedAt])
+  })
+
+  it('안건 철회 (#313) — 전환 직전 상태가 저장되지 않은 예전 저장값은 서버 V6와 같은 규칙으로 채운다(전환 전 팀원 코멘트 → discussing)', async () => {
+    const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString()
+    const storage = createMemoryStorage()
+    const seed = createSeed(NOW, 'github')
+    const team = seed.workspaces.find((w) => w.snapshot.workspace.id === TEAM_WS)!
+    const agenda = (id: string, helpRequestId: string, raisedAt: string) => ({
+      id, kind: 'help_request' as const, status: 'confirmed' as const, title: '예전 안건', background: null, tried: null, unresolvedReason: null,
+      source: { type: 'help_request' as const, id: helpRequestId }, evaluationRoundId: null, raisedByMemberId: ME, raisedAt,
+      decision: null, feedbackRequested: false, feedbackRequestedAt: null, instructorFeedbacks: [],
+    })
+    // hr_1: 팀원 코멘트(49시간 전)가 전환(48시간 전)보다 먼저 → discussing
+    Object.assign(team.snapshot.helpRequests.find((h) => h.id === 'hr_1')!, { status: 'on_agenda', agendaItemId: 'ag_old1' })
+    // hr_old: 팀원 코멘트(1시간 전)가 전환(2시간 전)보다 나중 → open
+    const mine = team.snapshot.helpRequests.find((h) => h.id === 'hr_1')!
+    team.snapshot.helpRequests.push({ ...mine, id: 'hr_old', commentCount: 1, agendaItemId: 'ag_old2' })
+    team.helpThreads!.push({ helpRequestId: 'hr_old', comments: [{ ...team.helpThreads!.find((t) => t.helpRequestId === 'hr_1')!.comments[0], id: 'hc_late', createdAt: hoursAgo(1) }], helpfulCommentId: null, learning: null })
+    team.snapshot.agendaItems.push(agenda('ag_old1', 'hr_1', hoursAgo(48)), agenda('ag_old2', 'hr_old', hoursAgo(2)))
+    storage.setItem(V1_STORAGE_KEY, JSON.stringify(seed))
+    const source = createV1MockDataSource({ storage, session: 'github', latencyMs: [0, 0], now: () => NOW })
+
+    await source.withdrawAgendaItem(TEAM_WS, 'ag_old1')
+    await source.withdrawAgendaItem(TEAM_WS, 'ag_old2')
+    const snap = await source.load(TEAM_WS)
+    assert.deepEqual(['hr_1', 'hr_old'].map((id) => snap.helpRequests.find((h) => h.id === id)!.status), ['discussing', 'open'])
+  })
+
   it('강사에게 요청 — 요청자만, 켜면 시각이 남고 다시 눌러도 그대로(처음 시각 유지)', async () => {
     const source = make()
     const on = await source.requestInstructorHelp(TEAM_WS, 'hr_1')
