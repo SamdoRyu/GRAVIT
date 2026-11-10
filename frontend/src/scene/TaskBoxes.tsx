@@ -3,11 +3,18 @@
 import { useMemo, useRef, type ReactElement } from 'react'
 import { useOffice, type OfficeSelection } from '../store'
 import { withdrawRefusal } from './cargoDrop'
+import { CargoCapsules } from './CargoCapsules'
 import { MergeBurst } from './MergeBurst'
 import { TaskBox, type AgendaSource } from './TaskBox'
 import { useToday } from './signals'
 import { computeSlots, type Slot } from './slots'
 import { useStationScene } from './useStationScene'
+
+/**
+ * 사무실마다 이미 본 상자 키 — 처음 연 사무실의 상자는 그냥 거기 있고, 그 뒤에 새로 생긴 상자만 등장 연출(새 이슈는 화물 캡슐 #304)을 한다.
+ * 다른 사무실로 갔다가 돌아와도 이미 본 상자는 다시 연출하지 않는다(새로 고치면 처음부터).
+ */
+const seenByOffice = new Map<string, Set<string>>()
 
 export function TaskBoxes() {
   const scene = useStationScene()
@@ -17,7 +24,7 @@ export function TaskBoxes() {
   const doneAssign = useRef(new Map<string, number>())
   const prevSlots = useRef(new Map<string, Slot>())
   const popped = useRef(new Map<string, boolean>())
-  const firstBatch = useRef(true)
+  const poppedOffice = useRef<string | null>(null)
 
   const slots = useMemo(() => {
     if (!scene || !snapshot) return new Map<string, Slot>()
@@ -53,11 +60,21 @@ export function TaskBoxes() {
   }, [snapshot])
 
   if (!scene) return null
-  // Boxes present in the first loaded snapshot are simply there; later ones pop in.
-  for (const key of slots.keys()) {
-    if (!popped.current.has(key)) popped.current.set(key, !firstBatch.current)
+  // 처음 본 사무실의 상자는 그냥 거기 있고, 이미 본 적 없는 상자만 등장 연출을 한다(사무실을 옮겨도 다시 하지 않는다)
+  const officeId = snapshot?.workspace.id ?? null
+  if (officeId !== poppedOffice.current) {
+    poppedOffice.current = officeId
+    popped.current.clear()
   }
-  if (slots.size > 0) firstBatch.current = false
+  if (officeId !== null && slots.size > 0) {
+    let seen = seenByOffice.get(officeId)
+    const firstLook = seen === undefined
+    if (!seen) seenByOffice.set(officeId, (seen = new Set()))
+    for (const key of slots.keys()) {
+      if (!popped.current.has(key)) popped.current.set(key, !firstLook && !seen.has(key))
+      seen.add(key)
+    }
+  }
 
   const items: ReactElement[] = []
   for (const e of scene.entities) {
@@ -84,6 +101,8 @@ export function TaskBoxes() {
     <>
       {items}
       <MergeBurst />
+      {/* 새 이슈 화물 캡슐(#304) — 보고 있는 중에 들어온 이슈 상자를 싣고 온다 */}
+      <CargoCapsules />
     </>
   )
 }
