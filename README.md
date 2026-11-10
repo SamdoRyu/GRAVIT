@@ -1,6 +1,6 @@
 # GRAVIT
 
-GitHub 저장소의 이슈 · PR · 회의 · 도움 요청을 3D 사무실 공간으로 보여 주는 부트캠프 팀 프로젝트 학습 서비스(기획명 GitVillage)의 개발 저장소입니다.
+GitHub 저장소의 이슈 · PR · 회의 · 도움 요청을 3D 사무실 공간으로 보여 주는 부트캠프 팀 프로젝트 학습 서비스 GRAVIT(이전 기획명 GitVillage)의 개발 저장소입니다.
 프론트엔드 · 백엔드 · 공통 계약 예시 · 로컬 DB 설정을 이 저장소 하나(모노레포)에서 관리합니다.
 
 > 지금은 **실행 가능한 개발 뼈대** 단계입니다. 화면은 기존 3D 데모를 브라우저 mock 데이터로 띄우고, Spring Boot는 DB 연결까지만 되어 있습니다. 자세한 건 아래 「현재 상태」를 보세요.
@@ -27,7 +27,7 @@ GRAVIT/
 ├── backend/             Spring Boot (com.samdoryu.backend)
 │   └── src/main/resources/
 │       ├── application.yaml
-│       └── db/migration/   Flyway 마이그레이션 (V1__xxx.sql 형식, 아직 없음)
+│       └── db/migration/   Flyway 마이그레이션 (V1 ~ V7)
 ├── contract/examples/   API 계약 예시 JSON (CONTRACTS_API.md에서 옮김)
 ├── docs/                공통 계약 문서 (CONTRACTS.md · CONTRACTS_API.md) + 기준 위치 안내(docs/README.md)
 ├── .github/             이슈 · PR 템플릿, CODEOWNERS, labels.yml, CI(workflows/ci.yml)
@@ -158,7 +158,7 @@ macOS · Linux에서는 `.\gradlew.bat` 대신 `./gradlew`를 씁니다.
 
 ## 공통 계약
 
-- **기준 계약 커밋: `d6b3160788412d004173f0d46e49dd293972e37e`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
+- **기준 계약 커밋: `937fcb7259a6fe433d080a96f846023d61a666f1`** — GRAVIT `docs/CONTRACTS.md` · `docs/CONTRACTS_API.md`를 마지막으로 바꾼 커밋. 두 파일이 바뀌면 그 커밋 SHA가 새 기준입니다.
 - 개발 중에 읽는 곳: [`docs/CONTRACTS.md`](docs/CONTRACTS.md)(도메인 · ID · 에러 · 보안 · 계약 테스트) · [`docs/CONTRACTS_API.md`](docs/CONTRACTS_API.md)(엔드포인트 · DTO)
   - 기획 저장소 커밋 `796fc25`의 두 파일을 **2026-11-03에 그대로 옮겼습니다**(본문 변경 없음, 맨 위에 출처 안내만 추가).
   - 본문에 이름만 나오는 기획 문서(03 · 05 · 06 · ARCHITECTURE.md · 코드 컨벤션 (BE) 등)의 고정 링크는 [`docs/README.md`](docs/README.md)에 있습니다.
@@ -298,7 +298,7 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 
 - 모노레포 구조(`frontend/` · `backend/` · `contract/examples/` · `compose.yaml` · `.env.example`), Vite `/api` 프록시 → Spring `:8080`
 - 백엔드 공통 기반(#74): Spring Security 기본 거부 · 서버 세션 · CSRF(`XSRF-TOKEN` → `X-XSRF-TOKEN`) · 401 JSON · 쓰기 Origin 검사, 공통 에러 응답 · 전역 예외 처리, 내부 ID 문자열 ↔ `Long` 변환, 인가 서비스(로그인 → 사무실 접근 → 역할)
-- 스키마: Flyway `V1` ~ `V4`(기본 · 기능 · 도움 요청 테이블, 작업 포드 8개), 패키지별 Entity · Repository
+- 스키마: Flyway `V1` ~ `V7`(기본 · 기능 · 도움 요청 테이블, 작업 포드 8개, PR 커밋, 안건 철회 뒤 도움 요청 복구 · 거두지 않은 안건 하나, 도움 요청 개인 숨김 · 영구 삭제), 패키지별 Entity · Repository
 - 백엔드 v1 API(`docs/CONTRACTS_API.md`):
   - 로그인: GitHub 로그인(GitHub App OAuth), 보안 심사용 ID/PW 로그인(기본 꺼짐)
   - 사무실: 레포 고르기 · 사무실 열기, Snapshot, SSE 알림, 팀 설정
