@@ -7,7 +7,7 @@
 
 # API 계약 — 오피스 v1
 
-> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-09
+> 문서: CONTRACTS_API.md · 상태: **v1 확정 (2026-11-03)** · 마지막 갱신: 2026-11-10
 > [CONTRACTS.md](CONTRACTS.md)의 상세편이다. 공통 규칙(ID · 시각 · 상태 코드 · 페이지 · 에러 · 검사 순서 · 익명성 · Snapshot 경계)은 CONTRACTS.md에 있고 여기서 다시 적지 않는다. 엔드포인트 · DTO는 **이 문서 한 곳**이 기준이다. 바꿀 때는 CONTRACTS.md 「9. 계약 변경 절차」(문서 담당자가 고치고 커밋을 공유).
 > 근거: 2026-11-03 결정(Q1~Q6), 03 · 05 · 06 · 07. 이 문서는 새 기능 · 새 정책을 만들지 않는다 — 정책에서 바로 나오지 않는 인터페이스 선택에는 `[구현 기본값]`을 붙였다.
 
@@ -64,6 +64,9 @@
 | 11 | `POST W/help-requests/{helpRequestId}/close` | 팀원 — 요청자 | `closeHelpRequest` | FR-LRN-17 |
 | 11 | `POST W/help-requests/{helpRequestId}/to-agenda` | 팀원 — 요청자 | `convertHelpRequestToAgenda` | FR-LRN-18 · 19 |
 | 11 | `POST W/help-requests/{helpRequestId}/instructor-request` | 팀원 — 요청자 | `requestInstructorHelp` | FR-LRN-21 |
+| 11 | `PUT` · `DELETE W/help-requests/{helpRequestId}/hidden` | 팀원 · R4 — 그 요청을 볼 수 있는 사람 | `hideHelpRequest` · `unhideHelpRequest` | FR-LRN-15 |
+| 11 | `GET W/help-requests/hidden` | 접근 — 본인 것만 | `listHiddenHelpRequests` | FR-LRN-15 |
+| 11 | `DELETE W/help-requests/{helpRequestId}` | 팀원 — 요청자 | `deleteHelpRequest` | FR-LRN-15 |
 | 12 | `GET W/standups?date=` | 접근 | `listStandups` | FR-MTG-02 |
 | 12 | `GET W/standups/{date}/mine/prefill` | 팀원 | `getStandupPrefill` | FR-MTG-01 |
 | 12 | `PUT W/standups/{date}/mine` | 팀원 | `saveMyStandup` | FR-MTG-02 |
@@ -249,7 +252,7 @@ interface WorkspaceSnapshot {
   requirementLinks: RequirementLinkDto[];
   agendaItems: AgendaItemDto[];       // 거둔 것 포함 전부. raisedAt 오름차순
   meetings: MeetingDto[];             // 진행 중 + 최근 끝난 것 20개. startedAt 오름차순
-  helpRequests: HelpRequestSummary[]; // 전부. createdAt 오름차순
+  helpRequests: HelpRequestSummary[]; // 전부 — 보는 사람이 숨긴 요청(「11」 나에게서만 삭제)만 뺀다. createdAt 오름차순
   activityNotes: ActivityNote[];      // 확인된 활동 기록 (FR-ACT-03 — Should)
   flow: FlowSummary;
   generatedAt: Instant;
@@ -418,6 +421,7 @@ type SnapshotResource = 'workspace' | 'settings' | 'members' | 'tasks' | 'submis
 ```
 
 - 이벤트에는 자원 종류만 담는다 — ID · 내용 · 개인 지표 없음. 화면은 `change`를 받으면 Snapshot을 다시 읽는다(짧게 모아서). 개인 API 데이터는 이벤트가 없다 — 화면을 열 때 읽는다.
+- 도움 요청 숨김 · 숨김 해제(「11」)는 그 사람에게만 해당하므로 이벤트를 보내지 않는다 — 요청한 화면이 응답 뒤 Snapshot을 다시 읽는다 (2026-11-10 — #315).
 - 커밋이 끝난 뒤에만 보낸다. 30초마다 keep-alive 주석(`: ping`) [구현 기본값]. 다시 연결하면 Snapshot을 다시 읽는다(놓친 이벤트 재생 없음) [구현 기본값].
 
 ## 7. 팀 설정 · 강사 지정
@@ -537,7 +541,7 @@ interface AgendaItemDto {
   background: string | null;
   tried: string | null;
   unresolvedReason: string | null;
-  source: { type: 'task' | 'submission' | 'help_request'; id: Id } | null;
+  source: { type: 'task' | 'submission' | 'help_request'; id: Id } | null; // learning · other는 null. help_request 종류인데 null이면 원본 도움 요청이 영구 삭제됨(「11」) — title은 "삭제된 도움 요청"
   evaluationRoundId: Id | null;   // PR 안건 — 붙는 추천·비추천 이유는 이 회차의 것 (「9」 rounds로 읽음)
   raisedByMemberId: Id;
   raisedAt: Instant;              // 24시간 미처리 강조는 화면 계산 (FR-LRN-13 — Should)
@@ -578,12 +582,16 @@ interface MeetingDto {
 
 | 메서드 · 경로 | 요청 | 성공 | 역할 · 조건 | 실패 |
 | --- | --- | --- | --- | --- |
-| `GET W/help-requests/{helpRequestId}` | — | `200 HelpRequestDetail` | 접근 | — |
+| `GET W/help-requests/{helpRequestId}` | — | `200 HelpRequestDetail`. 내가 숨긴 요청도 읽힌다(숨김 목록에서 열어 해제) | 접근 | 없거나 다른 사무실 것 · 영구 삭제된 요청 `404` |
 | `POST W/help-requests` | `{ content: string; fromStandupId: Id \| null }` (1~2000자) | `201 HelpRequestSummary`(`open`) | 팀원. `fromStandupId`는 본인의 스탠드업 | 스탠드업이 본인 것이 아님 `403`, 강사 `403` |
 | `POST W/help-requests/{helpRequestId}/comments` | `{ content: string }` (1~2000자) | `201 HelpCommentDto`. 요청자가 아닌 팀원의 첫 코멘트면 `open` → `discussing`. 강사 답변(`isInstructorAnswer: true`)은 상태를 바꾸지 않는다 | 팀원, 또는 R4 — "강사에게 요청"이 켜진 글 | 요청 안 된 글에 강사 `403`, `resolved` · `ended` `409` |
 | `POST W/help-requests/{helpRequestId}/close` | `{ helpfulCommentId: Id \| null; learning: string }` (배운 점 1~200자) | `200 HelpRequestDetail`(`resolved`) | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 도움이 된 코멘트가 이 글의 것이 아님 · 강사 답변 · 요청자 본인 코멘트 `400`, 그 밖의 상태 `409` |
 | `POST W/help-requests/{helpRequestId}/to-agenda` | `{ title: string }` (1~100자) | `201 AgendaItemDto`(`help_request` 종류, `confirmed`). 도움 요청은 `on_agenda`. 직접 전환과 48시간 후보 확정이 같은 API다 | 팀원 — 요청자. 상태 `open` · `discussing` | 요청자가 아님 `403`, 그 밖의 상태 `409` |
 | `POST W/help-requests/{helpRequestId}/instructor-request` | — | `200 HelpRequestSummary`(`instructorRequested: true`). 이미 켜져 있으면 그대로(처음 시각 유지, 변경 알림 없음) | 팀원 — 요청자. 상태 `open` · `discussing` · `on_agenda` | 요청자가 아님 `403`, `resolved` · `ended` `409`(이미 켜져 있어도), 새로 켤 때 사무실에 지정된 강사가 없음 `409` — 시연 사무실은 심사용 강사 계정이 강사라 이 검사를 하지 않는다. 검사 순서는 대상 → 요청자 → 상태 → (이미 켜져 있으면 그대로) → 지정된 강사 (2026-11-09 결정) |
+| `PUT W/help-requests/{helpRequestId}/hidden` | — | `204`. **나에게서만 삭제** — 이 사용자에게만 숨긴다. 이미 숨겼으면 그대로 `204` (2026-11-10 — #315) | 팀원 · R4 — 그 요청을 볼 수 있는 사람. 요청자 본인도 된다. 상태와 상관없음 | 없거나 다른 사무실 것 · 영구 삭제된 요청 `404` |
+| `DELETE W/help-requests/{helpRequestId}/hidden` | — | `204`. 숨김 해제 — 다시 보인다. 숨기지 않았으면 그대로 `204` | 같음 | 같음 |
+| `GET W/help-requests/hidden` | — | `200 HelpRequestSummary[]` — 이 사무실에서 내가 숨긴 요청만, 숨긴 시각 내림차순 | 접근 — 본인 것만(다른 사람의 숨김 목록을 읽는 길은 없다) | — |
+| `DELETE W/help-requests/{helpRequestId}` | — | `204`. **모두에게서 영구 삭제** — 아래 「도움 요청 삭제」 ②. 변경 알림 `help_requests`, 안건이 바뀌었으면 `agenda_items`도 | 팀원 — 요청자. 상태와 상관없음 | 없거나 다른 사무실 것 · 이미 지운 요청 `404`, 요청자가 아님(다른 팀원 · 강사) `403 forbidden_role`. 검사 순서는 대상 → 요청자 |
 
 ```ts
 type HelpRequestStatus = 'open' | 'discussing' | 'resolved' | 'on_agenda' | 'ended';
@@ -617,6 +625,28 @@ interface HelpCommentDto {
 ```
 
 - 회의에서 결정을 기록하면(「10」) `on_agenda` → `ended`. 이슈로 만들기로 한 경우도 같다 — 이슈는 GitHub에서 만든다(FR-LRN-20).
+- **도움 요청 삭제 — 두 방식** (2026-11-10 팀 확정 — #315 · #316): 삭제할 때마다 사용자가 범위를 고른다. 요청자는 ① · ② 둘 다, 그 밖의 사람(다른 팀원 · 강사)은 ①만 고를 수 있다. 서버는 고른 범위(엔드포인트)대로 권한을 검사한다. 두 방식은 함께 있다.
+  - **① 나에게서만 삭제(숨김)**
+    - 숨김은 사용자(AppUser)마다 서버에 저장한다(CONTRACTS.md 「2」 `HelpRequestHidden`). 도움 요청 원본과 코멘트는 그대로다.
+    - 숨긴 사람의 응답에서만 뺀다: Snapshot `helpRequests`(「5」), 강사 요청함(「16」). 게시판 배지는 Snapshot에서 세므로 따라 줄어든다(CONTRACTS.md 「8」). 서버가 조회 · 응답 단계에서 빼므로 새로고침 · 다시 접속해도 같다.
+    - 다른 사람의 응답 · 변경 알림은 바뀌지 않는다(「6」 — 숨김 · 해제는 이벤트 없음).
+    - 숨겨도 그 요청의 상태 변화(코멘트 · 전환 · 닫기)는 그대로 일어난다. 그 요청에서 만든 안건은 별도 기록이라 회의실에 그대로 보인다.
+    - 강사도 숨길 수 있다 — 자기 화면 설정이라 FR-AUTH-08의 쓰기 제한 대상이 아니며, 「0」 역할 열에 R4가 있어 강사 쓰기 허용 목록에 더한다.
+  - **② 모두에게서 영구 삭제**
+    - 요청자만, 상태와 상관없이(`open` · `discussing` · `on_agenda` · `resolved` · `ended`) 지울 수 있다.
+    - 같은 트랜잭션에서 아래를 처리한다(한 단계라도 실패하면 전부 롤백).
+      1. **실제로 지운다**: 도움 요청(본문 · 닫을 때 배운 점 · 도움이 된 코멘트 연결), 그 요청의 코멘트 전부(다른 사람 코멘트 · 강사 답변 포함), 모든 사용자의 숨김 행. `deleted` 같은 논리 삭제 칸으로 대신하지 않는다.
+      2. 이 요청에서 만든 **미논의 안건**(`confirmed`)은 `withdrawn`으로 바꾸고 원본 연결을 끊는다. 회의실 탁자에서 빠진다.
+      3. **결정을 기록한 안건**(`discussed` — 결정 · 강사 피드백 포함), **거둔 안건**(`withdrawn`), **회의**는 지우지 않는다. 원본 연결만 끊는다.
+      4. 남기는 안건의 `title`은 고정 문구 `"삭제된 도움 요청"`으로 바꾼다 — 화면이 전환할 때 본문 첫 줄로 제목을 미리 채우므로 원문이 복사돼 있을 수 있다. 도움 요청 안건의 나머지 글 칸(`background` · `tried` · `unresolvedReason`)은 비어 있다.
+    - 원본이 지워진 안건은 `kind: 'help_request'`, `source: null`이다(「10」).
+    - DB 외래키의 `ON DELETE CASCADE`나 JPA `cascade` · `orphanRemoval`로 처리하지 않는다. 서비스가 위 순서대로 지워 의도하지 않은 연쇄 삭제를 막는다.
+    - 지운 뒤 그 요청을 가리키는 모든 요청(상세 · 다시 지우기 · 숨김 · 코멘트 등)은 `404`다. 복원하는 API는 없다.
+    - 화면은 지우기 전에 경고(다른 사람 코멘트 · 강사 답변 개수, 복원 불가, 연결 안건 처리)를 보이고 한 번 더 확인받는다(#316). 서버는 확인 여부를 따로 받지 않는다 — 요청 자체가 확인이다.
+  - **삭제 범위의 한계**
+    - 사람이 결정 결론 · 배운 점 · 회의록 등에 직접 옮겨 적은 내용은 찾아 지우지 않는다. 독립 기록으로 보존한다.
+    - DB 밖의 데이터는 삭제 범위가 아니다: 이미 내보낸 회고 마크다운, DB 백업 · binlog, 서버 로그, 브라우저에 남은 화면 · localStorage.
+  - 회의실 쓰레기통의 안건 철회(「10」 `withdraw`)는 삭제가 아니다. 철회해도 도움 요청은 지워지지 않는다.
 
 ## 12. 스탠드업
 
@@ -778,6 +808,7 @@ interface FollowUpQuestionDto { id: Id; instructor: UserRef; body: string; creat
 - 역할: `MeResponse.isInstructor`가 `true`인 사람. 아니면 `403 forbidden_role`.
 - 범위: 요청한 순간 **지금 지정된 사무실**의 요청만(요청마다 DB 확인). 해제된 사무실 것은 나오지 않는다. 심사용 강사 계정은 시연 사무실 것만.
 - 답 없이 `resolved` · `ended`가 된 도움 요청은 나오지 않는다 — 강사가 더 답할 수 없다(「11」 코멘트 `409`). 답이 하나라도 있었으면 `answered=true` · 전부에 그대로 남는다(전부 = `true` ∪ `false`). 원본의 "강사에게 요청" 기록은 지우지 않는다 (2026-11-09 결정)
+- 그 강사가 숨긴 도움 요청(「11」 나에게서만 삭제)은 그 강사의 요청함에서만 빠진다. 요청자가 영구 삭제한 도움 요청은 모든 강사의 요청함에서 사라진다 — 강사 답변도 함께 지워진다 (2026-11-10 — #315)
 
 ```ts
 interface InboxItem {
