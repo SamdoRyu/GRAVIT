@@ -286,6 +286,21 @@ public class AgendaItemService {
         return AgendaItemDto.of(item, List.of());
     }
 
+    /**
+     * 원본 도움 요청 영구 삭제(#315)와 같은 트랜잭션에서 help 패키지가 부른다 — 이 도움 요청에서 만든 안건(거둔 것 포함)을 지우지
+     * 않고 원본 연결만 끊는다. 결정 전({@code confirmed})이면 거두고, 제목은 고정 문구로 바꾼다. 결정 기록 · 강사 피드백 · 회의는
+     * 그대로다. 변경 알림은 부르는 쪽이 도움 요청과 함께 보낸다.
+     *
+     * @return 바뀐 안건이 있었는지 — 있을 때만 {@code agenda_items} 변경 알림(CONTRACTS_API 「11」)
+     */
+    @Transactional
+    public boolean detachDeletedHelpRequest(Long workspaceId, Long helpRequestId) {
+        List<AgendaItem> items = agendaItemRepository.findByWorkspaceIdAndSourceHelpRequestId(workspaceId,
+                helpRequestId);
+        items.forEach(AgendaItem::detachDeletedHelpRequest);
+        return !items.isEmpty();
+    }
+
     /** 이슈 · PR 안건의 원본 ID — 없으면 {@code invalid}(종류와 원본이 맞지 않음). */
     private static Long requireSourceId(AgendaItemCreateRequest request) {
         if (request.sourceId() == null) {

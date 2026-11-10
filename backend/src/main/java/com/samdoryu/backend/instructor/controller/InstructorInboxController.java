@@ -27,6 +27,7 @@ public class InstructorInboxController {
     /** {@code requestedAt} 내림차순. {@code answered}를 빼면 전부. */
     @GetMapping("/api/instructor/inbox")
     public List<InboxItem> inbox(@RequestParam(required = false) Boolean answered) {
-        return instructorInboxService.inbox(authorizationService.requireInstructorInboxWorkspaceIds(), answered);
+        List<Long> workspaceIds = authorizationService.requireInstructorInboxWorkspaceIds();
+        return instructorInboxService.inbox(workspaceIds, authorizationService.currentPrincipal().userId(), answered);
     }
 }

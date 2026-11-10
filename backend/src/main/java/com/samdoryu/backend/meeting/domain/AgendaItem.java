@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
 /**
  * 회의 안건과 그 결정 기록(CONTRACTS.md 「2」). 행을 지우지 않는다 — 거두면 {@link AgendaStatus#WITHDRAWN}.
  * 종류와 원본은 짝이 맞아야 한다(이슈 → Task, PR → Submission, 도움 요청 → 도움 요청 ID, 배운 점 · 기타 → 없음) —
- * 생성 메서드와 DB CHECK 제약이 함께 막는다. 같은 사무실 것인지는 Service가 확인한다(다르면 {@code not_found}).
+ * 생성 메서드와 DB CHECK 제약이 함께 막는다. 도움 요청 안건만 원본이 영구 삭제되면 원본 없이 남는다(#315 · V7). 같은 사무실 것인지는 Service가 확인한다(다르면 {@code not_found}).
  * <p>
  * 다른 패키지의 대상 일부는 ID로 둔다: 평가 회차(외래키는 V2), 도움 요청(#47 — Entity와 외래키는 그쪽 마이그레이션).
  */
@@ -34,6 +34,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AgendaItem {
+
+    /** 원본 도움 요청이 영구 삭제된 안건의 제목(#315) — 원문이 남지 않게. */
+    public static final String DELETED_HELP_REQUEST_TITLE = "삭제된 도움 요청";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -192,6 +195,22 @@ public class AgendaItem {
             throw new IllegalStateException("confirmed 안건만 거둔다");
         }
         this.status = AgendaStatus.WITHDRAWN;
+    }
+
+    /**
+     * 원본 도움 요청이 영구 삭제됨(#315) — 행은 지우지 않고 원본 연결만 끊는다. 결정 전({@code confirmed})이면 거둬 회의실에서
+     * 빼고, 결정 기록 · 강사 피드백 · 회의는 그대로 둔다. 도움 요청 본문 첫 줄이 복사됐을 수 있는 제목은 고정 문구로 바꾼다.
+     * 사람이 직접 적은 결론 · 배운 점은 그대로다.
+     */
+    public void detachDeletedHelpRequest() {
+        if (kind != AgendaKind.HELP_REQUEST) {
+            throw new IllegalStateException("도움 요청 안건만 원본 도움 요청 삭제로 연결을 끊는다");
+        }
+        if (isConfirmed()) {
+            this.status = AgendaStatus.WITHDRAWN;
+        }
+        this.sourceHelpRequestId = null;
+        this.title = DELETED_HELP_REQUEST_TITLE;
     }
 
     /**

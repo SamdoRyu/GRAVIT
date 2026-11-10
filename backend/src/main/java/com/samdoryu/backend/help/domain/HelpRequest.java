@@ -22,7 +22,8 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Formula;
 
 /**
- * 도움 요청(CONTRACTS.md 「2」 · FR-LRN-15). 행을 지우지 않는다.
+ * 도움 요청(CONTRACTS.md 「2」 · FR-LRN-15). 요청자가 "모두에게서 영구 삭제"하면 코멘트 · 숨김 행과 함께 행을 실제로 지운다
+ * (#315 — 논리 삭제 칸 없음). 그 밖에는 지우지 않는다. "나에게서만 삭제"는 {@link HelpRequestHidden}이다.
  * 전환된 안건 · 코멘트 수는 저장하지 않고 읽을 때 계산한다 — 안건 쪽 {@code source_help_request_id}가 원본이다.
  * 안건 전환은 그 기능 Issue(#51)에서 더한다.
  */
@@ -154,5 +155,13 @@ public class HelpRequest {
         this.status = HelpRequestStatus.ENDED;
         this.statusBeforeAgenda = null;
         this.closedAt = Objects.requireNonNull(decidedAt);
+    }
+
+    /**
+     * 영구 삭제(#315) 직전 — 도움이 된 코멘트 연결을 비운다. 코멘트도 함께 지우는데 이 행과 코멘트가 서로를 가리키므로
+     * 코멘트보다 먼저 비워야 한다. 삭제 말고는 부르지 않는다.
+     */
+    public void clearHelpfulCommentForDeletion() {
+        this.helpfulComment = null;
     }
 }

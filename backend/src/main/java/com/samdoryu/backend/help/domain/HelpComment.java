@@ -18,7 +18,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 도움 요청 코멘트(CONTRACTS.md 「2」 · FR-LRN-16 · 21). HelpRequest 1–N. 지우지 않는다. 익명이 아니다.
+ * 도움 요청 코멘트(CONTRACTS.md 「2」 · FR-LRN-16 · 21). HelpRequest 1–N. 하나씩 지우는 API는 없고, 요청자가 도움 요청을
+ * 영구 삭제할 때만 그 요청의 코멘트 전부(강사 답변 포함)를 함께 지운다(#315). 익명이 아니다.
  * 팀원이 아닌 작성자(강사)의 코멘트는 강사 답변이다 — 생성자와 DB CHECK가 함께 지킨다.
  * 작성 API({@code POST W/help-requests/{id}/comments})는 #48에서 더한다.
  */

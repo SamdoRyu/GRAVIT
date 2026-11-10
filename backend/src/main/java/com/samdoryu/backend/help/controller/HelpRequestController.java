@@ -10,14 +10,19 @@ import com.samdoryu.backend.help.dto.HelpRequestCreateRequest;
 import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
 import com.samdoryu.backend.help.dto.HelpRequestToAgendaRequest;
+import com.samdoryu.backend.help.service.HelpRequestDeletionService;
 import com.samdoryu.backend.help.service.HelpRequestService;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
 import jakarta.validation.Valid;
+import java.time.Instant;
+import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -30,12 +35,14 @@ public class HelpRequestController {
 
     private final AuthorizationService authorizationService;
     private final HelpRequestService helpRequestService;
+    private final HelpRequestDeletionService helpRequestDeletionService;
     private final AgendaItemService agendaItemService;
 
     public HelpRequestController(AuthorizationService authorizationService, HelpRequestService helpRequestService,
-            AgendaItemService agendaItemService) {
+            HelpRequestDeletionService helpRequestDeletionService, AgendaItemService agendaItemService) {
         this.authorizationService = authorizationService;
         this.helpRequestService = helpRequestService;
+        this.helpRequestDeletionService = helpRequestDeletionService;
         this.agendaItemService = agendaItemService;
     }
 
@@ -90,5 +97,39 @@ public class HelpRequestController {
             @Valid @RequestBody HelpRequestToAgendaRequest request) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return agendaItemService.createFromHelpRequest(access, Ids.fromPath(helpRequestId), request.title());
+    }
+
+    /** 접근 — 내가 숨긴 이 사무실의 도움 요청(#315 ① 나에게서만 삭제), createdAt 오름차순. */
+    @GetMapping("/hidden")
+    public List<HelpRequestSummary> listHidden(@PathVariable String workspaceId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        return helpRequestService.listHidden(access, Instant.now());
+    }
+
+    /** 접근 — 팀원 · 지정된 강사 누구나 자기 화면에서만 숨긴다(#315 ①). 이미 숨겼으면 그대로. */
+    @PutMapping("/{helpRequestId}/hidden")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void hide(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        helpRequestService.hide(access, Ids.fromPath(helpRequestId));
+    }
+
+    /** 접근 — 숨김 해제(#315 ①). 숨기지 않았으면 그대로. */
+    @DeleteMapping("/{helpRequestId}/hidden")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unhide(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        helpRequestService.unhide(access, Ids.fromPath(helpRequestId));
+    }
+
+    /**
+     * 팀원 — 요청자만(그 밖의 팀원 · 강사는 {@code forbidden_role}). 모두에게서 영구 삭제(#315 ②) — 상태와 상관없이 지우고,
+     * 그 요청의 안건은 남긴 채 원본 연결만 끊는다.
+     */
+    @DeleteMapping("/{helpRequestId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable String workspaceId, @PathVariable String helpRequestId) {
+        WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
+        helpRequestDeletionService.delete(access, Ids.fromPath(helpRequestId));
     }
 }
