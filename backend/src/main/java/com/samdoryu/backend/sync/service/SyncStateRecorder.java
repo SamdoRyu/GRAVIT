@@ -29,9 +29,16 @@ class SyncStateRecorder {
         this.workspaceService = workspaceService;
     }
 
+    /**
+     * 있으면 그대로(평소 경로 — 잠금 없음). 없으면 중복에도 실패하지 않는 INSERT 뒤 잠금 읽기로 최신 행을 읽는다 — 첫 요청 두 개가
+     * 동시에 와도 UNIQUE 충돌로 트랜잭션이 깨지지 않는다(전에는 한쪽이 503). 같은 트랜잭션 · 같은 커넥션에서 끝난다.
+     */
     private SyncState stateOf(Long workspaceId) {
-        return syncStateRepository.findByWorkspaceId(workspaceId)
-                .orElseGet(() -> syncStateRepository.save(new SyncState(workspaceService.requireWorkspace(workspaceId))));
+        return syncStateRepository.findByWorkspaceId(workspaceId).orElseGet(() -> {
+            workspaceService.requireWorkspace(workspaceId); // 없는 사무실이면 not_found(전과 같음)
+            syncStateRepository.insertIfAbsent(workspaceId);
+            return syncStateRepository.findLatestByWorkspaceId(workspaceId).orElseThrow();
+        });
     }
 
     /** 사무실을 열 때 만들지만, 없으면 여기서 만든다. 없는 사무실이면 {@code not_found}. */
