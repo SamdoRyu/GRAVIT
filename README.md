@@ -3,7 +3,7 @@
 GitHub 저장소의 이슈 · PR · 회의 · 도움 요청을 3D 사무실 공간으로 보여 주는 부트캠프 팀 프로젝트 학습 서비스 GRAVIT(이전 기획명 GitVillage)의 개발 저장소입니다.
 프론트엔드 · 백엔드 · 공통 계약 예시 · 로컬 DB 설정을 이 저장소 하나(모노레포)에서 관리합니다.
 
-> 지금은 **실행 가능한 개발 뼈대** 단계입니다. 화면은 기존 3D 데모를 브라우저 mock 데이터로 띄우고, Spring Boot는 DB 연결까지만 되어 있습니다. 자세한 건 아래 「현재 상태」를 보세요.
+> 로컬 앱은 Spring API를 기본으로 사용합니다. 프론트엔드만 보려면 `?source=mock`을 붙여 mock 데이터로 열 수 있습니다. 자세한 건 아래 「처음 실행하기」를 보세요.
 
 ## 기술 스택
 
@@ -93,8 +93,8 @@ npm ci
 npm run dev
 ```
 
-- 브라우저: <http://localhost:5173> — 기본은 **브라우저 mock 데이터**라 백엔드 없이도 3D 화면 · 드래그가 동작합니다.
-- 화면 메뉴의 「데이터 초기화」로 mock 데이터를 처음 상태로 되돌릴 수 있습니다.
+- 브라우저: <http://localhost:5173> — 기본은 **Spring API**입니다. GitHub 로그인과 실제 레포를 쓰려면 Spring · MySQL 및 GitHub App 설정이 필요합니다.
+- 백엔드 없이 프론트엔드만 확인할 때는 <http://localhost:5173/?source=mock>으로 엽니다. 화면 메뉴의 「데이터 초기화」로 mock 데이터를 처음 상태로 되돌릴 수 있습니다.
 
 ### 5. GitHub App 설정 (실제 GitHub 사무실 — 선택)
 
@@ -112,7 +112,7 @@ mock만 쓸 때는 필요 없습니다. 팀에서 앱 하나를 만들어 같이
    - **키 경로는 절대 경로**로 적는다(예: `C:/work/GRAVIT/secrets/github-app.pem`). Spring은 `backend/`에서 실행되어 `./secrets/...`가 `backend/secrets/`로 풀리고, 첫 동기화가 `GitHub App 개인 키 파일을 읽지 못함`으로 실패한다
    - 강사로 볼 계정이 있으면 `INSTRUCTOR_GITHUB_USER_IDS`에 GitHub 사용자 **ID**(숫자 — `https://api.github.com/users/<login>`의 `id`)를 넣는다
 5. 앱 화면 → **Install App** → 팀 레포가 있는 계정(조직)에 설치하고, 그 레포만 고른다
-6. Spring을 다시 시작하고 브라우저는 **`http://localhost:5173/?source=api`**로 연다(`127.0.0.1`이면 쓰기 요청의 Origin이 `APP_ORIGIN`과 달라 `403`). GitHub로 로그인 → 사무실 열기 → 첫 동기화
+6. Spring을 다시 시작하고 브라우저는 **`http://localhost:5173/`**로 연다(`127.0.0.1`이면 쓰기 요청의 Origin이 `APP_ORIGIN`과 달라 `403`). **GitHub로 로그인** → 사무실 열기 → 첫 동기화. Spring은 OAuth 완료 뒤 `/`로 돌아오며, 이 주소도 API 모드로 열립니다.
 
 ## 프론트엔드 ↔ 백엔드 연결
 
@@ -123,7 +123,7 @@ mock만 쓸 때는 필요 없습니다. 팀에서 앱 하나를 만들어 같이
 - 화면은 항상 같은 출처의 상대 경로 `/api/**`를 부릅니다. 개발 중엔 Vite가 Spring으로 넘깁니다(`frontend/vite.config.ts`).
 - 프록시는 `Host`를 바꾸지 않습니다(`changeOrigin: false`). 세션 쿠키 · CSRF 쿠키 · 리다이렉트가 화면 출처(`localhost:5173`) 기준으로 만들어지게 하려는 것입니다.
 - Spring 포트를 바꿨다면 Vite를 띄우는 셸에서 지정합니다: `$env:API_PORT=8081; npm run dev`
-- 데이터 소스 선택은 주소로 합니다: `/` = mock, `/?source=api` = 서버(Spring v1 API — GitHub 로그인은 위 「5. GitHub App 설정」이 필요).
+- 데이터 소스 선택은 주소로 합니다: `/`와 `/?source=api` = 서버(Spring v1 API), `/?source=mock` = 브라우저 mock. 이전 버전에서 탭에 저장한 mock 선택은 기본 동작에 영향을 주지 않습니다.
 
 ## 빌드 · 테스트 명령
 
@@ -308,7 +308,7 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 - 프론트(`frontend/`):
   - 진입 화면: 로그인 · 사무실 고르기 · 사무실 열기
   - 우주정거장 3D(R3F · SceneModel · ThemeLayout), 상단 바 · 관리 패널 · 대화상자 HUD
-  - v1 DataSource 두 구현: 브라우저 mock이 기본, `?source=api`는 Spring
+  - v1 DataSource 두 구현: Spring API가 기본, `?source=mock`은 브라우저 mock
 - 계약 예시 JSON(`contract/examples/`)과 계약 테스트 ① · ②(Java) · ③ · ④(TS), Playwright E2E(로컬)
 - 공통 계약 문서(`docs/` — 기준 위치 `docs/README.md`), 이슈 · PR 템플릿, CI(프론트 · 백엔드), 라벨 · CODEOWNERS · `main` 보호 규칙(승인 1명 · CI 2개 필수), Claude Code 규칙 · `CLAUDE.md`
 - 확정 디자인 시안(#77): `frontend/public/station/`
@@ -316,6 +316,5 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 ### 아직 없는 것
 
 - 동료 피드백(FR-ACT-04) — v1 보류
-- 기본 데이터 소스 전환: 지금은 주소에 `?source=api`가 있어야 서버를 쓴다
 - CI의 E2E
 - 배포 — **하지 않는다**(2026-11-09 결정). 개발 · 리허설 · 발표 시연은 위 「처음 실행하기」대로 로컬에서 실행한다

@@ -54,7 +54,7 @@ async function serveInstructorApi(page: Page): Promise<string[]> {
 }
 
 test('a student has no instructor inbox — not on the workspace picker, not in the more menu', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?source=mock')
   await expect(page.getByRole('heading', { name: '사무실 고르기' })).toBeVisible()
   await expect(page.getByRole('list', { name: '들어갈 수 있는 사무실' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '강사 요청함' })).toHaveCount(0)

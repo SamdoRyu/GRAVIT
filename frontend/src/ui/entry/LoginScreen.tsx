@@ -187,7 +187,7 @@ export function LoginScreen() {
           ) : (
             <button type="button" className="login-github" onClick={github}>
               <GithubMark />
-              GitHub로 계속하기
+              GitHub로 로그인
             </button>
           )}
           <p className="login-note">{mock ? '로컬 mock 데이터 — 누르면 바로 로그인돼요.' : '요청하는 권한은 GitHub 승인 화면에서 확인할 수 있어요.'}</p>

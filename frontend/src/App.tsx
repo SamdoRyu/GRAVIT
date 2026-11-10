@@ -13,21 +13,16 @@ import { officeProblem } from './data/rules/errors'
 
 // One source per page load (module scope, so StrictMode's double effects don't create two).
 const params = new URLSearchParams(location.search)
-// GitHub 로그인은 서버의 고정 주소(/)로 돌아와 ?source가 빠진다 — 이 탭에서 고른 소스를 기억해 두고, 주소에 없으면 그것을 쓴다
-// (#236 · mock이 기본인 동안만 필요). 저장소를 못 쓰면 주소만 본다.
-const SOURCE_KEY = 'gravit.source'
-function chooseSource(): string | null {
-  const fromUrl = params.get('source')
-  try {
-    if (fromUrl !== null) sessionStorage.setItem(SOURCE_KEY, fromUrl)
-    return fromUrl ?? sessionStorage.getItem(SOURCE_KEY)
-  } catch {
-    return fromUrl
-  }
+// API is the default and GitHub OAuth returns to `/`. Remove the old tab preference so a saved
+// `mock` choice from earlier versions cannot hide the new default. Only `?source=mock` opts in.
+try {
+  sessionStorage.removeItem('gravit.source')
+} catch {
+  /* Storage may be unavailable; source selection still comes from the URL. */
 }
-const apiMode = chooseSource() === 'api'
+const apiMode = params.get('source') !== 'mock'
 
-// v1 DataSource — 로그인 · 사무실 고르기 · 사무실(WorkspaceSnapshot). `?source=api`는 Spring /api, 아니면 브라우저 mock.
+// v1 DataSource — 로그인 · 사무실 고르기 · 사무실(WorkspaceSnapshot). `/` uses Spring /api; `?source=mock` uses browser mock.
 // `?workspace=<id>`면 로그인돼 있고 들어갈 수 있을 때 바로 그 사무실을 연다(없으면 지난번 사무실, 그것도 없으면 고르기).
 const officeSource = apiMode ? createV1ApiDataSource() : createV1MockDataSource()
 const preferredWorkspace = params.get('workspace')
