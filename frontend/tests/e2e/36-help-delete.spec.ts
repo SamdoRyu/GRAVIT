@@ -1,6 +1,7 @@
 // 36. 도움 요청 삭제 두 방식 (#316 — CONTRACTS_API.md 「11」 도움 요청 삭제, 서버 #315): 상세의 「삭제」를 누르면 범위를 고른다.
 // 요청자는 「나에게서만 삭제」 · 「모두에게서 영구 삭제」, 그 밖의 사람은 「나에게서만 삭제」만. 영구 삭제는 경고(다른 사람 코멘트 개수 ·
-// 복원 불가 · 연결 안건)를 본 뒤 한 번 더 눌러야 지운다. 숨긴 요청은 「숨긴 도움 요청」에서 다시 보이게 할 수 있다.
+// 복원 불가 · 연결 안건)를 본 뒤 한 번 더 눌러야 지운다. 나에게서만 삭제는 실행 버튼이 「확인」이고, 내 목록에서만 빠지며 되돌리는
+// 화면(숨긴 목록 · 숨김 해제)은 없다(#333). 최종 「영구 삭제」 버튼은 흰 글자이고 마우스를 올려도 색이 바뀌지 않는다.
 // mock seed: 내 글 hr_1(이삼도 코멘트 1개) · 박데브의 글 hr_2. 테스트마다 새 브라우저 저장소라 seed에서 시작한다.
 import type { Page } from '@playwright/test'
 import { runtime } from './agendaTrash'
@@ -49,7 +50,20 @@ test('the requester deletes for everyone only after the warning and a second con
   expect(await storedHas(page, '세션이 자꾸 끊겨요')).toBe(true)
 
   await dialog.getByRole('button', { name: '다음' }).click()
-  await dialog.getByRole('button', { name: '영구 삭제' }).click()
+  // 최종 버튼 — 흰 글자, hover에도 글자 · 배경이 그대로(#333)
+  const finalButton = dialog.getByRole('button', { name: '영구 삭제' })
+  const look = () => finalButton.evaluate((el) => { const s = getComputedStyle(el); return `${s.color} / ${s.backgroundColor}` })
+  // 색 전환(0.12s)이 끝나 두 번 연속 같은 값일 때 읽는다 — 「다음」에서 보라 → 빨강으로 바뀌는 중에 읽지 않게
+  const settledLook = async () => {
+    let last = ''
+    await expect.poll(async () => { const now = await look(); const same = now === last; last = now; return same }, { intervals: [150] }).toBe(true)
+    return last
+  }
+  const before = await settledLook()
+  expect(before.startsWith('rgb(255, 255, 255) / ')).toBe(true)
+  await finalButton.hover()
+  expect(await settledLook()).toBe(before)
+  await finalButton.click()
   await expect(page.getByText('도움 요청을 모두에게서 지웠어요')).toBeVisible()
   await expect(dialog).toBeHidden()
   await expect(list(page).getByRole('button', { name: MINE })).toHaveCount(0)
@@ -63,13 +77,17 @@ test('the requester deletes for everyone only after the warning and a second con
   await expect(list(page).getByRole('button', { name: MINE })).toHaveCount(0)
 })
 
-test("someone else's request can only be hidden for me; it stays hidden after a reload and comes back from the hidden list", async ({ page }) => {
+test("someone else's request can only be deleted for me — 「확인」 removes it from my list for good, the original stays, and there is no hidden list", async ({ page }) => {
   await openApp(page, 'mock', { scene: false })
   await openHelpTab(page)
   const dialog = await openDelete(page, OTHERS)
   await expect(dialog.getByRole('radio', { name: /모두에게서 영구 삭제/ })).toHaveCount(0)
-  await dialog.getByRole('button', { name: '나에게서만 삭제' }).click()
-  await expect(page.getByText('내 화면에서 숨겼어요', { exact: false })).toBeVisible()
+  await expect(dialog.getByRole('radio', { name: /나에게서만 삭제/ })).toBeChecked()
+  await expect(dialog).not.toContainText('숨긴 도움 요청')
+  await expect(dialog.getByRole('button', { name: '나에게서만 삭제' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: '확인' }).click()
+  await expect(page.getByText('나에게서만 삭제했어요', { exact: false })).toBeVisible()
+  await expect(page.getByText('숨긴 도움 요청', { exact: false })).toHaveCount(0)
   await expect(list(page).getByRole('button', { name: OTHERS })).toHaveCount(0)
   expect(await storedHas(page, '3D 상자를 끌면')).toBe(true) // 원본은 그대로
 
@@ -77,14 +95,8 @@ test("someone else's request can only be hidden for me; it stays hidden after a 
   await expect.poll(() => readStore(page, (s) => s.office?.status)).toBe('ready')
   await openHelpTab(page)
   await expect(list(page).getByRole('button', { name: OTHERS })).toHaveCount(0)
-
-  await panel(page).getByRole('button', { name: '숨긴 도움 요청' }).click()
-  const hidden = panel(page).getByRole('list', { name: '숨긴 도움 요청 목록' })
-  await expect(hidden.getByText(OTHERS)).toBeVisible()
-  await hidden.getByRole('button', { name: /숨김 해제/ }).click()
-  await expect(page.getByText('숨김을 풀었어요', { exact: false })).toBeVisible()
-  await expect(list(page).getByRole('button', { name: OTHERS })).toBeVisible()
-  await expect(panel(page).getByText('숨긴 도움 요청이 없어요.')).toBeVisible()
+  await expect(panel(page).getByText('숨긴 도움 요청', { exact: false })).toHaveCount(0)
+  await expect(panel(page).getByRole('button', { name: /숨김 해제/ })).toHaveCount(0)
 })
 
 test('deleting a request that is on the agenda withdraws its agenda item and leaves "삭제된 도움 요청" instead of the copied text', async ({ page }) => {

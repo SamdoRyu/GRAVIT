@@ -53,7 +53,6 @@ class InstructorWriteGuardIntegrationTest {
     private static final Set<String> CONTRACT_INSTRUCTOR_WRITES = Set.of(
             "POST " + PREFIX + "/help-requests/{helpRequestId}/comments",
             "PUT " + PREFIX + "/help-requests/{helpRequestId}/hidden",
-            "DELETE " + PREFIX + "/help-requests/{helpRequestId}/hidden",
             "POST " + PREFIX + "/agenda-items/{agendaItemId}/instructor-feedback",
             "POST " + PREFIX + "/members/{memberId}/decision-cards/{cardId}/follow-up-questions");
 

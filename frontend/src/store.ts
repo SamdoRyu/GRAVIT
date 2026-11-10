@@ -233,12 +233,8 @@ interface OfficeState {
   convertHelpRequestToAgenda: (helpRequestId: Id, title: string) => Promise<AgendaItemDto | null>
   /** POST W/help-requests/{id}/instructor-request — 요청자만 */
   requestInstructorHelp: (helpRequestId: Id) => Promise<HelpRequestSummary | null>
-  /** PUT W/help-requests/{id}/hidden — "나에게서만 삭제"(#316). 성공하면 내 목록에서 바로 뺀다 */
+  /** PUT W/help-requests/{id}/hidden — "나에게서만 삭제"(#316 · #333, 되돌리기 없음). 성공하면 내 목록에서 바로 뺀다 */
   hideHelpRequest: (helpRequestId: Id, onError?: OnDataError) => Promise<boolean>
-  /** DELETE W/help-requests/{id}/hidden — 숨김 해제. 알림이 없으므로 성공하면 Snapshot을 다시 읽는다 */
-  unhideHelpRequest: (helpRequestId: Id) => Promise<boolean>
-  /** GET W/help-requests/hidden — 내가 숨긴 요청(숨긴 시각 내림차순) */
-  listHiddenHelpRequests: () => Promise<HelpRequestSummary[] | null>
   /** DELETE W/help-requests/{id} — "모두에게서 영구 삭제"(요청자만). 성공하면 목록에서 빼고, 연결 안건 처리를 보려고 Snapshot을 다시 읽는다 */
   deleteHelpRequest: (helpRequestId: Id, onError?: OnDataError) => Promise<boolean>
   /**
@@ -684,25 +680,10 @@ export const useOffice = create<OfficeState>((set, get) => {
           await src.hideHelpRequest(ws, helpRequestId)
           return true as const
         },
-        // 숨김은 이벤트가 없다 — 내 Snapshot에서 바로 뺀다(다시 읽어도 서버가 뺀 값이다)
+        // 나에게서만 삭제는 이벤트가 없다 — 내 Snapshot에서 바로 뺀다(다시 읽어도 서버가 뺀 값이다)
         (snap) => ({ ...snap, helpRequests: snap.helpRequests.filter((h) => h.id !== helpRequestId) }),
         onError,
       )) !== null,
-    unhideHelpRequest: async (helpRequestId) => {
-      const gen = officeGen
-      const ok =
-        (await officeWrite(
-          async (src, ws) => {
-            await src.unhideHelpRequest(ws, helpRequestId)
-            return true as const
-          },
-          (snap) => snap,
-        )) !== null
-      // 숨김 해제도 이벤트가 없다 — 지금 값으로 다시 보이게 Snapshot을 바로 다시 읽는다
-      if (ok && gen === officeGen) await loadOffice(gen)
-      return ok
-    },
-    listHiddenHelpRequests: () => officeRead((src, ws) => src.listHiddenHelpRequests(ws)),
     deleteHelpRequest: async (helpRequestId, onError) => {
       const gen = officeGen
       const ok =

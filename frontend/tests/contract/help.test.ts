@@ -407,7 +407,7 @@ describe('도움 요청 삭제 두 방식 (#316 — 「11」 도움 요청 삭�
     assert.deepEqual(helpDeleteLoss({ requesterMemberId: 'm_1', comments: [] }), { otherComments: 0, instructorAnswers: 0 })
   })
 
-  it('나에게서만 삭제 — 숨긴 사람의 Snapshot에서만 빠지고 원본 · 코멘트는 그대로, 숨김 목록 · 해제, 이벤트 없음, 상태 무관', async () => {
+  it('나에게서만 삭제 — 뺀 사람의 Snapshot에서만 빠지고 원본 · 코멘트는 그대로, 되돌리기 없음, 이벤트 없음, 상태 무관 (#333)', async () => {
     const storage = createMemoryStorage()
     const source = makeWith(storage)
     const { changes, off } = listen(source)
@@ -417,27 +417,25 @@ describe('도움 요청 삭제 두 방식 (#316 — 「11」 도움 요청 삭�
     await source.hideHelpRequest(TEAM_WS, 'hr_3')
     let snap = await source.load(TEAM_WS)
     assert.deepEqual(snap.helpRequests.map((h) => h.id).sort(), ['hr_1', 'hr_4'])
-    // 원본은 그대로 — 상세는 읽히고(숨김 목록에서 열어 해제), 저장값에 행이 남는다
-    assert.equal((await source.getHelpRequest(TEAM_WS, 'hr_2')).id, 'hr_2')
+    // 원본은 그대로 — 상세는 읽히고(회의실 안건 등에서 직접 열 때), 저장값에 원문 · 코멘트가 남는다
+    const thread = await source.getHelpRequest(TEAM_WS, 'hr_2')
+    assert.equal(thread.id, 'hr_2')
     assert.equal(stored(storage).snapshot.helpRequests.length, 4)
-    assert.deepEqual((await source.listHiddenHelpRequests(TEAM_WS)).map((h) => h.id).sort(), ['hr_2', 'hr_3'])
-
-    await source.unhideHelpRequest(TEAM_WS, 'hr_2')
-    await source.unhideHelpRequest(TEAM_WS, 'hr_2') // 숨기지 않았으면 그대로
-    snap = await source.load(TEAM_WS)
-    assert.deepEqual(snap.helpRequests.map((h) => h.id).sort(), ['hr_1', 'hr_2', 'hr_4'])
-    assert.deepEqual((await source.listHiddenHelpRequests(TEAM_WS)).map((h) => h.id), ['hr_3'])
+    assert.deepEqual(stored(storage).hiddenHelpRequests.map((r: { helpRequestId: string }) => r.helpRequestId).sort(), ['hr_2', 'hr_3'])
+    // 되돌리는 길이 없다 — 다시 만들어도(다시 로그인) 계속 빠진다
+    snap = await makeWith(storage).load(TEAM_WS)
+    assert.deepEqual(snap.helpRequests.map((h) => h.id).sort(), ['hr_1', 'hr_4'])
+    assert.equal('unhideHelpRequest' in source, false)
+    assert.equal('listHiddenHelpRequests' in source, false)
     off()
     assert.deepEqual(changes, []) // 개인 설정이라 다른 사람에게 알리지 않는다
 
     await rejectsCode(source.hideHelpRequest(TEAM_WS, 'hr_nope'), 'not_found', HELP_MSG.notFound)
-    await rejectsCode(source.unhideHelpRequest(TEAM_WS, 'hr_nope'), 'not_found', HELP_MSG.notFound)
   })
 
-  it('나에게서만 삭제 — 다른 사람이 숨긴 것은 내 Snapshot · 숨김 목록에 영향이 없다', async () => {
+  it('나에게서만 삭제 — 다른 사람이 뺀 것은 내 Snapshot에 영향이 없다', async () => {
     const source = makeWith(seededWithOthersHidden())
     assert.ok((await source.load(TEAM_WS)).helpRequests.some((h) => h.id === 'hr_1'))
-    assert.deepEqual(await source.listHiddenHelpRequests(TEAM_WS), [])
   })
 
   it('모두에게서 영구 삭제 — 요청자만, 도움 요청 · 코멘트(남의 코멘트 포함) · 모든 숨김을 실제로 지운다. 지운 뒤에는 404', async () => {

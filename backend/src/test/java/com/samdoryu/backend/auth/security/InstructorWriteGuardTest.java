@@ -57,7 +57,6 @@ class InstructorWriteGuardTest {
         assertThat(InstructorWriteGuard.INSTRUCTOR_WRITES).containsExactlyInAnyOrder(
                 "POST " + W + "/help-requests/{helpRequestId}/comments",
                 "PUT " + W + "/help-requests/{helpRequestId}/hidden",
-                "DELETE " + W + "/help-requests/{helpRequestId}/hidden",
                 "POST " + W + "/agenda-items/{agendaItemId}/instructor-feedback",
                 "POST " + W + "/members/{memberId}/decision-cards/{cardId}/follow-up-questions");
     }

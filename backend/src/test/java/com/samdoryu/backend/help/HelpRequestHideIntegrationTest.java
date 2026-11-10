@@ -1,7 +1,6 @@
 package com.samdoryu.backend.help;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -15,7 +14,6 @@ import com.samdoryu.backend.auth.TestLogin;
 import com.samdoryu.backend.auth.domain.AppUser;
 import com.samdoryu.backend.auth.domain.WorkspaceRole;
 import com.samdoryu.backend.auth.repository.AppUserRepository;
-import com.samdoryu.backend.common.contract.ContractShape;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.help.domain.HelpComment;
 import com.samdoryu.backend.help.domain.HelpRequest;
@@ -47,9 +45,9 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * #315 ① 나에게서만 삭제 — {@code PUT · DELETE W/help-requests/{id}/hidden}, {@code GET W/help-requests/hidden}을 실제
- * Security · MVC · MySQL로 본다. 숨긴 사람의 Snapshot · 강사 요청함에서만 빠지고, 다른 사람의 응답과 원본 · 코멘트 행은 그대로다.
- * 숨김은 서버에 남으므로 새 세션(다시 로그인)에서도 같다. 테스트마다 트랜잭션을 되돌린다.
+ * #315 ① · #333 나에게서만 삭제 — {@code PUT W/help-requests/{id}/hidden}을 실제 Security · MVC · MySQL로 본다. 뺀 사람의
+ * Snapshot · 강사 요청함에서만 빠지고, 다른 사람의 응답과 원본 · 코멘트 행은 그대로다. 제외는 서버에 남으므로 새 세션(다시
+ * 로그인)에서도 같고, 되돌리는 API(숨김 목록 · 해제)는 없다. 테스트마다 트랜잭션을 되돌린다.
  */
 @SpringBootTest(properties = {
         "app.origin=" + HelpRequestHideIntegrationTest.ORIGIN,
@@ -143,10 +141,6 @@ class HelpRequestHideIntegrationTest {
         return write(put(hiddenPath(workspace, helpRequestId)), session);
     }
 
-    private ResultActions unhide(Workspace workspace, Long helpRequestId, MockHttpSession session) throws Exception {
-        return write(delete(hiddenPath(workspace, helpRequestId)), session);
-    }
-
     private ResultActions snapshot(MockHttpSession session) throws Exception {
         return mvc.perform(get(base(ws) + "/snapshot").session(session)).andExpect(status().isOk());
     }
@@ -172,39 +166,32 @@ class HelpRequestHideIntegrationTest {
         assertThat(helpRequests.existsById(help.getId())).isTrue();
         assertThat(helpComments.count()).isEqualTo(comments);
         assertThat(hiddenRows.count()).isEqualTo(1);
-        // 숨겨도 상세는 열린다 — 숨김 목록에서 해제하려면 필요하다
+        // 목록 · 배지 · 요청함에서만 빠진다 — 회의실 안건(도움 요청 구) 등에서 직접 열면 상세는 읽힌다
         mvc.perform(get(base(ws) + "/help-requests/" + id).session(bobSession())).andExpect(status().isOk());
     }
 
-    /** 숨김 목록은 숨긴 시각 내림차순 — 나중에 숨긴 것이 먼저. 해제하면 Snapshot에 다시 나온다. */
+    /**
+     * #333 — 숨김 목록 · 숨김 해제 API는 없다. 지운 경로로 보내도 제외 행은 남고, 다시 로그인해도(새 세션) 계속 빠진다.
+     * 다른 사람에게는 원문 · 코멘트가 그대로 보인다.
+     */
     @Test
-    void hiddenListShowsMyHiddenRequestsAndUnhideBringsThemBack() throws Exception {
+    void noHiddenListNoUnhideAndItStaysExcludedAfterLoggingInAgain() throws Exception {
         String id = Ids.toApi(help.getId());
         hide(ws, help.getId(), bobSession()).andExpect(status().isNoContent());
-        hide(ws, other.getId(), bobSession()).andExpect(status().isNoContent());
         flushAndClear();
 
-        String body = mvc.perform(get(base(ws) + "/help-requests/hidden").session(bobSession()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(Ids.toApi(other.getId())))
-                .andExpect(jsonPath("$[1].id").value(id))
-                .andReturn().getResponse().getContentAsString();
-        ContractShape.assertSameShape(ContractShape.readExample("help", "help-request-summary.json"),
-                ContractShape.readTree(body).get(0));
-        mvc.perform(get(base(ws) + "/help-requests/hidden").session(aliceSession()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", empty()));
-
-        unhide(ws, help.getId(), bobSession()).andExpect(status().isNoContent());
-        unhide(ws, help.getId(), bobSession()).andExpect(status().isNoContent()); // 숨기지 않음 — 그대로
-        flushAndClear();
-
-        snapshot(bobSession()).andExpect(jsonPath("$.helpRequests[*].id", hasItem(id)));
         mvc.perform(get(base(ws) + "/help-requests/hidden").session(bobSession()))
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(Ids.toApi(other.getId())));
+                .andExpect(status().is4xxClientError());
+        write(delete(hiddenPath(ws, help.getId())), bobSession()).andExpect(status().is4xxClientError());
+        flushAndClear();
+
         assertThat(hiddenRows.count()).isEqualTo(1);
+        snapshot(bobSession()).andExpect(jsonPath("$.helpRequests[*].id", not(hasItem(id))));
+        snapshot(aliceSession()).andExpect(jsonPath("$.helpRequests[*].id", hasItem(id)));
+        mvc.perform(get(base(ws) + "/help-requests/" + id).session(aliceSession()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("세션이 끊겨요"))
+                .andExpect(jsonPath("$.comments[*].content", hasItem("same-site 확인")));
     }
 
     /** 강사도 자기 화면에서만 숨긴다 — 강사의 Snapshot · 요청함에서 빠지고 팀원 화면은 그대로. */
@@ -222,11 +209,6 @@ class HelpRequestHideIntegrationTest {
                 .andExpect(jsonPath("$[*].targetId", not(hasItem(id))));
         snapshot(instructorSession()).andExpect(jsonPath("$.helpRequests[*].id", not(hasItem(id))));
         snapshot(aliceSession()).andExpect(jsonPath("$.helpRequests[*].id", hasItem(id)));
-
-        unhide(ws, help.getId(), instructorSession()).andExpect(status().isNoContent());
-        flushAndClear();
-        mvc.perform(get("/api/instructor/inbox").session(instructorSession()))
-                .andExpect(jsonPath("$[*].targetId", hasItem(id)));
     }
 
     /** 숨겨도 그 요청의 상태 변화는 그대로 일어난다 — 숨긴 사람이 아닌 사람의 코멘트로 discussing. */
@@ -250,7 +232,6 @@ class HelpRequestHideIntegrationTest {
         hide(ws, elsewhere.getId(), aliceSession())
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("not_found"));
-        unhide(ws, elsewhere.getId(), aliceSession()).andExpect(status().isNotFound());
         hide(ws, elsewhere.getId() + 1000, aliceSession()).andExpect(status().isNotFound());
 
         assertThat(hiddenRows.count()).isZero();

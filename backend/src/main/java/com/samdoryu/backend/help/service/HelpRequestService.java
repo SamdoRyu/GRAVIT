@@ -193,9 +193,10 @@ public class HelpRequestService {
     }
 
     /**
-     * 나에게서만 삭제(#315 ①) — 그 도움 요청을 볼 수 있는 사람(팀원 · 지정된 강사) 누구나. 대상이 없거나 다른 사무실 것이면
-     * {@code not_found}. 이미 숨겼으면 그대로(처음 시각 유지). 원본 · 코멘트와 다른 사람의 화면은 그대로라 변경 알림을 보내지
-     * 않는다 — 숨긴 사람의 화면이 스스로 다시 읽는다.
+     * 나에게서만 삭제(#315 ① · #333) — 그 도움 요청을 볼 수 있는 사람(팀원 · 지정된 강사) 누구나. 이 사용자의 조회 결과
+     * (Snapshot {@code helpRequests} · 강사 요청함)에서만 뺀다. 대상이 없거나 다른 사무실 것이면 {@code not_found}. 이미 뺐으면
+     * 그대로(처음 시각 유지). 되돌리는 길은 없다. 원본 · 코멘트와 다른 사람의 화면은 그대로라 변경 알림을 보내지 않는다 — 뺀 사람의
+     * 화면이 스스로 다시 읽는다.
      */
     @Transactional
     public void hide(WorkspaceAccess access, Long helpRequestId) {
@@ -206,21 +207,6 @@ public class HelpRequestService {
             // 위 확인과 이 저장 사이에 요청자가 영구 삭제했다(외래키) — 이제 없는 요청이다
             throw new ApiException(ErrorCode.NOT_FOUND);
         }
-    }
-
-    /** 숨김 해제(#315 ①) — 대상이 없거나 다른 사무실 것이면 {@code not_found}. 숨기지 않았으면 그대로. 변경 알림 없음. */
-    @Transactional
-    public void unhide(WorkspaceAccess access, Long helpRequestId) {
-        requireInWorkspace(access.workspaceId(), helpRequestId);
-        hiddenRepository.deleteByHelpRequestIdAndUserId(helpRequestId, access.userId());
-    }
-
-    /** 내가 숨긴 이 사무실의 도움 요청(#315 ①) — 숨긴 시각 내림차순. 다른 사람의 숨김 목록을 읽는 길은 없다. */
-    @Transactional(readOnly = true)
-    public List<HelpRequestSummary> listHidden(WorkspaceAccess access, Instant now) {
-        return hiddenRepository.findHiddenHelpRequestsNewestFirst(access.userId(), access.workspaceId()).stream()
-                .map(helpRequest -> HelpRequestSummary.of(helpRequest, now))
-                .toList();
     }
 
     /**

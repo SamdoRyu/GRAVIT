@@ -146,7 +146,7 @@ export function afterComment(help: HelpRequestSummary, comment: HelpCommentDto):
 /** 원본 도움 요청이 영구 삭제된 안건에 남기는 제목 — 복사된 원문(본문 첫 줄로 미리 채운 제목)을 남기지 않는다 */
 export const DELETED_HELP_REQUEST_TITLE = '삭제된 도움 요청'
 
-/** 삭제 범위 — me = 나에게서만 삭제(숨김, 해제 가능) · everyone = 모두에게서 영구 삭제(복원 불가) */
+/** 삭제 범위 — me = 나에게서만 삭제(내 조회 결과에서만 뺌, 원문 · 코멘트 보존 — #333) · everyone = 모두에게서 영구 삭제(복원 불가) */
 export type HelpDeleteScope = 'me' | 'everyone'
 
 /**
