@@ -3,7 +3,6 @@ package com.samdoryu.backend.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -32,11 +31,13 @@ import com.samdoryu.backend.report.repository.DecisionCardRepository;
 import com.samdoryu.backend.report.repository.FollowUpQuestionRepository;
 import com.samdoryu.backend.report.repository.RetroReportRepository;
 import com.samdoryu.backend.sync.domain.Submission;
+import com.samdoryu.backend.sync.domain.SubmissionIssueLink;
 import com.samdoryu.backend.sync.domain.SubmissionState;
 import com.samdoryu.backend.sync.domain.Task;
 import com.samdoryu.backend.sync.domain.TaskAssignee;
 import com.samdoryu.backend.sync.domain.TaskClosedReason;
 import com.samdoryu.backend.sync.domain.TaskState;
+import com.samdoryu.backend.sync.repository.SubmissionIssueLinkRepository;
 import com.samdoryu.backend.sync.repository.SubmissionRepository;
 import com.samdoryu.backend.sync.repository.TaskAssigneeRepository;
 import com.samdoryu.backend.sync.repository.TaskRepository;
@@ -48,6 +49,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,6 +81,7 @@ class RetroReportIntegrationTest {
     private static final String SHA = "0123456789abcdef0123456789abcdef01234567";
 
     @Autowired MockMvc mvc;
+    @Autowired SubmissionIssueLinkRepository issueLinks;
     @Autowired EntityManager em;
     @Autowired AppUserRepository users;
     @Autowired WorkspaceRepository workspaces;
@@ -132,22 +135,35 @@ class RetroReportIntegrationTest {
                 + "/reports";
     }
 
+    /** 카드 없이 만들기 — 제목 "회고 리포트", 느낀 점 "느낀 점". */
     private ResultActions create(String path, MockHttpSession session, String kind) throws Exception {
+        return createWith(path, session, "{\"kind\":\"" + kind + "\",\"title\":\"회고 리포트\",\"learning\":\"느낀 점\","
+                + "\"decisionCardIds\":[]}");
+    }
+
+    private ResultActions createWith(String path, MockHttpSession session, String body) throws Exception {
         String setCookie = mvc.perform(get("/api/health")).andReturn().getResponse().getHeader(HttpHeaders.SET_COOKIE);
         String token = setCookie.substring("XSRF-TOKEN=".length(), setCookie.indexOf(';'));
         return mvc.perform(post(path).session(session)
                 .cookie(new Cookie("XSRF-TOKEN", token)).header("X-XSRF-TOKEN", token)
                 .header(HttpHeaders.ORIGIN, ORIGIN)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"" + kind + "\"}"));
+                .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
-    private void assign(int number, String labelsJson, boolean closed, Member assignee) {
+    /** 저장소에 바로 — 제목은 종류로, 느낀 점 "느낀 점". */
+    private RetroReport report(Member member, ReportKind kind, Instant createdAt, DecisionCard... cards) {
+        return reports.saveAndFlush(new RetroReport(member, kind, kind == ReportKind.FINAL ? "최종 회고" : "중간 회고",
+                "느낀 점", List.of(cards), createdAt));
+    }
+
+    private Task assign(int number, String labelsJson, boolean closed, Member assignee) {
         Task task = tasks.saveAndFlush(Task.builder().workspace(ws).githubIssueNumber(number).title("이슈 " + number)
                 .state(closed ? TaskState.CLOSED : TaskState.OPEN)
                 .closedReason(closed ? TaskClosedReason.COMPLETED : null).labelsJson(labelsJson)
                 .githubCreatedAt(T0).githubUpdatedAt(T0).closedAt(closed ? T0.plusSeconds(3600) : null)
                 .stateChangedAt(T0).syncedAt(T0).build());
         taskAssignees.saveAndFlush(new TaskAssignee(task, assignee, T0));
+        return task;
     }
 
     private Submission pr(int number, String labelsJson, Member author, long authorGithubId, boolean merged) {
@@ -190,9 +206,10 @@ class RetroReportIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.kind").value("final"))
                 .andExpect(jsonPath("$.memberId").value(Ids.toApi(alice.getId())))
-                .andExpect(jsonPath("$.summary").value("맡은 이슈 1개(닫힘 1) · 작성한 PR 1개(머지 1) · 올린 안건 2건(결론 1)"))
-                .andExpect(jsonPath("$.areaLabels").value(contains("area:auth", "area:sync")))
-                .andExpect(jsonPath("$.learning").value(nullValue()))
+                .andExpect(jsonPath("$.title").value("회고 리포트"))
+                .andExpect(jsonPath("$.summary").doesNotExist())
+                .andExpect(jsonPath("$.areaLabels").value(empty())) // 고른 카드가 없다 — 내 이슈 · PR이 있어도 비어 있다
+                .andExpect(jsonPath("$.learning").value("느낀 점"))
                 .andExpect(jsonPath("$.agendaResults.length()").value(1))
                 .andExpect(jsonPath("$.agendaResults[0].agendaItemId").value(Ids.toApi(decided.getId())))
                 .andExpect(jsonPath("$.agendaResults[0].conclusion").value("계약 모양으로 맞춘다"))
@@ -212,40 +229,55 @@ class RetroReportIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(reportId))
-                .andExpect(jsonPath("$[0].kind").value("final"));
+                .andExpect(jsonPath("$[0].kind").value("final"))
+                .andExpect(jsonPath("$[0].title").value("회고 리포트"));
         mvc.perform(get(base(alice) + "/" + reportId).session(aliceSession))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(reportId))
                 .andExpect(jsonPath("$.agendaResults.length()").value(1));
     }
 
-    /** {@code learning}이 있으면 확인한 카드, 없으면 확인 전 카드. */
+    /** {@code learning}이 있으면 배운 점을 쓴 카드(리포트에 고를 수 있음), 없으면 빈 카드. */
     private DecisionCard card(Member member, Submission submission, String goal, String learning) {
         DecisionCard card = new DecisionCard(member, submission, DecisionCardCells.EMPTY, T0.plusSeconds(1000));
         if (learning != null) {
-            card.edit(new DecisionCardCells(goal, null, null, null, null, null, null, learning, null), true,
+            card.edit(new DecisionCardCells(goal, null, null, null, null, null, null, learning, null),
                     T0.plusSeconds(1100));
         }
         return decisionCards.saveAndFlush(card);
     }
 
-    /** #62 결정 카드는 본인이 확인한 것만(P11) — 확인 전 카드 · 다른 팀원 카드는 빠진다. 계약 ② — 카드가 든 응답 모양. */
+    /**
+     * #335 — 리포트에는 고른 카드만 PR 번호 순으로 들어가고, 담당 기능 영역은 고른 카드의 PR과 그 PR에 연결된 이슈의 {@code area:*}다.
+     * 제목 앞뒤 공백은 뺀다. 계약 ② — 카드가 든 응답 모양.
+     */
     @Test
-    void reportCarriesOnlyOwnConfirmedDecisionCards() throws Exception {
-        DecisionCard confirmed = card(alice, pr(5, "[]", alice, 1001L, true), null, "실패 응답은 한 곳에서");
-        card(alice, pr(7, "[]", alice, 1001L, true), null, null);
-        card(bob, pr(6, "[]", bob, 1002L, true), null, "밥의 배움");
-        followUpQuestions.saveAndFlush(new FollowUpQuestion(confirmed, instructorUser, "왜 그 방법을 골랐나요?",
+    void reportCarriesOnlySelectedCardsInPrNumberOrderWithAreasFromThem() throws Exception {
+        Submission pr9 = pr(9, "[\"area:sync\"]", alice, 1001L, true);
+        Submission pr5 = pr(5, "[\"area:auth\"]", alice, 1001L, true);
+        Submission pr7 = pr(7, "[\"area:vote\"]", alice, 1001L, true);
+        Task linked = assign(3, "[\"area:plan\",\"priority:high\"]", true, alice);
+        issueLinks.saveAndFlush(new SubmissionIssueLink(pr5, linked, "CLOSING_REFERENCE"));
+        assign(4, "[\"area:report\"]", true, alice); // 고른 카드와 상관없는 내 이슈 — 영역에 들어가지 않는다
+        DecisionCard card9 = card(alice, pr9, null, "동기화는 한 곳에서");
+        DecisionCard card5 = card(alice, pr5, null, "실패 응답은 한 곳에서");
+        card(alice, pr7, null, "고르지 않은 카드");
+        followUpQuestions.saveAndFlush(new FollowUpQuestion(card5, instructorUser, "왜 그 방법을 골랐나요?",
                 T0.plusSeconds(1200)));
         em.clear();
 
-        String response = create(base(alice), aliceSession, "final")
+        String body = "{\"kind\":\"final\",\"title\":\"  1차 스프린트 회고  \",\"learning\":\"계약을 먼저 맞추면 덜 고친다\","
+                + "\"decisionCardIds\":[\"" + Ids.toApi(card9.getId()) + "\",\"" + Ids.toApi(card5.getId()) + "\"]}";
+        String response = createWith(base(alice), aliceSession, body)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.decisionCards.length()").value(1))
-                .andExpect(jsonPath("$.decisionCards[0].id").value(Ids.toApi(confirmed.getId())))
-                .andExpect(jsonPath("$.decisionCards[0].confirmed").value(true))
+                .andExpect(jsonPath("$.title").value("1차 스프린트 회고"))
+                .andExpect(jsonPath("$.learning").value("계약을 먼저 맞추면 덜 고친다"))
+                .andExpect(jsonPath("$.decisionCards.length()").value(2))
+                .andExpect(jsonPath("$.decisionCards[0].id").value(Ids.toApi(card5.getId())))
+                .andExpect(jsonPath("$.decisionCards[1].id").value(Ids.toApi(card9.getId())))
                 .andExpect(jsonPath("$.decisionCards[0].cells.learning").value("실패 응답은 한 곳에서"))
                 .andExpect(jsonPath("$.decisionCards[0].followUpQuestions[0].body").value("왜 그 방법을 골랐나요?"))
+                .andExpect(jsonPath("$.areaLabels").value(contains("area:auth", "area:plan", "area:sync")))
                 .andReturn().getResponse().getContentAsString();
         var actual = ContractShape.readTree(response);
         ContractShape.assertSameShape(ContractShape.readExample("report", "retro-report.json"), actual);
@@ -253,14 +285,47 @@ class RetroReportIntegrationTest {
 
         mvc.perform(get(base(alice) + "/" + actual.get("id").asString()).session(instructorSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.decisionCards.length()").value(1));
+                .andExpect(jsonPath("$.decisionCards.length()").value(2));
+        mvc.perform(get(base(alice)).session(aliceSession))
+                .andExpect(jsonPath("$[0].title").value("1차 스프린트 회고"));
+    }
+
+    /** 고를 수 없는 카드(배운 점이 빈 카드 · 남의 카드 · 없는 카드 · 중복 · 형식) · 빈 제목 · 빈 느낀 점 · 카드 목록 없음은 400. 리포트가 생기지 않는다. */
+    @Test
+    void unselectableCardsAndBlankTitleOrLearningAre400() throws Exception {
+        DecisionCard mine = card(alice, pr(5, "[]", alice, 1001L, true), null, "배운 점");
+        DecisionCard noLearning = card(alice, pr(7, "[]", alice, 1001L, true), null, null);
+        DecisionCard bobs = card(bob, pr(6, "[]", bob, 1002L, true), null, "밥의 배움");
+        String ok = "\"" + Ids.toApi(mine.getId()) + "\"";
+        em.clear();
+
+        for (String ids : new String[] {"\"" + Ids.toApi(noLearning.getId()) + "\"", "\"" + Ids.toApi(bobs.getId()) + "\"",
+                "\"999999\"", ok + "," + ok, "\"x\""}) {
+            createWith(base(alice), aliceSession,
+                    "{\"kind\":\"final\",\"title\":\"t\",\"learning\":\"l\",\"decisionCardIds\":[" + ids + "]}")
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("invalid"));
+        }
+        for (String body : new String[] {
+                "{\"kind\":\"final\",\"title\":\"  \",\"learning\":\"l\",\"decisionCardIds\":[]}",
+                "{\"kind\":\"final\",\"title\":\"t\",\"learning\":\"\",\"decisionCardIds\":[]}",
+                "{\"kind\":\"final\",\"title\":\"t\",\"learning\":\"l\"}",
+                "{\"kind\":\"final\"}"}) {
+            createWith(base(alice), aliceSession, body).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("invalid"));
+        }
+        assertThat(reports.count()).isZero();
+
+        createWith(base(alice), aliceSession,
+                "{\"kind\":\"final\",\"title\":\"t\",\"learning\":\"l\",\"decisionCardIds\":[" + ok + "]}")
+                .andExpect(status().isCreated());
     }
 
     /** 계산 칸은 읽을 때 계산 — 만든 뒤 생긴 결정도 보인다. 목록은 createdAt 내림차순. */
     @Test
     void computedFieldsFollowCurrentDataAndListIsNewestFirst() throws Exception {
-        RetroReport midterm = reports.saveAndFlush(new RetroReport(alice, ReportKind.MIDTERM, T0));
-        RetroReport finalReport = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0.plusSeconds(60)));
+        RetroReport midterm = report(alice, ReportKind.MIDTERM, T0);
+        RetroReport finalReport = report(alice, ReportKind.FINAL, T0.plusSeconds(60));
         mvc.perform(get(base(alice) + "/" + midterm.getId()).session(aliceSession))
                 .andExpect(jsonPath("$.agendaResults").value(empty()));
 
@@ -278,7 +343,7 @@ class RetroReportIntegrationTest {
     /** 쓰기는 본인만 — 다른 학생 · 강사 403. 읽기는 본인 · 지정된 강사 — 다른 학생 403. */
     @Test
     void onlySelfCreatesAndOnlySelfOrInstructorReads() throws Exception {
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        RetroReport report = report(alice, ReportKind.FINAL, T0);
 
         create(base(alice), bobSession, "final").andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("forbidden_role"));
@@ -308,7 +373,7 @@ class RetroReportIntegrationTest {
         mvc.perform(get("/api/workspaces/" + Ids.toApi(ws.getId()) + "/members/999999/reports").session(aliceSession))
                 .andExpect(status().isNotFound());
 
-        RetroReport bobs = reports.saveAndFlush(new RetroReport(bob, ReportKind.FINAL, T0));
+        RetroReport bobs = report(bob, ReportKind.FINAL, T0);
         mvc.perform(get(base(alice) + "/" + bobs.getId()).session(aliceSession)).andExpect(status().isNotFound());
     }
 
@@ -336,10 +401,10 @@ class RetroReportIntegrationTest {
         return reports.findById(report.getId()).orElseThrow().getLearning();
     }
 
-    /** 본인이 쓰면 저장되고 리포트 전체가 돌아온다. 다시 쓰면 바꾸고, 빈 값으로 비울 수 있다. */
+    /** 본인이 쓰면 저장되고 리포트 전체가 돌아온다. 다시 쓰면 바꾸고, 빈 값으로는 비울 수 없다(#335 — 느낀 점 필수). */
     @Test
-    void selfWritesLearningAndCanRewriteOrClearIt() throws Exception {
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+    void selfWritesLearningAndCanRewriteButNotClearIt() throws Exception {
+        RetroReport report = report(alice, ReportKind.FINAL, T0);
         String path = base(alice) + "/" + report.getId();
 
         String response = writeLearning(path, aliceSession, "{\"learning\":\"에러 응답은 한 곳에서 정한다\"}")
@@ -354,16 +419,17 @@ class RetroReportIntegrationTest {
                 .andExpect(jsonPath("$.learning").value("에러 응답은 한 곳에서 정한다"));
 
         writeLearning(path, aliceSession, "{\"learning\":\"" + "가".repeat(5000) + "\"}").andExpect(status().isOk());
-        writeLearning(path, aliceSession, "{\"learning\":\"\"}").andExpect(status().isOk())
-                .andExpect(jsonPath("$.learning").value(""));
-        assertThat(learningOf(report)).isEmpty();
+        writeLearning(path, aliceSession, "{\"learning\":\"\"}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("invalid"));
+        writeLearning(path, aliceSession, "{\"learning\":\"   \"}").andExpect(status().isBadRequest());
+        assertThat(learningOf(report)).isEqualTo("가".repeat(5000));
     }
 
     /** 본인만 — 다른 학생 · 강사 403, 다른 팀원의 리포트 404, 5000자 넘음 · 값 없음 400. 아무것도 바뀌지 않는다. */
     @Test
     void onlySelfWritesValidLearning() throws Exception {
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
-        RetroReport bobs = reports.saveAndFlush(new RetroReport(bob, ReportKind.FINAL, T0));
+        RetroReport report = report(alice, ReportKind.FINAL, T0);
+        RetroReport bobs = report(bob, ReportKind.FINAL, T0);
         String path = base(alice) + "/" + report.getId();
         String body = "{\"learning\":\"남이 쓴 배운 점\"}";
 
@@ -377,8 +443,8 @@ class RetroReportIntegrationTest {
                 .andExpect(jsonPath("$.error.code").value("invalid"));
         writeLearning(path, aliceSession, "{}").andExpect(status().isBadRequest());
 
-        assertThat(learningOf(report)).isNull();
-        assertThat(learningOf(bobs)).isNull();
+        assertThat(learningOf(report)).isEqualTo("느낀 점");
+        assertThat(learningOf(bobs)).isEqualTo("느낀 점");
     }
 
     // ---- #42 마크다운 내보내기 · 팀원 이름 익명화 ------------------------------------------------------
@@ -397,7 +463,7 @@ class RetroReportIntegrationTest {
         DecisionCard confirmed = card(alice, pr(5, "[]", alice, 1001L, true), "첫 줄\n둘째 줄", "밥에게 배운 점");
         followUpQuestions.saveAndFlush(new FollowUpQuestion(confirmed, instructorUser, "앨리스는 왜?",
                 T0.plusSeconds(1200)));
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        RetroReport report = report(alice, ReportKind.FINAL, T0, confirmed);
         em.clear();
 
         var response = mvc.perform(get(base(alice) + "/" + report.getId() + "/markdown").session(aliceSession))
@@ -405,24 +471,23 @@ class RetroReportIntegrationTest {
                 .andReturn().getResponse();
         assertThat(response.getContentType()).isEqualTo("text/markdown;charset=UTF-8");
         assertThat(response.getContentAsString(StandardCharsets.UTF_8))
-                .contains("# 최종 회고 리포트", "- 만든 시각: 2026-11-01T00:00:00Z",
-                        "맡은 이슈 1개(닫힘 1) · 작성한 PR 1개(머지 1) · 올린 안건 1건(결론 1)", "- area:auth",
-                        "## 내가 배운 점\n\n- 없음",
+                .contains("# 최종 회고\n\n- 만든 시각: 2026-11-01T00:00:00Z",
+                        "## 느낀 점\n\n느낀 점\n\n## 담당 기능 영역\n\n- 없음", // 고른 카드의 PR에 area 라벨이 없다
                         "### @팀원 A 질문과 팀원 B 답",
                         "- 결론: 팀원 A과 팀원 C이 맞춘다 — alicebot은 그대로",
                         "- 배운 점: 배운 점 @팀원 A 질문과 팀원 B 답",
                         "- 2026-11-01T00:15:00Z 강사: 팀원 B에게 한 줄",
-                        "## 기술 결정 카드\n\n### 확인한 카드 — 2026-11-01T00:18:20Z\n\n"
+                        "## 기술 결정 카드\n\n### #5 PR 5\n\n"
                                 + "- 무엇을 하려 했나: 첫 줄\n  둘째 줄\n- 내가 배운 점: 팀원 A에게 배운 점\n"
                                 + "- 2026-11-01T00:20:00Z 강사 꼬리질문: 팀원 B는 왜?\n")
-                .doesNotContain("앨리스", "밥", "캐럴", "@bob", "Carol", "instructor");
+                .doesNotContain("앨리스", "밥", "캐럴", "@bob", "Carol", "instructor", "## 요약", "area:auth");
     }
 
     /** 읽기 규칙은 리포트 읽기와 같다 — 강사 200, 다른 학생 403, 다른 팀원의 리포트 · 다른 사무실 팀원 404(JSON 에러). */
     @Test
     void markdownFollowsReportReadRules() throws Exception {
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.MIDTERM, T0));
-        RetroReport bobs = reports.saveAndFlush(new RetroReport(bob, ReportKind.FINAL, T0));
+        RetroReport report = report(alice, ReportKind.MIDTERM, T0);
+        RetroReport bobs = report(bob, ReportKind.FINAL, T0);
 
         mvc.perform(get(base(alice) + "/" + report.getId() + "/markdown").session(instructorSession))
                 .andExpect(status().isOk());
@@ -455,7 +520,7 @@ class RetroReportIntegrationTest {
      */
     @Test
     void unassignedInstructorGets404OnEveryReportRoute() throws Exception {
-        RetroReport report = reports.saveAndFlush(new RetroReport(alice, ReportKind.FINAL, T0));
+        RetroReport report = report(alice, ReportKind.FINAL, T0);
         String path = base(alice) + "/" + report.getId();
         Submission merged = pr(5, "[]", alice, 1001L, true);
         DecisionCard card = card(alice, merged, null, "배운 점");
@@ -476,7 +541,7 @@ class RetroReportIntegrationTest {
         send(post(cardsPath), instructorSession, "{\"submissionId\":\"" + Ids.toApi(merged.getId()) + "\"}")
                 .andExpect(status().isNotFound());
         send(put(cardsPath + "/" + Ids.toApi(card.getId())), instructorSession,
-                "{\"cells\":{\"learning\":\"해제된 강사\"},\"confirmed\":false}")
+                "{\"cells\":{\"learning\":\"해제된 강사\"}}")
                 .andExpect(status().isNotFound());
 
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, alice.getUser(),

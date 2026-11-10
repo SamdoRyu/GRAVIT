@@ -91,7 +91,7 @@ describe('활동 기록 — mock', () => {
   it('회고 리포트 분포는 내 확인된 활동만 (FR-ACT-03)', async () => {
     const source = make()
     await source.createActivity(TEAM_WS, req({ kind: 'planning', durationMinutes: 999 })) // 확인 전 — 빠진다
-    const report = await source.createReport(TEAM_WS, 'm_1', { kind: 'midterm' })
+    const report = await source.createReport(TEAM_WS, 'm_1', { kind: 'final', title: '회고', learning: '느낀 점', decisionCardIds: [] })
     assert.deepEqual(report.activityDistribution, [{ kind: 'planning', totalMinutes: 90 }])
   })
 })

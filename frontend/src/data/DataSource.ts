@@ -208,11 +208,11 @@ export interface DataSource {
   getTimeline(workspaceId: Id, memberId: Id, page?: number, size?: number): Promise<PageResponse<TimelineEntry>>
   /** GET W/members/{memberId}/reports — createdAt 내림차순 */
   listReports(workspaceId: Id, memberId: Id): Promise<RetroReportSummary[]>
-  /** POST W/members/{memberId}/reports — 201. 본인만, kind는 final · midterm(아니면 invalid) */
+  /** POST W/members/{memberId}/reports — 201. 본인만. 제목 1~100자 · 느낀 점 1~5000자 · 넣을 카드(본인 것, 배운 점 있음) — 아니면 invalid (#335) */
   createReport(workspaceId: Id, memberId: Id, request: ReportCreateRequest): Promise<RetroReportDto>
   /** GET W/members/{memberId}/reports/{reportId} — 계산 칸은 읽을 때 계산. 다른 팀원의 리포트 ID면 not_found */
   getReport(workspaceId: Id, memberId: Id, reportId: Id): Promise<RetroReportDto>
-  /** PUT W/members/{memberId}/reports/{reportId}/learning — 본인만, 0~5000자(아니면 invalid) */
+  /** PUT W/members/{memberId}/reports/{reportId}/learning — 본인만, 느낀 점 1~5000자(아니면 invalid) */
   updateReportLearning(workspaceId: Id, memberId: Id, reportId: Id, request: ReportLearningRequest): Promise<RetroReportDto>
   /** GET W/members/{memberId}/reports/{reportId}/markdown — text/markdown 본문. 팀원 이름은 "팀원 A"처럼 바뀐다 (FR-REP-03) */
   exportReportMarkdown(workspaceId: Id, memberId: Id, reportId: Id): Promise<string>
@@ -225,7 +225,7 @@ export interface DataSource {
    * 본인만. 내가 작성한 PR이 아님 forbidden_role, PR이 아직 열림 · 같은 PR 카드가 있음 conflict
    */
   createDecisionCard(workspaceId: Id, memberId: Id, request: DecisionCardCreateRequest): Promise<DecisionCardDto>
-  /** PUT W/members/{memberId}/decision-cards/{cardId} — 본인만. 9칸 각 0~2000자, confirmed: true인데 learning이 비었으면 invalid */
+  /** PUT W/members/{memberId}/decision-cards/{cardId} — 본인만. 9칸 각 0~2000자(「확인함」 없음 — #335) */
   updateDecisionCard(workspaceId: Id, memberId: Id, cardId: Id, request: DecisionCardUpdateRequest): Promise<DecisionCardDto>
   /** POST W/members/{memberId}/decision-cards/{cardId}/follow-up-request — 본인만. 이미 켜져 있으면 처음 시각 그대로 */
   requestFollowUp(workspaceId: Id, memberId: Id, cardId: Id): Promise<DecisionCardDto>

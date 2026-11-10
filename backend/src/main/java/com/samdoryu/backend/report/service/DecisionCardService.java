@@ -54,6 +54,7 @@ public class DecisionCardService {
     /** {@code AgendaItemDto.Source.type} — PR 안건. */
     private static final String SUBMISSION_SOURCE = "submission";
     private static final Set<SubmissionState> OPEN_STATES = Set.of(SubmissionState.OPEN, SubmissionState.DRAFT);
+    private static final String REPORT_CARD_INVALID = "배운 점을 쓴 내 기술 결정 카드만 넣을 수 있어요";
 
     private final DecisionCardRepository decisionCardRepository;
     private final FollowUpQuestionRepository followUpQuestionRepository;
@@ -135,19 +136,15 @@ public class DecisionCardService {
     }
 
     /**
-     * {@code PUT W/members/{memberId}/decision-cards/{cardId}}(P11) — 본인이 9칸을 통째로 고치고 확인 여부를 정한다.
-     * {@code confirmed: true}인데 {@code learning} 칸이 비었으면 {@code invalid}. 다른 팀원의 카드 ID면 {@code not_found}.
+     * {@code PUT W/members/{memberId}/decision-cards/{cardId}}(P11) — 본인이 9칸을 통째로 고친다. 「확인함」 단계는 없다(#335) —
+     * 배운 점 칸이 있으면 리포트를 만들 때 고를 수 있다. 다른 팀원의 카드 ID면 {@code not_found}.
      */
     @Transactional
-    public DecisionCardDto update(WorkspaceAccess access, Long memberId, Long cardId, DecisionCardCells cells,
-            boolean confirmed) {
+    public DecisionCardDto update(WorkspaceAccess access, Long memberId, Long cardId, DecisionCardCells cells) {
         workspaceService.requireMember(access.workspaceId(), memberId);
         access.requireSelf(memberId);
         DecisionCard card = requireCard(memberId, cardId);
-        if (confirmed && !cells.hasLearning()) {
-            throw new ApiException(ErrorCode.INVALID, "확인하려면 내가 배운 점을 써 주세요");
-        }
-        card.edit(cells, confirmed, now());
+        card.edit(cells, now());
         return DecisionCardDto.of(card,
                 followUpQuestionRepository.findWithInstructorByDecisionCardIds(List.of(card.getId())));
     }
@@ -205,6 +202,39 @@ public class DecisionCardService {
         return followUpQuestionRepository.findWithInstructorByDecisionCardIds(cardIds).stream()
                 .collect(Collectors.toMap(question -> question.getDecisionCard().getId(), FollowUpQuestion::getCreatedAt,
                         BinaryOperator.minBy(Comparator.naturalOrder())));
+    }
+
+    /**
+     * 리포트에 넣을 카드(#335 · P11) — 회고 리포트 만들기가 부른다(경로 팀원 · 본인 검사는 부른 쪽이 끝냈다). 모두 이 팀원의 카드이고
+     * 배운 점 칸이 있어야 한다. 형식이 틀리거나 · 없거나 · 다른 팀원 것이거나 · 배운 점이 비었거나 · 중복이면 같은 {@code invalid}
+     * — 개인 기록이라 존재를 구분하지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public List<DecisionCard> requireSelectableForReport(Long memberId, List<String> cardIds) {
+        List<Long> ids = cardIds.stream().map(Ids::fromBody).toList();
+        if (Set.copyOf(ids).size() != ids.size()) {
+            throw new ApiException(ErrorCode.INVALID, REPORT_CARD_INVALID);
+        }
+        List<DecisionCard> cards = ids.isEmpty() ? List.of() : decisionCardRepository.findAllById(ids);
+        if (cards.size() != ids.size() || cards.stream().anyMatch(card ->
+                !card.getMember().getId().equals(memberId) || !card.isSelectableForReport())) {
+            throw new ApiException(ErrorCode.INVALID, REPORT_CARD_INVALID);
+        }
+        return cards;
+    }
+
+    /** 카드 → 꼬리질문을 붙인 DTO, 주어진 순서 그대로 — 회고 리포트의 {@code decisionCards}. */
+    @Transactional(readOnly = true)
+    public List<DecisionCardDto> toDtos(List<DecisionCard> cards) {
+        if (cards.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, List<FollowUpQuestion>> questions = followUpQuestionRepository
+                .findWithInstructorByDecisionCardIds(cards.stream().map(DecisionCard::getId).toList()).stream()
+                .collect(Collectors.groupingBy(question -> question.getDecisionCard().getId()));
+        return cards.stream()
+                .map(card -> DecisionCardDto.of(card, questions.getOrDefault(card.getId(), List.of())))
+                .toList();
     }
 
     private DecisionCard requireCard(Long memberId, Long cardId) {

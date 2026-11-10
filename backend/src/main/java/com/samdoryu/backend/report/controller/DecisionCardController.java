@@ -59,7 +59,7 @@ public class DecisionCardController {
             @PathVariable String cardId, @Valid @RequestBody DecisionCardUpdateRequest request) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
         return decisionCardService.update(access, Ids.fromPath(memberId), Ids.fromPath(cardId),
-                request.cells().toCells(), request.confirmed());
+                request.cells().toCells());
     }
 
     /** 본인만 — 강사에게 꼬리질문 요청(FR-REP-11). 본문 없음. */

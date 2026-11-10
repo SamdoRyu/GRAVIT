@@ -298,7 +298,7 @@ Settings에서: `main` 보호 — PR 필수 · 필수 승인 1명 · force push 
 
 - 모노레포 구조(`frontend/` · `backend/` · `contract/examples/` · `compose.yaml` · `.env.example`), Vite `/api` 프록시 → Spring `:8080`
 - 백엔드 공통 기반(#74): Spring Security 기본 거부 · 서버 세션 · CSRF(`XSRF-TOKEN` → `X-XSRF-TOKEN`) · 401 JSON · 쓰기 Origin 검사, 공통 에러 응답 · 전역 예외 처리, 내부 ID 문자열 ↔ `Long` 변환, 인가 서비스(로그인 → 사무실 접근 → 역할)
-- 스키마: Flyway `V1` ~ `V7`(기본 · 기능 · 도움 요청 테이블, 작업 포드 8개, PR 커밋, 안건 철회 뒤 도움 요청 복구 · 거두지 않은 안건 하나, 도움 요청 개인 숨김 · 영구 삭제), 패키지별 Entity · Repository
+- 스키마: Flyway `V1` ~ `V8`(기본 · 기능 · 도움 요청 테이블, 작업 포드 8개, PR 커밋, 안건 철회 뒤 도움 요청 복구 · 거두지 않은 안건 하나, 도움 요청 개인 숨김 · 영구 삭제, 회고 리포트 제목 · 고른 기술 결정 카드), 패키지별 Entity · Repository
 - 백엔드 v1 API(`docs/CONTRACTS_API.md`):
   - 로그인: GitHub 로그인(GitHub App OAuth), 보안 심사용 ID/PW 로그인(기본 꺼짐)
   - 사무실: 레포 고르기 · 사무실 열기, Snapshot, SSE 알림, 팀 설정

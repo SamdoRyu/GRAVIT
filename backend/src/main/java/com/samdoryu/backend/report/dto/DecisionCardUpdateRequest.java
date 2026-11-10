@@ -6,10 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * {@code PUT W/members/{memberId}/decision-cards/{cardId}} 요청 — CONTRACTS_API 「15」 {@code { cells: DecisionCardCells; confirmed }}.
- * 9칸을 통째로 바꾼다. {@code confirmed: true}인데 {@code learning} 칸이 비었으면 Service가 {@code invalid}로 거부한다.
+ * {@code PUT W/members/{memberId}/decision-cards/{cardId}} 요청 — CONTRACTS_API 「15」 {@code { cells: DecisionCardCells }}.
+ * 9칸을 통째로 바꾼다. 「확인함」(confirmed)은 없다(#335).
  */
-public record DecisionCardUpdateRequest(@NotNull @Valid Cells cells, @NotNull Boolean confirmed) {
+public record DecisionCardUpdateRequest(@NotNull @Valid Cells cells) {
 
     /** 9칸 — 각 0~2000자 또는 null(CONTRACTS_API 「15」 DecisionCardCells). */
     public record Cells(

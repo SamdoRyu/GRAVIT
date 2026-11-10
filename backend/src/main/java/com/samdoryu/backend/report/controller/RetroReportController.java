@@ -51,7 +51,7 @@ public class RetroReportController {
     public RetroReportDto create(@PathVariable String workspaceId, @PathVariable String memberId,
             @Valid @RequestBody ReportCreateRequest request) {
         WorkspaceAccess access = authorizationService.requireWorkspaceAccess(workspaceId);
-        return retroReportService.create(access, Ids.fromPath(memberId), request.kind());
+        return retroReportService.create(access, Ids.fromPath(memberId), request);
     }
 
     /** 본인 · 지정된 강사. */

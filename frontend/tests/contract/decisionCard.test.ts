@@ -12,7 +12,6 @@ import {
   CARD_CELLS,
   CARD_MSG,
   FOLLOW_UP_QUESTION_MAX,
-  cardConfirmError,
   cardCreateError,
   cardUpdateError,
   draftCardCells,
@@ -166,20 +165,19 @@ describe('기술 결정 카드 규칙 — 요청 검사', () => {
     for (const bad of [null, {}, { submissionId: '' }, { submissionId: 7 }]) assert.equal(cardCreateError(bad), CARD_MSG.request)
   })
 
-  it('고치기 — 9칸이 모두 있고(문자열 또는 null) 각 2000자, confirmed는 boolean', () => {
-    assert.equal(cardUpdateError({ cells: emptyCells(), confirmed: false }), null)
-    assert.equal(cardUpdateError({ cells: { ...emptyCells(), learning: '가'.repeat(CARD_CELL_MAX) }, confirmed: true }), null)
-    assert.equal(cardUpdateError({ cells: { ...emptyCells(), goal: '가'.repeat(CARD_CELL_MAX + 1) }, confirmed: false }), CARD_MSG.cells)
+  it('고치기 — 9칸이 모두 있고(문자열 또는 null) 각 2000자, 「확인함」(confirmed)은 없다 (#335)', () => {
+    assert.equal(cardUpdateError({ cells: emptyCells() }), null)
+    assert.equal(cardUpdateError({ cells: { ...emptyCells(), learning: '가'.repeat(CARD_CELL_MAX) } }), null)
+    assert.equal(cardUpdateError({ cells: { ...emptyCells(), goal: '가'.repeat(CARD_CELL_MAX + 1) } }), CARD_MSG.cells)
     const { source: _omitted, ...missing } = emptyCells()
-    for (const bad of [null, { cells: emptyCells() }, { cells: emptyCells(), confirmed: 'yes' }, { cells: missing, confirmed: false }, { cells: { ...emptyCells(), goal: 3 }, confirmed: false }]) {
+    for (const bad of [null, {}, { cells: emptyCells(), confirmed: true }, { cells: missing }, { cells: { ...emptyCells(), goal: 3 } }]) {
       assert.equal(cardUpdateError(bad), CARD_MSG.cells)
     }
     assert.deepEqual(CARD_CELLS.map((c) => c.key), Object.keys(retroReportExample.decisionCards[0].cells), '9칸 = 계약 순서')
   })
 
-  it('확인 — 배운 점이 공백뿐이면 안 된다', () => {
-    assert.equal(cardConfirmError({ cells: { ...emptyCells(), learning: '  ' }, confirmed: true }), CARD_MSG.learningRequired)
-    assert.equal(cardConfirmError({ cells: emptyCells(), confirmed: false }), null)
+  it('배운 점 — 공백뿐이면 비었다(리포트에 고를 수 없다)', () => {
+    assert.equal(hasLearning({ learning: '  ' }), false)
     assert.equal(hasLearning({ learning: '배운 점' }), true)
   })
 
@@ -219,8 +217,8 @@ describe('mock v1 — 기술 결정 카드', () => {
       source: 'https://github.com/team-samdo/gitvillage/pull/15\nhttps://github.com/team-samdo/gitvillage/issues/5',
     })
     assert.deepEqual(
-      [card.memberId, card.submissionId, card.confirmed, card.confirmedAt, card.followUpRequested, card.followUpRequestedAt, card.followUpQuestions, card.createdAt, card.updatedAt],
-      [ME, MY_PR, false, null, false, null, [], '2026-11-05T03:20:00Z', '2026-11-05T03:20:00Z'],
+      [card.memberId, card.submissionId, card.followUpRequested, card.followUpRequestedAt, card.followUpQuestions, card.createdAt, card.updatedAt],
+      [ME, MY_PR, false, null, [], '2026-11-05T03:20:00Z', '2026-11-05T03:20:00Z'],
     )
     assert.deepEqual(await source.listDecisionCards(TEAM_WS, ME), [card])
   })
@@ -239,27 +237,23 @@ describe('mock v1 — 기술 결정 카드', () => {
     await rejectsCode(source.createDecisionCard(TEAM_WS, ME, { submissionId: MY_PR }), 'conflict', CARD_MSG.duplicate)
   })
 
-  it('고치기 · 확인 — 통째로 바꾸고, 확인하려면 배운 점, 확인 시각은 처음 것을 두고 끄면 지운다', async () => {
+  it('고치기 — 9칸을 통째로 바꾸고 「확인함」 단계는 없다, 배운 점이 비어도 저장된다 (#335)', async () => {
     const { source, clock } = await makeWithMergedPr()
     const card = await source.createDecisionCard(TEAM_WS, ME, { submissionId: MY_PR })
     const cells = { ...card.cells, goal: '세션을 오래 유지한다' }
 
-    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...cells, goal: '가'.repeat(CARD_CELL_MAX + 1) }, confirmed: false }), 'invalid', CARD_MSG.cells)
-    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, 'dc_404', { cells, confirmed: true }), 'not_found', CARD_MSG.cardNotFound)
-    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, card.id, { cells, confirmed: true }), 'invalid', CARD_MSG.learningRequired)
+    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...cells, goal: '가'.repeat(CARD_CELL_MAX + 1) } }), 'invalid', CARD_MSG.cells)
+    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, card.id, { cells, confirmed: true } as never), 'invalid', CARD_MSG.cells)
+    await rejectsCode(source.updateDecisionCard(TEAM_WS, ME, 'dc_404', { cells }), 'not_found', CARD_MSG.cardNotFound)
 
     clock.at = minutesLater(30)
-    const draft = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells, confirmed: false })
-    assert.deepEqual([draft.cells.goal, draft.confirmed, draft.confirmedAt, draft.updatedAt], ['세션을 오래 유지한다', false, null, '2026-11-05T03:30:00Z'])
+    const draft = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells })
+    assert.deepEqual([draft.cells.goal, draft.cells.learning, draft.updatedAt], ['세션을 오래 유지한다', null, '2026-11-05T03:30:00Z'])
+    assert.ok(!('confirmed' in draft))
 
     clock.at = minutesLater(40)
-    const confirmed = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...cells, learning: '쿠키 속성은 콜백 흐름으로 정한다' }, confirmed: true })
-    assert.deepEqual([confirmed.confirmed, confirmed.confirmedAt], [true, '2026-11-05T03:40:00Z'])
-    clock.at = minutesLater(50)
-    const again = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: confirmed.cells, confirmed: true })
-    assert.deepEqual([again.confirmedAt, again.updatedAt], ['2026-11-05T03:40:00Z', '2026-11-05T03:50:00Z'])
-    const off = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: confirmed.cells, confirmed: false })
-    assert.equal(off.confirmedAt, null)
+    const learned = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...cells, learning: '쿠키 속성은 콜백 흐름으로 정한다' } })
+    assert.deepEqual([learned.cells.learning, learned.updatedAt], ['쿠키 속성은 콜백 흐름으로 정한다', '2026-11-05T03:40:00Z'])
   })
 
   it('강사 꼬리질문 요청 — 본인만, 다시 눌러도 처음 시각 그대로, 수정 시각은 바꾸지 않는다', async () => {
@@ -290,14 +284,16 @@ describe('mock v1 — 기술 결정 카드', () => {
     await rejectsCode(source.listDecisionCards(TEAM_WS, 'm_404'), 'not_found')
   })
 
-  it('회고 리포트의 decisionCards — 본인이 확인한 카드만 (P11)', async () => {
+  it('회고 리포트의 decisionCards — 만들 때 고른 카드만, 배운 점이 빈 카드는 고를 수 없다 (P11 · #335)', async () => {
     const { source } = await makeWithMergedPr()
     const card = await source.createDecisionCard(TEAM_WS, ME, { submissionId: MY_PR })
-    const report = await source.createReport(TEAM_WS, ME, { kind: 'final' })
-    assert.deepEqual((await source.getReport(TEAM_WS, ME, report.id)).decisionCards, [])
-    const confirmed = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...card.cells, learning: '배운 점' }, confirmed: true })
-    assert.deepEqual((await source.getReport(TEAM_WS, ME, report.id)).decisionCards, [confirmed])
-    assert.ok((await source.exportReportMarkdown(TEAM_WS, ME, report.id)).includes('- 내가 배운 점: 배운 점\n'))
+    const report = (ids: string[]) => source.createReport(TEAM_WS, ME, { kind: 'final', title: '회고', learning: '느낀 점', decisionCardIds: ids })
+    await rejectsCode(report([card.id]), 'invalid')
+    assert.deepEqual((await report([])).decisionCards, [])
+    const learned = await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: { ...card.cells, learning: '배운 점' } })
+    const withCard = await report([learned.id])
+    assert.deepEqual((await source.getReport(TEAM_WS, ME, withCard.id)).decisionCards, [learned])
+    assert.ok((await source.exportReportMarkdown(TEAM_WS, ME, withCard.id)).includes('- 내가 배운 점: 배운 점\n'))
   })
 
   it('개인 데이터라 Snapshot · SSE에 실리지 않는다 — 만들기 · 고치기 · 요청에 알림이 없다', async () => {
@@ -305,7 +301,7 @@ describe('mock v1 — 기술 결정 카드', () => {
     const changes: Change[] = []
     const off = source.subscribe(TEAM_WS, (c) => changes.push(c))
     const card = await source.createDecisionCard(TEAM_WS, ME, { submissionId: MY_PR })
-    await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: card.cells, confirmed: false })
+    await source.updateDecisionCard(TEAM_WS, ME, card.id, { cells: card.cells })
     await source.requestFollowUp(TEAM_WS, ME, card.id)
     off()
     assert.deepEqual(changes, [])

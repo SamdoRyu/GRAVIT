@@ -4,13 +4,13 @@
 // 로그인 여부(unauthorized)와 "내가 들어갈 수 있는 사무실"(not_found)은 지킨다.
 // 이름은 데모 mock을 지울 때 createMockDataSource로 바꾼다.
 import { DataError, type DataSource } from '../../DataSource'
-import { CARD_MSG, cardConfirmError, cardCreateError, cardUpdateError, draftCardCells, followUpQuestionError, type CardMaterials } from '../../rules/decisionCard'
+import { CARD_MSG, cardCreateError, cardUpdateError, draftCardCells, followUpQuestionError, type CardMaterials } from '../../rules/decisionCard'
 import { EVALUATION_MSG, evaluationError, orderReasons } from '../../rules/evaluation'
 import { averageReviewWaitHours } from '../../rules/flow'
 import { DELETED_HELP_REQUEST_TITLE, HELP_MSG, acceptsComments, helpCloseError, helpCommentError, helpCreateError, helpToAgendaError, instructorRequestError, isAgendaCandidate, isOpenForDiscussion } from '../../rules/help'
 import { MEETING_MSG, agendaCreateError, blankToNull, decisionError, dueDateError, instructorFeedbackError, meetingEndError } from '../../rules/meeting'
 import { SETTINGS_MSG, addLocalDays, isLocalDate, kstToday, openWorkspaceError, settingsError } from '../../rules/period'
-import { REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
+import { REPORT_KIND_LABEL, REPORT_MSG, TIMELINE_PAGE_SIZE, anonymizeMembers, isSelectableForReport, reportCreateError, reportLearningError, reportMarkdown, retroReportView, slicePage, timelineEntries, timelinePageError, type StoredReport } from '../../rules/report'
 import { INBOX_MSG, canUseInbox } from '../../rules/inbox'
 import { INSTRUCTOR_MSG, assignError } from '../../rules/instructors'
 import { CONVENTION_MSG, conventionRequestError } from '../../rules/conventionLibrary'
@@ -1081,7 +1081,8 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       return (ws.reports ?? [])
         .filter((r) => r.memberId === target.id)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .map((r) => ({ id: r.id, kind: r.kind, createdAt: r.createdAt }))
+        .map(storedReport)
+        .map((r) => ({ id: r.id, kind: r.kind, title: r.title, createdAt: r.createdAt }))
     },
 
     async createReport(workspaceId, memberId, request) {
@@ -1091,7 +1092,18 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       const error = reportCreateError(request)
       if (error) throw new DataError(error, 'invalid')
       const target = personalTarget(ws, memberId, 'write')
-      const report: StoredReport = { id: nextId('rp'), memberId: target.id, kind: request.kind, createdAt: toInstant(now()), learning: null }
+      // 넣을 카드 — 본인 카드이고 배운 점이 있어야 한다. 없음 · 남의 것 · 빈 배운 점은 같은 invalid(서버 requireSelectableForReport)
+      const mine = cardsOf(ws, target.id)
+      if (request.decisionCardIds.some((id) => !mine.some((c) => c.id === id && isSelectableForReport(c)))) throw new DataError(REPORT_MSG.cards, 'invalid')
+      const report: StoredReport = {
+        id: nextId('rp'),
+        memberId: target.id,
+        kind: request.kind,
+        title: request.title.trim(),
+        createdAt: toInstant(now()),
+        learning: request.learning,
+        decisionCardIds: [...request.decisionCardIds],
+      }
       ws.reports ??= []
       ws.reports.push(report)
       save()
@@ -1121,7 +1133,7 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       await wait()
       const ws = accessible(workspaceId, requireUser())
       const target = personalTarget(ws, memberId, 'read')
-      return anonymizeMembers(reportMarkdown(reportView(ws, findReport(ws, target, reportId))), ws.snapshot.members)
+      return anonymizeMembers(reportMarkdown(reportView(ws, findReport(ws, target, reportId)), ws.snapshot.submissions), ws.snapshot.members)
     },
 
     // ---- 「15」 개인 API — 기술 결정 카드 · 강사 꼬리질문 (#218). 9칸은 서버와 같은 규칙(rules/decisionCard.ts) ----
@@ -1153,8 +1165,6 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
         memberId: target.id,
         submissionId: sub.id,
         cells: draftCardCells(cardMaterials(ws, target, sub)),
-        confirmed: false,
-        confirmedAt: null,
         followUpRequested: false,
         followUpRequestedAt: null,
         followUpQuestions: [],
@@ -1173,15 +1183,10 @@ export function createV1MockDataSource(opts: V1MockOptions = {}): V1MockDataSour
       if (error) throw new DataError(error, 'invalid')
       const target = personalTarget(ws, memberId, 'write')
       const card = findCard(ws, target, cardId)
-      const confirmError = cardConfirmError(request)
-      if (confirmError) throw new DataError(confirmError, 'invalid')
       const at = toInstant(now())
       // 계약의 9칸만, 계약 순서대로 통째로 바꾼다
       const c = request.cells
       card.cells = { goal: c.goal, initialApproach: c.initialApproach, feedbackReceived: c.feedbackReceived, meetingDecision: c.meetingDecision, finalChange: c.finalChange, rationale: c.rationale, blockedMoment: c.blockedMoment, learning: c.learning, source: c.source }
-      card.confirmed = request.confirmed
-      // 확인을 끄면 확인 시각을 지우고, 이미 확인된 카드를 다시 확인하면 처음 시각을 둔다(서버 DecisionCard.edit)
-      card.confirmedAt = request.confirmed ? (card.confirmedAt ?? at) : null
       card.updatedAt = at
       save()
       return structuredClone(card)
@@ -1341,10 +1346,23 @@ function findReport(ws: MockWorkspace, member: MemberDto, reportId: Id): StoredR
   return report
 }
 
-/** 저장된 리포트 + 지금 사무실 데이터 → 응답. 카드는 본인이 확인한 것만(P11), 활동 분포는 본인의 확인된 활동만(FR-ACT-03) */
-function reportView(ws: MockWorkspace, report: StoredReport) {
+/** 저장된 리포트 + 지금 사무실 데이터 → 응답. 카드는 만들 때 고른 것만(P11 · #335), 활동 분포는 본인의 확인된 활동만(FR-ACT-03) */
+/**
+ * #335 이전 브라우저 저장값 보정 — 제목 · 고른 카드가 없던 리포트는 서버 V8처럼 "최종/중간 회고 리포트 · 만든 날"로 읽고, 고른 카드는
+ * 없는 것으로 본다(예전 mock은 확인 여부를 따로 남기지 않았다).
+ */
+function storedReport(report: StoredReport): StoredReport {
+  return {
+    ...report,
+    title: report.title ?? `${REPORT_KIND_LABEL[report.kind]} 회고 리포트 · ${kstToday(new Date(report.createdAt))}`,
+    decisionCardIds: report.decisionCardIds ?? [],
+  }
+}
+
+function reportView(ws: MockWorkspace, stored: StoredReport) {
+  const report = storedReport(stored)
   const { tasks, submissions, agendaItems } = ws.snapshot
-  const decisionCards = cardsOf(ws, report.memberId).filter((c) => c.confirmed)
+  const decisionCards = cardsOf(ws, report.memberId)
   const activityDistribution = activityMinutesByKind((ws.activities ?? []).filter((a) => a.authorMemberId === report.memberId))
   return structuredClone(retroReportView(report, { tasks, submissions, agendaItems, activityDistribution, decisionCards }))
 }

@@ -33,8 +33,7 @@ class DecisionCardContractTest {
 
     static final String CONTRACT_UPDATE = "{\"cells\":{\"goal\":\"로그인 실패를 계약 모양으로\",\"initialApproach\":null,"
             + "\"feedbackReceived\":\"비추천: 실패 응답 모양이 달라요\",\"meetingDecision\":null,\"finalChange\":null,"
-            + "\"rationale\":null,\"blockedMoment\":null,\"learning\":\"에러 응답은 한 곳에서\",\"source\":null},"
-            + "\"confirmed\":true}";
+            + "\"rationale\":null,\"blockedMoment\":null,\"learning\":\"에러 응답은 한 곳에서\",\"source\":null}}";
 
     /** 계약 「15」 FollowUpQuestionDto — instructor는 「1」 UserRef. 예시 JSON의 카드에는 꼬리질문이 없어 TS 인터페이스를 옮겼다. */
     static final String CONTRACT_FOLLOW_UP_QUESTION = "{\"id\":\"30\","
@@ -97,14 +96,14 @@ class DecisionCardContractTest {
     }
 
     @Test
-    void eachCellIsUpTo2000CharsAndCellsAndConfirmedAreRequired() {
+    void eachCellIsUpTo2000CharsAndCellsAreRequired() {
         String max = "a".repeat(2000);
         String over = "a".repeat(2001);
         DecisionCardUpdateRequest.Cells longest = new DecisionCardUpdateRequest.Cells(max, max, max, max, max, max, max,
                 max, max);
-        assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(longest, true))).isEmpty();
+        assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(longest))).isEmpty();
         assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(new DecisionCardUpdateRequest.Cells(
-                null, null, null, null, null, null, null, null, null), false))).isEmpty();
+                null, null, null, null, null, null, null, null, null)))).isEmpty();
 
         // 9칸 어느 것이든 2001자면 실패
         for (int i = 0; i < 9; i++) {
@@ -112,10 +111,9 @@ class DecisionCardContractTest {
             values[i] = over;
             DecisionCardUpdateRequest.Cells cells = new DecisionCardUpdateRequest.Cells(values[0], values[1], values[2],
                     values[3], values[4], values[5], values[6], values[7], values[8]);
-            assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(cells, false))).as("칸 %d", i).hasSize(1);
+            assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(cells))).as("칸 %d", i).hasSize(1);
         }
 
-        assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(null, false))).hasSize(1);
-        assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(longest, null))).hasSize(1);
+        assertThat(VALIDATOR.validate(new DecisionCardUpdateRequest(null))).hasSize(1);
     }
 }

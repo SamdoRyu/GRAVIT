@@ -327,7 +327,8 @@ class ActivityIntegrationTest {
         confirm(aliceSession, base, carols).andExpect(status().isOk());
 
         String reportBody = write(post(base + "/members/" + Ids.toApi(alice.getId()) + "/reports"), aliceSession,
-                "{\"kind\":\"final\"}").andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+                "{\"kind\":\"final\",\"title\":\"t\",\"learning\":\"l\",\"decisionCardIds\":[]}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 
         JsonNode report = ContractShape.readTree(reportBody);
         JsonNode distribution = report.get("activityDistribution");

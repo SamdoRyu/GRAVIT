@@ -151,7 +151,7 @@ class DecisionCardAccessIntegrationTest {
 
     /** 카드 경로 다섯 개 — 이름 → 요청. 쓰기는 CSRF 쿠키 → 헤더 · 허용 출처를 갖춘다(거부가 CSRF 때문이 아니게). */
     private Map<String, MockHttpServletRequestBuilder> routes() {
-        String updateBody = "{\"cells\":{\"goal\":\"바뀐 목표\",\"learning\":\"바뀐 배운 점\"},\"confirmed\":true}";
+        String updateBody = "{\"cells\":{\"goal\":\"바뀐 목표\",\"learning\":\"바뀐 배운 점\"}}";
         return Map.of(
                 "목록", get(cardsPath),
                 "만들기", write(post(cardsPath), "{\"submissionId\":\"" + Ids.toApi(cardlessPr.getId()) + "\"}"),
@@ -210,11 +210,10 @@ class DecisionCardAccessIntegrationTest {
         assertRow("지정된 적 없는 강사", neverAssignedSession, all(404));
         assertRow("다른 사무실 팀원", outsiderSession, all(404));
 
-        // 거부 뒤 그대로 — 카드 하나, 9칸 · 확인 · 수정 시각 그대로, 꼬리질문 없음
+        // 거부 뒤 그대로 — 카드 하나, 9칸 · 수정 시각 그대로, 꼬리질문 없음
         assertThat(cards.findAll()).singleElement().satisfies(only -> {
             assertThat(only.getId()).isEqualTo(card.getId());
             assertThat(only.getCells()).isEqualTo(DecisionCardCells.EMPTY);
-            assertThat(only.getConfirmedAt()).isNull();
             assertThat(only.getUpdatedAt()).isEqualTo(T0);
         });
         assertThat(followUpQuestions.findAll()).isEmpty();

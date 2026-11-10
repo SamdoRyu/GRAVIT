@@ -8,15 +8,14 @@ import com.samdoryu.backend.common.error.ErrorCode;
 import com.samdoryu.backend.common.id.Ids;
 import com.samdoryu.backend.meeting.dto.AgendaItemDto;
 import com.samdoryu.backend.meeting.service.AgendaItemService;
+import com.samdoryu.backend.report.domain.DecisionCard;
 import com.samdoryu.backend.report.domain.DecisionCardCells;
-import com.samdoryu.backend.report.domain.ReportKind;
 import com.samdoryu.backend.report.domain.RetroReport;
 import com.samdoryu.backend.report.dto.DecisionCardDto;
+import com.samdoryu.backend.report.dto.ReportCreateRequest;
 import com.samdoryu.backend.report.dto.RetroReportDto;
 import com.samdoryu.backend.report.dto.RetroReportSummary;
 import com.samdoryu.backend.report.repository.RetroReportRepository;
-import com.samdoryu.backend.sync.domain.SubmissionState;
-import com.samdoryu.backend.sync.domain.TaskState;
 import com.samdoryu.backend.sync.dto.SubmissionDto;
 import com.samdoryu.backend.sync.dto.TaskDto;
 import com.samdoryu.backend.sync.service.SyncedItemService;
@@ -28,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -36,9 +36,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 개인 회고 리포트(FR-REP-01 · 05 · 06). 저장하는 것은 종류 · 배운 점 · 만든 시각뿐이고, 나머지 칸은 읽을 때 지금 데이터로 계산한다.
- * 개인 API 공통 규칙(CONTRACTS_API 「15」): 사무실 접근(Controller) → 경로 팀원(빠진 팀원 포함, 아니면 404) → 읽기는 본인 · 지정된 강사,
- * 쓰기는 본인(403). Snapshot · SSE에 싣지 않는다.
+ * 개인 회고 리포트(FR-REP-01 · 02 · 05 · 06 · 07). 저장하는 것은 종류 · 제목 · 느낀 점 · 만든 시각 · 고른 기술 결정 카드(#335)이고,
+ * 나머지 칸은 읽을 때 지금 데이터로 계산한다. 개인 API 공통 규칙(CONTRACTS_API 「15」): 사무실 접근(Controller) → 경로 팀원(빠진 팀원
+ * 포함, 아니면 404) → 읽기는 본인 · 지정된 강사, 쓰기는 본인(403). Snapshot · SSE에 싣지 않는다.
  */
 @Service
 public class RetroReportService {
@@ -49,6 +49,10 @@ public class RetroReportService {
     private static final Map<ActivityKind, String> ACTIVITY_KIND_NAMES = Map.of(
             ActivityKind.PLANNING, "기획", ActivityKind.RESEARCH, "자료조사", ActivityKind.DESIGN, "디자인",
             ActivityKind.PRESENTATION, "발표 준비", ActivityKind.MENTOR_QUESTION, "멘토 질문");
+    /** 리포트 안 카드 순서 — PR 번호 오름차순(같으면 먼저 만든 카드). */
+    private static final Comparator<DecisionCard> BY_PR_NUMBER = Comparator
+            .comparingInt((DecisionCard card) -> card.getSubmission().getGithubPrNumber())
+            .thenComparing(DecisionCard::getId);
 
     private final RetroReportRepository retroReportRepository;
     private final WorkspaceService workspaceService;
@@ -77,27 +81,28 @@ public class RetroReportService {
                 .map(RetroReportSummary::of).toList();
     }
 
-    /** {@code POST W/members/{memberId}/reports} — 본인만. 종류마다 여러 번 만들 수 있다(만든 시각으로 구분). */
+    /**
+     * {@code POST W/members/{memberId}/reports}(#335) — 본인만. 제목(앞뒤 공백 뺌) · 느낀 점 · 넣을 카드를 받는다. 카드는 본인 카드이고
+     * 배운 점이 있어야 한다({@link DecisionCardService#requireSelectableForReport}). 여러 번 만들 수 있다(제목 · 만든 시각으로 구분).
+     */
     @Transactional
-    public RetroReportDto create(WorkspaceAccess access, Long memberId, ReportKind kind) {
+    public RetroReportDto create(WorkspaceAccess access, Long memberId, ReportCreateRequest request) {
         Member member = workspaceService.requireMember(access.workspaceId(), memberId);
         access.requireSelf(memberId);
-        RetroReport report = retroReportRepository.save(new RetroReport(member, kind, Instant.now()));
+        List<DecisionCard> cards = decisionCardService.requireSelectableForReport(memberId, request.decisionCardIds());
+        RetroReport report = retroReportRepository.save(new RetroReport(member, request.kind(), request.title().strip(),
+                request.learning(), cards, Instant.now()));
         return toDto(access, report);
     }
 
     /** {@code GET W/members/{memberId}/reports/{reportId}} — 본인 · 지정된 강사. 다른 팀원의 리포트 ID면 404. */
     @Transactional(readOnly = true)
     public RetroReportDto get(WorkspaceAccess access, Long memberId, Long reportId) {
-        workspaceService.requireMember(access.workspaceId(), memberId);
-        access.requireSelfOrInstructor(memberId);
-        RetroReport report = retroReportRepository.findByIdAndMemberId(reportId, memberId)
-                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-        return toDto(access, report);
+        return toDto(access, requireReadable(access, memberId, reportId));
     }
 
     /**
-     * {@code PUT W/members/{memberId}/reports/{reportId}/learning}(FR-REP-02) — 내가 배운 점을 통째로 바꾼다. 본인만
+     * {@code PUT W/members/{memberId}/reports/{reportId}/learning}(FR-REP-02) — 느낀 점을 통째로 바꾼다(1~5000자). 본인만
      * (다른 학생 · 강사 403). 다른 팀원의 리포트 ID면 404.
      */
     @Transactional
@@ -116,22 +121,33 @@ public class RetroReportService {
      */
     @Transactional(readOnly = true)
     public String markdown(WorkspaceAccess access, Long memberId, Long reportId) {
-        RetroReportDto report = get(access, memberId, reportId);
-        return anonymize(toMarkdown(report), workspaceService.allMembers(access.workspaceId()));
+        RetroReport stored = requireReadable(access, memberId, reportId);
+        Map<String, String> cardHeads = stored.getDecisionCards().stream().collect(Collectors.toMap(
+                card -> Ids.toApi(card.getId()),
+                card -> "#" + card.getSubmission().getGithubPrNumber() + " " + card.getSubmission().getTitle()));
+        return anonymize(toMarkdown(toDto(access, stored), cardHeads), workspaceService.allMembers(access.workspaceId()));
     }
 
-    private static String toMarkdown(RetroReportDto report) {
+    private RetroReport requireReadable(WorkspaceAccess access, Long memberId, Long reportId) {
+        workspaceService.requireMember(access.workspaceId(), memberId);
+        access.requireSelfOrInstructor(memberId);
+        return retroReportRepository.findByIdAndMemberId(reportId, memberId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+    }
+
+    /** @param cardHeads 카드 ID → "#PR번호 PR 제목" */
+    private static String toMarkdown(RetroReportDto report, Map<String, String> cardHeads) {
         StringBuilder md = new StringBuilder();
-        md.append("# ").append(report.kind() == ReportKind.FINAL ? "최종" : "중간").append(" 회고 리포트\n\n")
+        md.append("# ").append(report.title()).append("\n\n")
                 .append("- 만든 시각: ").append(report.createdAt()).append("\n\n")
-                .append("## 요약\n\n").append(report.summary()).append("\n\n")
+                .append("## 느낀 점\n\n").append(report.learning() == null || report.learning().isBlank()
+                        ? NONE : report.learning()).append("\n\n")
                 .append("## 담당 기능 영역\n\n");
         report.areaLabels().forEach(label -> md.append("- ").append(label).append('\n'));
         if (report.areaLabels().isEmpty()) {
             md.append(NONE).append('\n');
         }
-        md.append("\n## 내가 배운 점\n\n").append(report.learning() == null || report.learning().isBlank()
-                ? NONE : report.learning()).append("\n\n## 안건 결론\n\n");
+        md.append("\n## 안건 결론\n\n");
         for (RetroReportDto.AgendaResult result : report.agendaResults()) {
             md.append("### ").append(result.title()).append("\n\n")
                     .append("- 결론: ").append(result.conclusion()).append('\n');
@@ -160,7 +176,7 @@ public class RetroReportService {
         }
         md.append("\n## 기술 결정 카드\n\n");
         for (DecisionCardDto card : report.decisionCards()) {
-            md.append("### 확인한 카드 — ").append(card.confirmedAt()).append("\n\n");
+            md.append("### ").append(cardHeads.get(card.id())).append("\n\n");
             cellLines(card.cells()).forEach(line -> md.append(line).append('\n'));
             card.followUpQuestions().forEach(question -> md.append("- ").append(question.createdAt())
                     .append(" 강사 꼬리질문: ").append(question.body()).append('\n'));
@@ -212,17 +228,13 @@ public class RetroReportService {
     }
 
     /**
-     * 계산 칸 — 활동 분포는 본인의 확인된 활동만 유형별 분 합계(FR-ACT-03 · #173). 결정 카드는 본인이 확인한 것만(P11), 카드 목록 순서(createdAt
-     * 내림차순) 그대로 — 카드 읽기 검사(본인 · 지정된 강사)는 리포트 읽기와 같다.
+     * 계산 칸 — 활동 분포는 본인의 확인된 활동만 유형별 분 합계(FR-ACT-03 · #173). 기술 결정 카드는 리포트에 고른 것만 PR 번호 순(#335),
+     * 담당 기능 영역은 고른 카드의 PR과 그 PR에 연결된 이슈의 {@code area:*}(중복 없이 이름순). 카드 읽기 검사(본인 · 지정된 강사)는 리포트
+     * 읽기와 같다.
      */
     private RetroReportDto toDto(WorkspaceAccess access, RetroReport report) {
         Long workspaceId = access.workspaceId();
         String me = Ids.toApi(report.getMember().getId());
-        // ponytail: 사무실의 이슈 · PR · 안건 전부를 읽어 본인 것을 거른다 — 팀 레포 규모면 충분, 커지면 팀원 조건 쿼리로
-        List<TaskDto> myIssues = syncedItemService.listTasks(workspaceId).stream()
-                .filter(issue -> issue.assigneeMemberIds().contains(me)).toList();
-        List<SubmissionDto> myPrs = syncedItemService.listSubmissions(workspaceId).stream()
-                .filter(pr -> me.equals(pr.authorMemberId())).toList();
         List<AgendaItemDto> myAgenda = agendaItemService.listAll(workspaceId).stream()
                 .filter(item -> me.equals(item.raisedByMemberId())).toList();
 
@@ -238,24 +250,35 @@ public class RetroReportService {
                                 feedback.body(), feedback.createdAt())))
                 .sorted(Comparator.comparing(RetroReportDto.InstructorFeedback::createdAt))
                 .toList();
-        List<String> areaLabels = Stream.concat(
-                        myIssues.stream().flatMap(issue -> issue.labels().stream()),
-                        myPrs.stream().flatMap(pr -> pr.labels().stream()))
-                .filter(label -> label.startsWith(AREA_LABEL_PREFIX))
-                .distinct().sorted().toList();
 
-        List<DecisionCardDto> confirmedCards = decisionCardService.list(access, report.getMember().getId()).stream()
-                .filter(DecisionCardDto::confirmed).toList();
+        List<DecisionCard> cards = report.getDecisionCards().stream().sorted(BY_PR_NUMBER).toList();
+        List<String> areaLabels = areaLabels(workspaceId, cards);
         List<RetroReportDto.ActivityShare> activityDistribution = activityService
                 .confirmedMinutesByKind(report.getMember().getId()).entrySet().stream()
                 .map(entry -> new RetroReportDto.ActivityShare(entry.getKey(), entry.getValue()))
                 .toList();
 
-        String summary = "맡은 이슈 %d개(닫힘 %d) · 작성한 PR %d개(머지 %d) · 올린 안건 %d건(결론 %d)".formatted(
-                myIssues.size(), myIssues.stream().filter(issue -> issue.state() == TaskState.CLOSED).count(),
-                myPrs.size(), myPrs.stream().filter(pr -> pr.state() == SubmissionState.MERGED).count(),
-                myAgenda.size(), agendaResults.size());
-        return new RetroReportDto(Ids.toApi(report.getId()), report.getKind(), report.getCreatedAt(), me, summary,
-                areaLabels, report.getLearning(), agendaResults, feedbacks, activityDistribution, confirmedCards);
+        return new RetroReportDto(Ids.toApi(report.getId()), report.getKind(), report.getTitle(), report.getCreatedAt(),
+                me, areaLabels, report.getLearning(), agendaResults, feedbacks, activityDistribution,
+                decisionCardService.toDtos(cards));
+    }
+
+    /** 고른 카드의 PR + 그 PR에 연결된 이슈의 {@code area:*} — 카드가 없으면 빈 목록. */
+    private List<String> areaLabels(Long workspaceId, List<DecisionCard> cards) {
+        if (cards.isEmpty()) {
+            return List.of();
+        }
+        Set<String> prIds = cards.stream().map(card -> Ids.toApi(card.getSubmission().getId()))
+                .collect(Collectors.toSet());
+        // ponytail: 사무실의 PR · 이슈 전부를 읽어 고른 것을 거른다 — 팀 레포 규모면 충분, 커지면 ID 조건 쿼리로
+        List<SubmissionDto> prs = syncedItemService.listSubmissions(workspaceId).stream()
+                .filter(pr -> prIds.contains(pr.id())).toList();
+        Set<String> issueIds = prs.stream().flatMap(pr -> pr.linkedTaskIds().stream()).collect(Collectors.toSet());
+        List<TaskDto> issues = issueIds.isEmpty() ? List.of() : syncedItemService.listTasks(workspaceId).stream()
+                .filter(issue -> issueIds.contains(issue.id())).toList();
+        return Stream.concat(prs.stream().flatMap(pr -> pr.labels().stream()),
+                        issues.stream().flatMap(issue -> issue.labels().stream()))
+                .filter(label -> label.startsWith(AREA_LABEL_PREFIX))
+                .distinct().sorted().toList();
     }
 }
