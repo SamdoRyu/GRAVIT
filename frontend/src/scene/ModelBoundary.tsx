@@ -4,6 +4,7 @@
 // 다시 불러오기: 네트워크가 돌아오면(online) 바로, 그 밖에는 RETRY_DELAYS_MS 간격으로 몇 번만. 소유: C.
 import { useGLTF } from '@react-three/drei'
 import { Component, Suspense, type ReactNode } from 'react'
+import { ModelPending, WarmGroup } from './shaderWarmup'
 
 /** 실패한 뒤 다시 불러오기까지 기다리는 시간 — 다 쓰면 online 이벤트만 기다린다(없는 파일을 계속 부르지 않게) */
 const RETRY_DELAYS_MS = [5_000, 20_000, 60_000] as const
@@ -57,8 +58,9 @@ export class ModelBoundary extends Component<Props, State> {
   render() {
     if (this.state.failed) return null
     return (
-      <Suspense key={this.state.attempt} fallback={null}>
-        {this.props.children}
+      <Suspense key={this.state.attempt} fallback={<ModelPending />}>
+        {/* 받는 동안은 첫 그림이 기다리고(ModelPending), 첫 그림 뒤에 붙으면 셰이더를 미리 컴파일할 때까지 숨겨 둔다(#331) */}
+        <WarmGroup>{this.props.children}</WarmGroup>
       </Suspense>
     )
   }

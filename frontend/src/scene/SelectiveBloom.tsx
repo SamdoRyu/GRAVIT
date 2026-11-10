@@ -5,7 +5,7 @@
 // 저사양(LOW_POWER)이면 끈다. 주소에 ?bloom=0이면 끈다(비교 · 문제 확인용).
 // 소유: C.
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { AdditiveBlending, BackSide, DoubleSide, FrontSide, HalfFloatType, Line, Mesh, MeshBasicMaterial, Points, Sprite, Vector2, type ShaderMaterial, WebGLRenderTarget, type Material, type Object3D } from 'three'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js'
@@ -13,6 +13,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { bloomGain, blooms } from './bloom'
 import { LOW_POWER } from './runtime'
+import { warmMaterials } from './warmup'
 
 /** 번짐 세기 · 퍼짐 · 번짐용 해상도 비율 */
 const STRENGTH = 0.6
@@ -49,12 +50,18 @@ function BloomPasses() {
     const composer = new EffectComposer(gl, new WebGLRenderTarget(1, 1, { type: HalfFloatType }))
     composer.renderToScreen = false
     composer.addPass(new RenderPass(scene, camera))
-    composer.addPass(new UnrealBloomPass(new Vector2(1, 1), STRENGTH, RADIUS, 0))
+    const bloomPass = new UnrealBloomPass(new Vector2(1, 1), STRENGTH, RADIUS, 0)
+    composer.addPass(bloomPass)
     // 흐린 번짐을 화면 위에 더한다
     const overlay = new MeshBasicMaterial({ map: composer.renderTarget2.texture, blending: AdditiveBlending, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
-    return { composer, overlay, quad: new FullScreenQuad(overlay), saved: new Map<Drawable, Material | Material[]>(), hidden: [] as Object3D[], dimmed: new Map<Material, number>() }
+    return { composer, bloomPass, overlay, quad: new FullScreenQuad(overlay), saved: new Map<Drawable, Material | Material[]>(), hidden: [] as Object3D[], dimmed: new Map<Material, number>() }
   }, [gl, scene, camera])
 
+  // 번짐 패스 · 가리개 재질은 장면 밖에서 쓰여 장면 미리 컴파일에 안 잡힌다 — 첫 그리기 전에 같이 컴파일한다(#331)
+  useLayoutEffect(() => {
+    const p = fx.bloomPass
+    void warmMaterials(gl, camera, scene, [...Object.values(BLACK), p.materialHighPassFilter, ...p.separableBlurMaterials, p.compositeMaterial, p.blendMaterial, fx.composer.copyPass.material, fx.overlay])
+  }, [fx, gl, camera, scene])
   useEffect(() => {
     fx.composer.setPixelRatio(dpr * BLOOM_RES)
     fx.composer.setSize(size.width, size.height)
