@@ -15,6 +15,7 @@ import com.samdoryu.backend.help.dto.HelpRequestCreateRequest;
 import com.samdoryu.backend.help.dto.HelpRequestDetail;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
 import com.samdoryu.backend.help.repository.HelpCommentRepository;
+import com.samdoryu.backend.help.repository.HelpRequestHiddenRepository;
 import com.samdoryu.backend.help.repository.HelpRequestRepository;
 import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import com.samdoryu.backend.meeting.domain.Standup;
@@ -29,8 +30,10 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,15 +46,18 @@ public class HelpRequestService {
 
     private final HelpRequestRepository helpRequestRepository;
     private final HelpCommentRepository helpCommentRepository;
+    private final HelpRequestHiddenRepository hiddenRepository;
     private final InstructorAssignmentService instructorAssignmentService;
     private final WorkspaceEventHub eventHub;
     private final EntityManager entityManager;
 
     public HelpRequestService(HelpRequestRepository helpRequestRepository,
-            HelpCommentRepository helpCommentRepository, InstructorAssignmentService instructorAssignmentService,
-            WorkspaceEventHub eventHub, EntityManager entityManager) {
+            HelpCommentRepository helpCommentRepository, HelpRequestHiddenRepository hiddenRepository,
+            InstructorAssignmentService instructorAssignmentService, WorkspaceEventHub eventHub,
+            EntityManager entityManager) {
         this.helpRequestRepository = helpRequestRepository;
         this.helpCommentRepository = helpCommentRepository;
+        this.hiddenRepository = hiddenRepository;
         this.instructorAssignmentService = instructorAssignmentService;
         this.eventHub = eventHub;
         this.entityManager = entityManager;
@@ -186,6 +192,75 @@ public class HelpRequestService {
                 .returnFromAgenda();
     }
 
+    /**
+     * 나에게서만 삭제(#315 ①) — 그 도움 요청을 볼 수 있는 사람(팀원 · 지정된 강사) 누구나. 대상이 없거나 다른 사무실 것이면
+     * {@code not_found}. 이미 숨겼으면 그대로(처음 시각 유지). 원본 · 코멘트와 다른 사람의 화면은 그대로라 변경 알림을 보내지
+     * 않는다 — 숨긴 사람의 화면이 스스로 다시 읽는다.
+     */
+    @Transactional
+    public void hide(WorkspaceAccess access, Long helpRequestId) {
+        requireInWorkspace(access.workspaceId(), helpRequestId);
+        try {
+            hiddenRepository.insertIfAbsent(helpRequestId, access.userId(), Instant.now());
+        } catch (DataIntegrityViolationException e) {
+            // 위 확인과 이 저장 사이에 요청자가 영구 삭제했다(외래키) — 이제 없는 요청이다
+            throw new ApiException(ErrorCode.NOT_FOUND);
+        }
+    }
+
+    /** 숨김 해제(#315 ①) — 대상이 없거나 다른 사무실 것이면 {@code not_found}. 숨기지 않았으면 그대로. 변경 알림 없음. */
+    @Transactional
+    public void unhide(WorkspaceAccess access, Long helpRequestId) {
+        requireInWorkspace(access.workspaceId(), helpRequestId);
+        hiddenRepository.deleteByHelpRequestIdAndUserId(helpRequestId, access.userId());
+    }
+
+    /** 내가 숨긴 이 사무실의 도움 요청(#315 ①) — 숨긴 시각 내림차순. 다른 사람의 숨김 목록을 읽는 길은 없다. */
+    @Transactional(readOnly = true)
+    public List<HelpRequestSummary> listHidden(WorkspaceAccess access, Instant now) {
+        return hiddenRepository.findHiddenHelpRequestsNewestFirst(access.userId(), access.workspaceId()).stream()
+                .map(helpRequest -> HelpRequestSummary.of(helpRequest, now))
+                .toList();
+    }
+
+    /**
+     * 영구 삭제(#315 ②) 1단계 — 요청자만. 검사 순서는 대상(404 — 없거나 다른 사무실 것 · 이미 지운 요청) → 요청자(403 — 강사는
+     * {@code InstructorWriteGuard}가 먼저 막는다). 상태와 상관없이 지울 수 있다. 행을 잠가 읽어, 지울 때까지 같은 글의 코멘트 ·
+     * 안건 전환 · 숨김이 끼어들지 못하게 한다. {@link HelpRequestDeletionService}만 부른다.
+     */
+    @Transactional
+    public HelpRequest lockForPermanentDelete(WorkspaceAccess access, Long helpRequestId) {
+        HelpRequest helpRequest = helpRequestRepository.findForDeleteByIdAndWorkspaceId(helpRequestId,
+                        access.workspaceId())
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        if (!access.isSelf(helpRequest.getRequester().getId())) {
+            throw new ApiException(ErrorCode.FORBIDDEN_ROLE);
+        }
+        return helpRequest;
+    }
+
+    /**
+     * 영구 삭제(#315 ②) 마지막 단계 — 안건 쪽 연결을 끊은 뒤 같은 트랜잭션에서 부른다. 서로를 가리키는 외래키 때문에 순서대로
+     * 지운다: 도움이 된 코멘트 연결 비우기 → 모든 사용자의 숨김 행 → 코멘트 전부(남의 코멘트 · 강사 답변 포함) → 도움 요청.
+     * 논리 삭제 칸을 두지 않고 행을 실제로 지운다. 연쇄 삭제(cascade · ON DELETE)는 쓰지 않는다.
+     * {@link HelpRequestDeletionService}만 부른다.
+     */
+    @Transactional
+    public void deletePermanently(HelpRequest helpRequest) {
+        helpRequest.clearHelpfulCommentForDeletion();
+        helpRequestRepository.flush(); // 안건 연결 끊기와 도움이 된 코멘트 비우기를 아래 일괄 삭제보다 먼저 DB에
+        hiddenRepository.deleteAllByHelpRequestId(helpRequest.getId());
+        helpCommentRepository.deleteAllByHelpRequestId(helpRequest.getId());
+        helpRequestRepository.delete(helpRequest);
+        helpRequestRepository.flush();
+    }
+
+    private void requireInWorkspace(Long workspaceId, Long helpRequestId) {
+        if (helpRequestRepository.findByIdAndWorkspaceId(helpRequestId, workspaceId).isEmpty()) {
+            throw new ApiException(ErrorCode.NOT_FOUND);
+        }
+    }
+
     /** 도움이 된 코멘트 — 이 글의 코멘트이고, 강사 답변 · 요청자 본인 코멘트가 아니어야 한다. 아니면 {@code invalid}. */
     private HelpComment requireHelpfulComment(HelpRequest helpRequest, Long commentId) {
         HelpComment comment = helpCommentRepository.findByIdAndHelpRequestId(commentId, helpRequest.getId())
@@ -205,22 +280,36 @@ public class HelpRequestService {
                 helpCommentRepository.findByHelpRequestIdOrderByCreatedAtAscIdAsc(helpRequestId), Instant.now());
     }
 
-    /** Snapshot {@code helpRequests} 조각 — 사무실의 도움 요청 전부, createdAt 오름차순. */
+    /**
+     * Snapshot {@code helpRequests} 조각 — 사무실의 도움 요청 중 보는 사람이 숨기지 않은 것, createdAt 오름차순(#315 ①).
+     *
+     * @param viewerUserId 세션 사용자 — 이 사람이 숨긴 요청만 뺀다
+     */
     @Transactional(readOnly = true)
-    public List<HelpRequestSummary> listSummaries(Long workspaceId, Instant now) {
+    public List<HelpRequestSummary> listSummaries(Long workspaceId, Long viewerUserId, Instant now) {
+        Set<Long> hidden = hiddenRepository.findHelpRequestIdsByUserIdAndWorkspaceId(viewerUserId, workspaceId);
         return helpRequestRepository.findByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
+                .filter(helpRequest -> !hidden.contains(helpRequest.getId()))
                 .map(helpRequest -> HelpRequestSummary.of(helpRequest, now))
                 .toList();
     }
 
     /**
      * 강사 요청함(CONTRACTS_API 「16」 · FR-LRN-23) 재료 — 여러 사무실의 "강사에게 요청"이 켜진 글을 사무실 · 요청자와 함께.
-     * 어느 사무실을 볼지(지금 지정된 사무실)는 부르는 쪽이 정한다.
+     * 보는 강사가 숨긴 글은 뺀다(#315 ①). 어느 사무실을 볼지(지금 지정된 사무실)는 부르는 쪽이 정한다.
      */
     @Transactional(readOnly = true)
-    public List<HelpRequest> listInstructorRequested(Collection<Long> workspaceIds) {
-        return workspaceIds.isEmpty() ? List.of()
-                : helpRequestRepository.findInstructorRequestedByWorkspaceIds(workspaceIds);
+    public List<HelpRequest> listInstructorRequested(Collection<Long> workspaceIds, Long viewerUserId) {
+        if (workspaceIds.isEmpty()) {
+            return List.of();
+        }
+        List<HelpRequest> requested = helpRequestRepository.findInstructorRequestedByWorkspaceIds(workspaceIds);
+        if (requested.isEmpty()) {
+            return requested;
+        }
+        Set<Long> hidden = hiddenRepository.findHiddenAmong(viewerUserId,
+                requested.stream().map(HelpRequest::getId).toList());
+        return requested.stream().filter(helpRequest -> !hidden.contains(helpRequest.getId())).toList();
     }
 
     /** 도움 요청마다 첫 강사 답변 시각 — 강사 답변이 없는 글은 키가 없다. */

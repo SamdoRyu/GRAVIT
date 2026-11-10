@@ -48,13 +48,14 @@ public class InstructorInboxService {
 
     /**
      * @param workspaceIds 볼 사무실 — 비어 있으면 빈 목록
+     * @param instructorUserId 세션 사용자(강사) — 이 사람이 숨긴 도움 요청은 뺀다(#315)
      * @param answered {@code null}이면 전부, {@code true}면 답이 있는 것만, {@code false}면 아직 없는 것만
      */
     @Transactional(readOnly = true)
-    public List<InboxItem> inbox(Collection<Long> workspaceIds, Boolean answered) {
+    public List<InboxItem> inbox(Collection<Long> workspaceIds, Long instructorUserId, Boolean answered) {
         List<InboxItem> items = new ArrayList<>();
 
-        List<HelpRequest> helpRequests = helpRequestService.listInstructorRequested(workspaceIds);
+        List<HelpRequest> helpRequests = helpRequestService.listInstructorRequested(workspaceIds, instructorUserId);
         Map<Long, Instant> helpAnswers = helpRequestService.firstInstructorAnswerAt(ids(helpRequests, HelpRequest::getId));
         // 답 없이 닫힌(resolved · ended) 도움 요청은 강사가 더 답할 수 없어 빼고, 답한 기록은 남긴다(계약 「16」)
         helpRequests.stream()

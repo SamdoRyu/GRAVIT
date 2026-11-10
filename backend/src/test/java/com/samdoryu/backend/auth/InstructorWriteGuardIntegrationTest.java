@@ -52,6 +52,8 @@ class InstructorWriteGuardIntegrationTest {
     /** CONTRACTS_API 「0」 역할 열에 R4가 있는 사무실 쓰기 — 가드의 목록과 같은지는 {@code InstructorWriteGuardTest}가 본다. */
     private static final Set<String> CONTRACT_INSTRUCTOR_WRITES = Set.of(
             "POST " + PREFIX + "/help-requests/{helpRequestId}/comments",
+            "PUT " + PREFIX + "/help-requests/{helpRequestId}/hidden",
+            "DELETE " + PREFIX + "/help-requests/{helpRequestId}/hidden",
             "POST " + PREFIX + "/agenda-items/{agendaItemId}/instructor-feedback",
             "POST " + PREFIX + "/members/{memberId}/decision-cards/{cardId}/follow-up-questions");
 

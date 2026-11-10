@@ -16,6 +16,7 @@ import com.samdoryu.backend.help.domain.HelpRequest;
 import com.samdoryu.backend.help.domain.HelpRequestStatus;
 import com.samdoryu.backend.help.dto.HelpRequestSummary;
 import com.samdoryu.backend.help.repository.HelpCommentRepository;
+import com.samdoryu.backend.help.repository.HelpRequestHiddenRepository;
 import com.samdoryu.backend.help.repository.HelpRequestRepository;
 import com.samdoryu.backend.instructor.service.InstructorAssignmentService;
 import com.samdoryu.backend.realtime.SnapshotResource;
@@ -57,6 +58,7 @@ class HelpRequestInstructorRequestTest {
         instructorAssignmentService = mock(InstructorAssignmentService.class);
         eventHub = mock(WorkspaceEventHub.class);
         service = new HelpRequestService(helpRequestRepository, mock(HelpCommentRepository.class),
+                mock(HelpRequestHiddenRepository.class),
                 instructorAssignmentService, eventHub, mock(EntityManager.class));
 
         AppUser aliceUser = AppUser.github(1001L, "alice", "앨리스", null);

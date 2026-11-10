@@ -13,6 +13,9 @@ public interface AgendaItemRepository extends JpaRepository<AgendaItem, Long> {
 
     Optional<AgendaItem> findByIdAndWorkspaceId(Long id, Long workspaceId);
 
+    /** 이 도움 요청에서 만든 안건 전부(거둔 것 포함) — 원본 도움 요청 영구 삭제(#315). */
+    List<AgendaItem> findByWorkspaceIdAndSourceHelpRequestId(Long workspaceId, Long sourceHelpRequestId);
+
     /** Snapshot {@code agendaItems} — 거둔 것 포함 전부, raisedAt 오름차순. */
     List<AgendaItem> findByWorkspaceIdOrderByRaisedAtAscIdAsc(Long workspaceId);
 

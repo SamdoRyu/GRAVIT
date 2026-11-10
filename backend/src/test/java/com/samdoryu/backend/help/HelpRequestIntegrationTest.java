@@ -297,13 +297,13 @@ class HelpRequestIntegrationTest {
         HelpRequest earlier = helpRequests.saveAndFlush(new HelpRequest(ws, alice, "먼저", null, T0));
         flushAndClear();
 
-        List<HelpRequestSummary> summaries = helpRequestService.listSummaries(ws.getId(),
+        List<HelpRequestSummary> summaries = helpRequestService.listSummaries(ws.getId(), aliceUser.getId(),
                 T0.plus(Duration.ofHours(48)));
 
         assertThat(summaries).extracting(HelpRequestSummary::id)
                 .containsExactly(Ids.toApi(earlier.getId()), Ids.toApi(later.getId()));
         assertThat(summaries).extracting(HelpRequestSummary::isAgendaCandidate).containsExactly(true, false);
-        assertThat(helpRequestService.listSummaries(otherWs.getId(), T0)).isEmpty();
+        assertThat(helpRequestService.listSummaries(otherWs.getId(), aliceUser.getId(), T0)).isEmpty();
     }
 
     // ---- #48 코멘트 ----------------------------------------------------------------------------
@@ -786,7 +786,7 @@ class HelpRequestIntegrationTest {
         String third = raise(helpRequest, "세 번째");
         assertThat(agendaStatusesOf(helpRequest))
                 .containsExactly(AgendaStatus.WITHDRAWN, AgendaStatus.WITHDRAWN, AgendaStatus.CONFIRMED);
-        assertThat(helpRequestService.listSummaries(ws.getId(), Instant.now()))
+        assertThat(helpRequestService.listSummaries(ws.getId(), aliceUser.getId(), Instant.now()))
                 .filteredOn(summary -> summary.id().equals(Ids.toApi(helpRequest.getId())))
                 .extracting(HelpRequestSummary::agendaItemId).containsExactly(third);
     }
@@ -833,7 +833,7 @@ class HelpRequestIntegrationTest {
                 .andExpect(jsonPath("$.isAgendaCandidate").value(true))
                 .andExpect(jsonPath("$.instructorRequested").value(false))
                 .andExpect(jsonPath("$.agendaItemId").value(nullValue()));
-        HelpRequestSummary summary = helpRequestService.listSummaries(ws.getId(), Instant.now()).stream()
+        HelpRequestSummary summary = helpRequestService.listSummaries(ws.getId(), aliceUser.getId(), Instant.now()).stream()
                 .filter(s -> s.id().equals(Ids.toApi(helpRequest.getId()))).findFirst().orElseThrow();
         assertThat(summary.status()).isEqualTo(HelpRequestStatus.DISCUSSING);
         assertThat(summary.isAgendaCandidate()).isTrue();

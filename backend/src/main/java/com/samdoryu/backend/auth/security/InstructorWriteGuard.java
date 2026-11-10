@@ -36,6 +36,9 @@ public class InstructorWriteGuard implements HandlerInterceptor {
     /** 강사(R4)에게 열린 사무실 쓰기 — "메서드 경로 패턴". */
     static final Set<String> INSTRUCTOR_WRITES = Set.of(
             "POST " + WORKSPACE_PATH + "/help-requests/{helpRequestId}/comments",
+            // 나에게서만 삭제 · 해제(#315) — 강사도 자기 화면에서만 숨긴다. 원본은 바뀌지 않는다
+            "PUT " + WORKSPACE_PATH + "/help-requests/{helpRequestId}/hidden",
+            "DELETE " + WORKSPACE_PATH + "/help-requests/{helpRequestId}/hidden",
             "POST " + WORKSPACE_PATH + "/agenda-items/{agendaItemId}/instructor-feedback",
             "POST " + WORKSPACE_PATH + "/members/{memberId}/decision-cards/{cardId}/follow-up-questions");
 

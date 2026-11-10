@@ -133,7 +133,7 @@ public class WorkspaceSnapshotService {
                 requirementLinkService.listLinks(workspaceId),
                 agendaItemService.listAll(workspaceId),
                 meetingService.listRecent(workspaceId),
-                helpRequestService.listSummaries(workspaceId, now),
+                helpRequestService.listSummaries(workspaceId, access.userId(), now), // 보는 사람이 숨긴 요청은 뺀다(#315)
                 activityService.listNotes(workspaceId),
                 FlowSummary.of(blocked.blockedMemberIds(), countOpen(submissions),
                         BlockedRule.averageReviewWaitHours(submissions, now)),
