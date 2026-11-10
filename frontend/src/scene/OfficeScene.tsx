@@ -2,7 +2,7 @@
 // office's crew and issue / PR boxes, placed by the SceneModel and the station ThemeLayout (useStationScene).
 // The 3D view is read-only: clicks open the v1 detail drawer; nothing is dragged (#102 T5-c-2).
 import { useThree } from '@react-three/fiber'
-import { Suspense, useEffect } from 'react'
+import { useEffect } from 'react'
 import { StationEnvironment } from '../theme/station/StationEnvironment'
 import { StationSky } from '../theme/station/StationSky'
 import { WarpStreaks } from '../theme/station/WarpStreaks'
@@ -10,11 +10,13 @@ import { ActivityNotes } from './ActivityNotes'
 import { AgendaTrash } from './AgendaTrash'
 import { ArchiveTag } from './ArchiveTag'
 import { Avatars } from './Avatars'
+import { CREW_MODEL_URL } from './Avatar'
 import { CameraRig } from './CameraRig'
 import { CommBoard } from './CommBoard'
 import { DockShip } from './DockShip'
-import { InstructorShip } from './InstructorShip'
+import { InstructorShip, RACO_MODEL_URL } from './InstructorShip'
 import { MeetingRoomState } from './MeetingRoomState'
+import { ModelBoundary } from './ModelBoundary'
 import { RequirementDeck } from './RequirementDeck'
 import { SelectiveBloom } from './SelectiveBloom'
 import { SyncBeam } from './SyncBeam'
@@ -68,19 +70,19 @@ export function OfficeScene() {
         <NoPick>
           <StationEnvironment podsShown={scene?.pods ?? NO_PODS} />
         </NoPick>
-        {/* The crew glTF loads after the station: nothing waits for it. */}
-        <Suspense fallback={null}>
+        {/* The crew glTF loads after the station: nothing waits for it, and if it fails only the crew is missing (#327). */}
+        <ModelBoundary url={CREW_MODEL_URL}>
           <Avatars />
-        </Suspense>
+        </ModelBoundary>
         <TaskBoxes />
         <MeetingRoomState />
         <AgendaTrash />
         <RequirementDeck />
         <CommBoard />
-        {/* 강사 우주선(#290) — 라코 glTF를 기다리는 동안에도 나머지 장면은 그대로 */}
-        <Suspense fallback={null}>
+        {/* 강사 우주선(#290) — 라코 glTF를 기다리는 동안에도, 못 받아도(#327) 나머지 장면은 그대로 */}
+        <ModelBoundary url={RACO_MODEL_URL}>
           <InstructorShip />
-        </Suspense>
+        </ModelBoundary>
         <ActivityNotes />
         <ArchiveTag />
         <SyncBeam />
