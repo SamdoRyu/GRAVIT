@@ -1,6 +1,6 @@
 // End-to-end suite (OWNER: qa-engineer). Drives the installed Chrome (channel 'chrome', no browser download)
 // against its own Vite dev server (:5180), so the dev server on :5173 is never touched.
-// GRAVIT: only the `mock` project (/) runs. The demo's `api` project needed the removed Hono server;
+// GRAVIT: only the `mock` project (/?source=mock) runs. The demo's `api` project needed the removed Hono server;
 // re-add it once the Spring API (/?source=api) exists.
 import { defineConfig } from '@playwright/test'
 import { WEB_PORT } from './tests/e2e/env'

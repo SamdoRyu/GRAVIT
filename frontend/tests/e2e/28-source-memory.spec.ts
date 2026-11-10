@@ -1,29 +1,62 @@
-// 28. 데이터 소스는 탭에서 기억한다 (#236): GitHub 로그인 성공 처리는 고정 주소(/)로 돌려보내 ?source=api가 빠진다.
-// 같은 탭에서 ?source 없이 돌아와도 api를 계속 쓰고, ?source=mock을 주면 다시 mock이다. 서버 대신 /api/**를 401로 가로챈다.
-import { expect, readStore, test } from './fixtures'
+// 28. API is the default after every page load, including GitHub's redirect back to `/`.
+// A legacy saved mock choice must not override it; only `?source=mock` opts into mock data.
+import { expect, test } from './fixtures'
 
-// 가로챈 401을 브라우저가 "Failed to load resource" 콘솔 에러로 남긴다 — 일부러 낸 응답이다
+// The API 401s and intercepted OAuth handoff are intentional in this frontend-only flow test.
 test.use({ allowConsoleErrors: true })
 
-test('?source=api survives the login round trip back to /, and ?source=mock switches back', async ({ page }) => {
+test('the root uses API despite a legacy saved mock, and explicit mock remains available', async ({ page }) => {
   const apiPaths: string[] = []
-  // 경로가 /api/로 시작하는 것만 — '**/api/**'는 Vite 모듈(/src/data/api/…)까지 잡는다
+  let oauthStarted = false
+
+  // Simulate the sessionStorage value left by earlier versions of the app.
+  await page.addInitScript(() => {
+    try {
+      sessionStorage.setItem('gravit.source', 'mock')
+    } catch {
+      /* storage blocked */
+    }
+  })
   await page.route((url) => url.pathname.startsWith('/api/'), (route) => {
-    apiPaths.push(new URL(route.request().url()).pathname)
-    return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unauthorized', message: '로그인이 필요해요' } }) })
+    const path = new URL(route.request().url()).pathname
+    apiPaths.push(path)
+    if (path === '/api/login-options') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ githubLoginUrl: '/oauth2/authorization/github', reviewLoginEnabled: false }),
+      })
+    }
+    return route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'unauthorized', message: '로그인이 필요해요' } }),
+    })
+  })
+  await page.route((url) => url.pathname === '/oauth2/authorization/github', (route) => {
+    oauthStarted = true
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: 'OAuth route reached' })
   })
 
-  await page.goto('/?source=api')
+  await page.goto('/')
   await expect.poll(() => apiPaths.includes('/api/me')).toBe(true)
+  await expect.poll(() => apiPaths.includes('/api/login-options')).toBe(true)
+  await expect(page.getByRole('button', { name: 'GitHub로 로그인' })).toBeVisible()
+  await expect(page.getByText('요청하는 권한은 GitHub 승인 화면에서 확인할 수 있어요.')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('gravit.source'))).toBeNull()
+
+  await page.getByRole('button', { name: 'GitHub로 로그인' }).click()
+  await expect.poll(() => oauthStarted).toBe(true)
+  await expect(page).toHaveURL(/\/oauth2\/authorization\/github$/)
+  await expect(page.getByText('OAuth route reached')).toBeVisible()
 
   apiPaths.length = 0
-  await page.goto('/') // 서버가 로그인 뒤 보내는 주소
-  await expect.poll(() => apiPaths.includes('/api/me'), { message: 'still the api source' }).toBe(true)
-
-  await page.goto('/?source=mock&workspace=ws_1')
-  await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
-  apiPaths.length = 0
-  await page.goto('/?workspace=ws_1')
-  await expect.poll(() => readStore(page, (s) => s.office?.status ?? null), { message: 'mock remembered' }).toBe('ready')
+  await page.goto('/?source=mock')
+  await expect(page.getByRole('heading', { name: '사무실 고르기' })).toBeVisible()
   expect(apiPaths).toEqual([])
+
+  // Returning to the unadorned callback URL chooses API even after the explicit mock visit.
+  await page.goto('/')
+  await expect.poll(() => apiPaths.includes('/api/me')).toBe(true)
+  await expect.poll(() => apiPaths.includes('/api/login-options')).toBe(true)
 })

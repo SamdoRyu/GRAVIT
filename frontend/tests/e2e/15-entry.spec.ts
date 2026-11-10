@@ -20,7 +20,7 @@ async function openMenu(page: Page) {
 }
 
 test('pick an office, switch, log out, log in for review, and come back to the last office', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?source=mock')
   // 고른 사무실 · 지난번 사무실이 없으면 고르기
   await expect(picker(page)).toBeVisible()
   const offices = picker(page).getByRole('list', { name: '들어갈 수 있는 사무실' }).getByRole('button')
@@ -49,7 +49,7 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   // 로그아웃 → 로그인 화면
   await picker(page).getByRole('button', { name: '로그아웃' }).click()
   await expect(login(page)).toBeVisible()
-  await expect(login(page).getByRole('button', { name: 'GitHub로 계속하기' })).toBeVisible()
+  await expect(login(page).getByRole('button', { name: 'GitHub로 로그인' })).toBeVisible()
 
   // 심사용 로그인 — 비어 있으면 · 틀리면 안내(어느 값인지 말하지 않음), 맞으면 시연 사무실만
   // 심사용 폼은 접혀 있다 — 펼쳐서 쓴다
@@ -79,13 +79,13 @@ test('pick an office, switch, log out, log in for review, and come back to the l
   await (await openMenu(page)).getByRole('menuitem', { name: '로그아웃' }).click()
   await expect(login(page)).toBeVisible()
   await expect.poll(() => readStore(page, (s) => s.office)).toBeNull()
-  await login(page).getByRole('button', { name: 'GitHub로 계속하기' }).click()
+  await login(page).getByRole('button', { name: 'GitHub로 로그인' }).click()
   await expect(picker(page)).toBeVisible()
   await expect(picker(page).getByText('김옥토')).toBeVisible()
 })
 
 test('open a new office from a repository: admin form with period and spec path, participant and app-approval hints', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?source=mock')
   await expect(picker(page)).toBeVisible()
   const repos = picker(page).getByRole('region', { name: '레포에서 사무실 열기' })
   await expect(repos).toBeVisible()
@@ -125,7 +125,7 @@ test('open a new office from a repository: admin form with period and spec path,
 })
 
 test('a GitHub user with no visible organization still sees the app-install hint (#238)', async ({ page }) => {
-  await page.goto('/?workspace=ws_1')
+  await page.goto('/?source=mock&workspace=ws_1')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   // 앱이 설치된 곳이 없는 계정 — 서버는 organizations: []를 준다(미설치 조직은 GitHub가 보여 주지 않는다)
   await page.evaluate(async () => {

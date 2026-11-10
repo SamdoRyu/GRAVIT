@@ -24,7 +24,7 @@ frontend/ backend/ contract/examples/ docs/ compose.yaml .env.example .github/ .
 ## 프론트엔드 데이터 흐름
 
 - 화면은 `frontend/src/data/DataSource.ts` 인터페이스로만 데이터를 받는다. 화면 코드에서 `fetch`를 직접 부르지 않는다.
-- 구현 둘: `src/data/mock/`(기본 — 브라우저 seed + localStorage, 서버 없이 동작) · `src/data/api/`(`?source=api` — Spring v1 API `/api/**` + SSE). v1 구현은 각 폴더의 `v1/`이다. 기본은 아직 mock이라, 실제 GitHub 사무실은 `?source=api`로 연다(로컬 설정은 README 「5. GitHub App 설정」).
+- 구현 둘: `src/data/api/`(기본 — Spring v1 API `/api/**` + SSE) · `src/data/mock/`(`?source=mock` — 브라우저 seed + localStorage, 서버 없이 동작). v1 구현은 각 폴더의 `v1/`이다. 주소에 옵션 없이 열면 API라, 실제 GitHub 사무실은 `http://localhost:5173/`에서 GitHub로 로그인해 연다(로컬 설정은 README 「5. GitHub App 설정」).
 - 상태는 `src/store.ts`(Zustand), 공용 규칙은 `src/data/rules/`. 방향: 도메인 데이터 → SceneModel → ThemeLayout → R3F.
 
 ## 백엔드 패키지 원칙
@@ -47,7 +47,7 @@ frontend/ backend/ contract/examples/ docs/ compose.yaml .env.example .github/ .
 docker compose up -d --wait                          # 루트 — 로컬 MySQL (.env 필요)
 cd backend;  .\gradlew.bat test bootJar             # MySQL 필요
 cd frontend; npm ci; npm run lint; npm run test:contract; npm run build
-npm run dev                                          # :5173, 기본 mock 데이터
+npm run dev                                          # :5173, 기본 Spring API (mock은 ?source=mock)
 ```
 
 CI(`.github/workflows/ci.yml`)는 위 프론트 4개와 `./gradlew test bootJar`(MySQL 서비스 컨테이너)를 돌린다. E2E(`npm run test:e2e`)는 로컬에서만.

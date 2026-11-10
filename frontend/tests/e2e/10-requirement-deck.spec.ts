@@ -9,7 +9,7 @@ import type { Page } from '@playwright/test'
 import { callStore, expect, hoverBox, readStore, settled, test, waitForScene } from './fixtures'
 
 async function openOffice(page: Page, workspaceId: string) {
-  await page.goto(`/?workspace=${workspaceId}`)
+  await page.goto(`/?source=mock&workspace=${workspaceId}`)
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null), { message: 'office ready' }).toBe('ready')
   await expect.poll(() => readStore(page, (s) => s.office?.snapshot?.workspace.id ?? null)).toBe(workspaceId)
   // The deck is at the station's east end, under the right panel: close the panel so it is on the canvas.

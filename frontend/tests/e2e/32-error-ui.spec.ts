@@ -253,7 +253,7 @@ test('panels: the repository list tells a GitHub rate limit from a lost GitHub c
 })
 
 test('form: opening an office that is already open keeps the period and offers to reload the lists', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?source=mock')
   const picker = page.getByRole('region', { name: '사무실 고르기' })
   await expect(picker).toBeVisible()
   const samdo = picker.getByRole('region', { name: 'team-samdo 레포' })

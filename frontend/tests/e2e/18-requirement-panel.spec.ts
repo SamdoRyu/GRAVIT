@@ -39,7 +39,7 @@ test('the requirement tab lists requirements by status with linked issues; a par
 })
 
 test('a repo admin unlinks an issue after confirming, and the progress updates', async ({ page }) => {
-  await page.goto('/?workspace=ws_2')
+  await page.goto('/?source=mock&workspace=ws_2')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   const panel = await openRequirementTab(page)
   const item = panel.getByRole('list', { name: '문서에 있는 요구사항' }).getByRole('listitem', { name: 'FR-DEMO-02 · 사무실 꾸미기' })
@@ -59,7 +59,7 @@ test('a repo admin unlinks an issue after confirming, and the progress updates',
 })
 
 test('the waiting list swaps a waiting requirement onto a plate for this browser, and "기본 순서로" resets it', async ({ page }) => {
-  await page.goto('/?workspace=ws_2')
+  await page.goto('/?source=mock&workspace=ws_2')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   const panel = await openRequirementTab(page)
   // active 12개 — 판 9장 + 대기 칸 3개(3D와 같은 판 배치)
@@ -90,7 +90,7 @@ test('the waiting list swaps a waiting requirement onto a plate for this browser
 })
 
 test('dropping an issue on the waiting plate opens the list to pick a requirement to link (repo admin)', async ({ page }) => {
-  await page.goto('/?workspace=ws_2')
+  await page.goto('/?source=mock&workspace=ws_2')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   // 3D 대기 칸에 이슈 상자를 놓았을 때 C가 부르는 액션
   await callStore(page, 'openRequirementWaiting', 't_12')

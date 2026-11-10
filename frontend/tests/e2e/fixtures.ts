@@ -1,7 +1,7 @@
 // Shared fixtures and helpers for the e2e suite (OWNER: qa-engineer).
 //
 // Conventions
-// - `source` (option, set by the project): 'mock' opens `/`, 'api' opens `/?source=api`.
+// - `source` (option, set by the project): 'mock' opens `/?source=mock`, 'api' opens `/?source=api`.
 // - Every test gets a fresh browser context (fresh localStorage); demo mode is switched off before the page
 //   loads (mock: the 'office-dashboard:demo' preference, api: PUT /api/demo) and the API data is reset.
 // - Any console.error / uncaught page error fails the test (set `allowConsoleErrors: true` to opt out).
@@ -106,7 +106,7 @@ export function callStore<R = unknown>(page: Page, action: string, ...args: unkn
 export const TEAM_WORKSPACE = 'ws_1'
 
 export function appPath(source: Source): string {
-  return source === 'api' ? '/?source=api' : `/?workspace=${TEAM_WORKSPACE}`
+  return source === 'api' ? '/?source=api' : `/?source=mock&workspace=${TEAM_WORKSPACE}`
 }
 
 /** Open the app and wait until data is loaded, the link is up (api) and the 3D scene is framed. */

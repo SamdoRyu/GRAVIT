@@ -22,7 +22,7 @@ test('a participant sees the assigned instructors but cannot assign or revoke', 
 })
 
 test('a repo admin assigns an approved instructor account and revokes it after confirming', async ({ page }) => {
-  await page.goto('/?workspace=ws_2')
+  await page.goto('/?source=mock&workspace=ws_2')
   await expect.poll(() => readStore(page, (s) => s.office?.status ?? null)).toBe('ready')
   const dialog = await openInstructors(page)
   await expect(dialog).toContainText('아직 지정된 강사가 없어요')
