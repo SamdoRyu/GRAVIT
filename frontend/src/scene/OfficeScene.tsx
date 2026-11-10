@@ -19,6 +19,7 @@ import { MeetingRoomState } from './MeetingRoomState'
 import { ModelBoundary } from './ModelBoundary'
 import { RequirementDeck } from './RequirementDeck'
 import { SelectiveBloom } from './SelectiveBloom'
+import { SceneWarmup } from './shaderWarmup'
 import { SyncBeam } from './SyncBeam'
 import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
@@ -89,6 +90,8 @@ export function OfficeScene() {
         <DockShip />
       </group>
       <TaskTooltip />
+      {/* 마지막 자식 — 장면이 다 붙은 뒤 셰이더를 미리 · 비동기로 컴파일하고 그리기 시작한다(#331) */}
+      <SceneWarmup />
     </>
   )
 }

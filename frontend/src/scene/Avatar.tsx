@@ -40,8 +40,6 @@ const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.
 /** Diamond colours: calm, or blocked (FR-FLOW-02). No per-person workload level (P6). */
 const GEM_COLOR = { calm: '#22b07d', blocked: '#e5484d' } as const
 
-useGLTF.preload(CREW_MODEL_URL)
-
 function lerpAngle(a: number, b: number, k: number) {
   let d = (b - a) % (Math.PI * 2)
   if (d > Math.PI) d -= Math.PI * 2

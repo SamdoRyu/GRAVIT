@@ -6,7 +6,7 @@
 // 시안 「아바타 모델 (스페이 · 라코 glTF)」의 모델(public/station — 읽기만)을 Sit 동작으로 태운다. OWNER: C.
 import { useAnimations, useGLTF } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { AdditiveBlending, MeshBasicMaterial, type Group, type Mesh, type MeshStandardMaterial, type Texture } from 'three'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { useOffice } from '../store'
@@ -18,11 +18,11 @@ import { FLIGHT_FROM, instructorShipPose, type InstructorFlight } from './instru
 import { useLinearTextures } from './linearTextures'
 import { noRaycast } from './runtime'
 import { useDynamicLayer } from './shared'
+import { ModelPending, WarmGroup } from './shaderWarmup'
 
 /** The design's instructor model (public/station — read only). Same rig as the crew: height 1, feet at the origin, facing +z. */
 export const RACO_MODEL_URL = '/station/models/raco_avatar.glb'
-// 첫 강사 요청이 올 때 바로 보이게 장면과 함께 받는다(3D 지연 청크 안 — 첫 화면 번들 밖, 승무원과 같다)
-useGLTF.preload(RACO_MODEL_URL)
+// 사무실 고르기 화면에서는 받지 않고(#331 — 3D 묶음은 거기서 미리 받는다), 사무실이 열리면 받아 둔다(InstructorShip이 붙을 때).
 
 /** 머무는 자리(우주선 가운데, 시안 단위): 게시판 화면(CommBoard SCREEN — 위 끝 deckY + 2.6) 위, "도움 요청" 알약보다 위 */
 const HOVER = { x: COMM_HUB.x, y: COMM_HUB.deckY + 7.5, z: 6.2 } as const
@@ -156,6 +156,10 @@ export function InstructorShip() {
   const checked = useInstructorAnswersChecked()
   const workspaceId = useOffice((s) => s.office?.workspaceId ?? null)
   const [phase, setPhase] = useState<Phase>('away')
+  // 사무실이 열리면 라코를 받아 둔다 — 첫 강사 요청 때 바로 탈 수 있게(사무실 고르기 화면에서는 받지 않는다, #331)
+  useEffect(() => {
+    useGLTF.preload(RACO_MODEL_URL)
+  }, [])
   const [seen, setSeen] = useState(false)
   // 사무실을 열면(새로고침 · 다른 사무실로 옮기기 포함) 그 사무실의 강사 답변 확인이 처음 끝난 결과를 비행 없이 보인다 —
   // 기다리는 글이 있으면 처음부터 게시판 위에, 없으면 처음부터 없다. 장면은 사무실을 옮겨도 그대로라, 확인이 끝날 때까지는
@@ -214,7 +218,11 @@ export function InstructorShip() {
       <group ref={root} position={phase === 'arrive' ? [HOVER.x + FLIGHT_FROM.x, HOVER.y + FLIGHT_FROM.y, HOVER.z + FLIGHT_FROM.z] : [HOVER.x, HOVER.y, HOVER.z]}>
         <group ref={tilt} scale={SHIP_SCALE}>
           <ShipBody flames={flames} />
-          <RacoRider />
+          <Suspense fallback={<ModelPending />}>
+            <WarmGroup>
+              <RacoRider />
+            </WarmGroup>
+          </Suspense>
         </group>
       </group>
     </group>
