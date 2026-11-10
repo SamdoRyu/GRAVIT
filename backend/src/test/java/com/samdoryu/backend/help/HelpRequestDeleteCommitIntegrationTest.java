@@ -91,10 +91,14 @@ class HelpRequestDeleteCommitIntegrationTest {
                 helpRequest.getId(), bobUser.getId(), Timestamp.from(T0.plusSeconds(120)));
     }
 
+    /** 안건을 두 사무실 모두 먼저 지운다 — 실패 재현용 안건은 다른 사무실에서 이 사무실의 도움 요청을 가리킨다. */
     @AfterEach
     void cleanUp() {
-        for (Long workspaceId : new Long[] {ws.getId(), otherWs.getId()}) {
+        Long[] workspaceIds = {ws.getId(), otherWs.getId()};
+        for (Long workspaceId : workspaceIds) {
             jdbc.update("DELETE FROM agenda_item WHERE workspace_id = ?", workspaceId);
+        }
+        for (Long workspaceId : workspaceIds) {
             jdbc.update("DELETE h FROM help_request_hidden h JOIN help_request r ON r.id = h.help_request_id"
                     + " WHERE r.workspace_id = ?", workspaceId);
             jdbc.update("DELETE c FROM help_comment c JOIN help_request r ON r.id = c.help_request_id"

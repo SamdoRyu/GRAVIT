@@ -30,12 +30,15 @@ import com.samdoryu.backend.meeting.repository.AgendaItemRepository;
 import com.samdoryu.backend.meeting.repository.InstructorFeedbackRepository;
 import com.samdoryu.backend.meeting.repository.MeetingRepository;
 import com.samdoryu.backend.workspace.domain.Member;
+import com.samdoryu.backend.workspace.domain.TeamSettings;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
+import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,6 +74,7 @@ class HelpRequestPermanentDeleteIntegrationTest {
     @Autowired WorkspaceRepository workspaces;
     @Autowired MemberRepository members;
     @Autowired InstructorAssignmentRepository instructorAssignments;
+    @Autowired TeamSettingsRepository teamSettings;
     @Autowired HelpRequestRepository helpRequests;
     @Autowired HelpCommentRepository helpComments;
     @Autowired HelpRequestHiddenRepository hiddenRows;
@@ -98,6 +102,7 @@ class HelpRequestPermanentDeleteIntegrationTest {
         bob = members.saveAndFlush(Member.collaborator(ws, bobUser, 1, false, T0));
         aliceElsewhere = members.saveAndFlush(Member.collaborator(otherWs, aliceUser, 0, true, T0));
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, aliceUser, T0));
+        teamSettings.saveAndFlush(new TeamSettings(ws, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 17), null)); // Snapshot에 필요
     }
 
     private MockHttpSession aliceSession() {

@@ -25,12 +25,15 @@ import com.samdoryu.backend.help.repository.HelpRequestRepository;
 import com.samdoryu.backend.instructor.domain.InstructorAssignment;
 import com.samdoryu.backend.instructor.repository.InstructorAssignmentRepository;
 import com.samdoryu.backend.workspace.domain.Member;
+import com.samdoryu.backend.workspace.domain.TeamSettings;
 import com.samdoryu.backend.workspace.domain.Workspace;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
+import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
 import com.samdoryu.backend.workspace.repository.WorkspaceRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +68,7 @@ class HelpRequestHideIntegrationTest {
     @Autowired WorkspaceRepository workspaces;
     @Autowired MemberRepository members;
     @Autowired InstructorAssignmentRepository instructorAssignments;
+    @Autowired TeamSettingsRepository teamSettings;
     @Autowired HelpRequestRepository helpRequests;
     @Autowired HelpCommentRepository helpComments;
     @Autowired HelpRequestHiddenRepository hiddenRows;
@@ -91,6 +95,7 @@ class HelpRequestHideIntegrationTest {
         bob = members.saveAndFlush(Member.collaborator(ws, bobUser, 1, false, T0));
         aliceElsewhere = members.saveAndFlush(Member.collaborator(otherWs, aliceUser, 0, true, T0));
         instructorAssignments.saveAndFlush(new InstructorAssignment(ws, INSTRUCTOR_GITHUB_ID, aliceUser, T0));
+        teamSettings.saveAndFlush(new TeamSettings(ws, LocalDate.of(2026, 11, 4), LocalDate.of(2026, 11, 17), null)); // Snapshot에 필요
 
         help = new HelpRequest(ws, alice, "세션이 끊겨요", null, T0);
         help.requestInstructor(T0.plusSeconds(30));
