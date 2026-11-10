@@ -78,7 +78,7 @@
 | `Meeting` | 사무실 | 시작 · 끝, 참석자, 메모 | → Workspace. 다룬 안건은 `AgendaItem`이 회의를 가리킨다 | 06 회의 |
 | `Standup` | 사무실 | 작성자 → Member, 날짜(한국 시간 기준 날짜 [구현 기본값]), 어제 한 일, 막힌 것 | → Workspace, → Member | FR-MTG-01 · 02 |
 | `HelpRequest` · `HelpComment` | 사무실 | 요청자 → Member, 내용, 상태, 강사에게 요청한 시각, 닫을 때 배운 점, 도움이 된 코멘트, 넘어온 스탠드업(선택), 전환된 안건(선택), 안건 전환 직전 상태(`on_agenda`인 동안만 값이 있다 — 철회하면 이 값으로 되돌리고 비우며, 회의 결정으로 `ended`가 될 때도 비운다. 응답 DTO에는 없음 — 2026-11-10 #313) / 코멘트 작성자 → AppUser, 내용, 강사 답변 여부 | HelpRequest 1–N HelpComment, HelpRequest 1–N AgendaItem — 거두지 않은 안건(`confirmed` · `discussed`)은 0..1, 거둔 안건은 여럿 남을 수 있다(2026-11-10 — #313). 요청자가 영구 삭제하면 코멘트와 함께 실제로 지운다 — 연결된 안건 · 회의는 남기고 원본 연결만 끊는다(CONTRACTS_API.md 「11」 도움 요청 삭제 — 2026-11-10 #315) | FR-LRN-15~21 |
-| `HelpRequestHidden` (도움 요청 개인 숨김) | 사무실 | 도움 요청, 사용자 → AppUser(팀원 · 강사), 숨긴 시각 | → HelpRequest, → AppUser. (도움 요청, 사용자)가 유일하다. 그 사용자의 응답(Snapshot `helpRequests` · 강사 요청함)에서만 그 요청을 뺀다. 숨김을 해제하거나 도움 요청이 영구 삭제되면 행을 지운다 (2026-11-10 — #315) | FR-LRN-15 |
+| `HelpRequestHidden` (도움 요청 개인 제외 — 「나에게서만 삭제」) | 사무실 | 도움 요청, 사용자 → AppUser(팀원 · 강사), 뺀 시각 | → HelpRequest, → AppUser. (도움 요청, 사용자)가 유일하다. 그 사용자의 응답(Snapshot `helpRequests` · 강사 요청함)에서만 그 요청을 뺀다 — 원문 · 코멘트는 그대로. 되돌리는 API는 없고(#333), 도움 요청이 영구 삭제될 때만 행을 지운다 (2026-11-10 — #315 · #333) | FR-LRN-15 |
 | `TaskDueDate` | 사무실 | 이슈, 마감일, 입력한 사람 → AppUser · 시각 | Task 1–1. [확정] 고칠 수 있는 사람은 그 사무실 ROLE-02와 그 이슈의 담당자(`TaskAssignee`) 전원 — P14. GitHub 이슈는 바뀌지 않는다 | FR-PLAN-02 · 03 (2026-11-01 결정 · 권한은 2026-11-01 추가 결정) |
 | `DecisionCard` · `FollowUpQuestion` | 사무실 | PR, 본인 → Member, 9칸, 본인 확인 시각, 꼬리질문 요청 시각 / 강사 → AppUser, 내용 | DecisionCard 1–N FollowUpQuestion | FR-REP-07 · 11 · P11 |
 | `RetroReport` | 사무실 | 본인 → Member, 종류(최종 · 중간), 배운 점, 만든 시각 (나머지 칸은 계산) | → Member | FR-REP-01~03 · 05 |
@@ -271,7 +271,7 @@ DB 유일 제약이나 서비스 검사로 막는다. 분산 트랜잭션은 쓰
 
 ### 지우지 않는 기록 [확정 → 계약]
 
-권한 해제 · 동기화 뒤에도 과거 기록을 남긴다(P1 · P7 · P8 · 2026-11-01 결정). 아래는 행을 지우는 API가 없다: `EvaluationRound` · `Evaluation`, `AgendaItem`(거두면 `withdrawn`), `InstructorAssignment`(해제 시각), `InstructorFeedback` · `HelpComment` · `FollowUpQuestion`, `Requirement`(`missing`), `Member`(`removedAt`), `Task` · `Submission`. 지울 수 있는 것은 `RequirementLink`(레포 관리자), `TaskDueDate`(마감 지우기), 본인의 `HelpRequestHidden`(숨김 해제)뿐이다. **예외** (2026-11-10 팀 확정 — #315): `HelpRequest`와 그 `HelpComment`(강사 답변 포함)는 요청자의 "모두에게서 영구 삭제"로만 실제로 지운다. 이때도 연결된 `AgendaItem` · 결정 · `InstructorFeedback` · `Meeting`은 지우지 않는다 — 원본 연결만 끊고, 복사된 제목은 고정 문구로 바꾼다(CONTRACTS_API.md 「11」 도움 요청 삭제).
+권한 해제 · 동기화 뒤에도 과거 기록을 남긴다(P1 · P7 · P8 · 2026-11-01 결정). 아래는 행을 지우는 API가 없다: `EvaluationRound` · `Evaluation`, `AgendaItem`(거두면 `withdrawn`), `InstructorAssignment`(해제 시각), `InstructorFeedback` · `HelpComment` · `FollowUpQuestion`, `Requirement`(`missing`), `Member`(`removedAt`), `Task` · `Submission`. 지울 수 있는 것은 `RequirementLink`(레포 관리자), `TaskDueDate`(마감 지우기)뿐이다(본인의 `HelpRequestHidden` 해제는 #333에서 지웠다). **예외** (2026-11-10 팀 확정 — #315): `HelpRequest`와 그 `HelpComment`(강사 답변 포함)는 요청자의 "모두에게서 영구 삭제"로만 실제로 지운다. 이때도 연결된 `AgendaItem` · 결정 · `InstructorFeedback` · `Meeting`은 지우지 않는다 — 원본 연결만 끊고, 복사된 제목은 고정 문구로 바꾼다(CONTRACTS_API.md 「11」 도움 요청 삭제).
 
 ## 4. API [계약]
 
