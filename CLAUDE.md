@@ -16,7 +16,7 @@ frontend/ backend/ contract/examples/ docs/ compose.yaml .env.example .github/ .
 
 ## 공통 계약 — 먼저 읽는다
 
-- **기준 계약 커밋: `d6b3160788412d004173f0d46e49dd293972e37e`** (GRAVIT — `docs/CONTRACTS*.md`를 마지막으로 바꾼 커밋). 사용자가 새 SHA를 주면 그것을 따른다.
+- **기준 계약 커밋: `937fcb7259a6fe433d080a96f846023d61a666f1`** (GRAVIT — `docs/CONTRACTS*.md`를 마지막으로 바꾼 커밋). 사용자가 새 SHA를 주면 그것을 따른다.
 - **계약의 기준은 GRAVIT `docs/CONTRACTS.md`(공통 규칙 · Entity · ID · 에러 · 보안) · `docs/CONTRACTS_API.md`(엔드포인트 · DTO)다**(2026-11-03 전환). 기획 저장소의 같은 파일은 `796fc25`까지의 이력일 뿐이다. 전환 상태 · 고정 링크 표 · 역할 대응은 `docs/README.md`.
 - `contract/examples/` — 계약 예시 JSON. Java DTO · TS 타입 · 예시 JSON은 한 PR에서 함께 바꾼다.
 - **계약을 바꾸지 않는다.** 필드 이름 · 타입 · enum · API 경로 · 상태 코드 · Entity가 계약과 달라야 하면 작업을 멈추고 사용자(문서 담당자)에게 변경을 요청한다. 계약 문서에 없는 계약을 코드에서 먼저 만들지 않는다.
