@@ -16,6 +16,7 @@ import { DockShip } from './DockShip'
 import { InstructorShip } from './InstructorShip'
 import { MeetingRoomState } from './MeetingRoomState'
 import { RequirementDeck } from './RequirementDeck'
+import { SyncBeam } from './SyncBeam'
 import { podsShown } from './stationScene'
 import { TaskBoxes } from './TaskBoxes'
 import { TaskTooltip } from './TaskTooltip'
@@ -79,6 +80,7 @@ export function OfficeScene() {
         </Suspense>
         <ActivityNotes />
         <ArchiveTag />
+        <SyncBeam />
         <DockShip />
       </group>
       <TaskTooltip />
