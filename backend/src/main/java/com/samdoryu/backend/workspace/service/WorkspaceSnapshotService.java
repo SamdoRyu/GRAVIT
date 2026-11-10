@@ -24,10 +24,13 @@ import com.samdoryu.backend.workspace.dto.WorkspaceSnapshot;
 import com.samdoryu.backend.workspace.dto.WorkspaceSummary;
 import com.samdoryu.backend.workspace.repository.MemberRepository;
 import com.samdoryu.backend.workspace.repository.TeamSettingsRepository;
+import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import org.hibernate.FlushMode;
+import org.hibernate.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,13 +60,15 @@ public class WorkspaceSnapshotService {
     private final RequirementService requirementService;
     private final RequirementLinkService requirementLinkService;
     private final ActivityService activityService;
+    private final EntityManager entityManager;
 
     public WorkspaceSnapshotService(WorkspaceService workspaceService, MemberRepository memberRepository,
             TeamSettingsRepository teamSettingsRepository, SyncService syncService,
             SyncedItemService syncedItemService, AgendaItemService agendaItemService, MeetingService meetingService,
             HelpRequestService helpRequestService, EvaluationRoundService evaluationRoundService,
             RequirementService requirementService, RequirementLinkService requirementLinkService,
-            ActivityService activityService) {
+            ActivityService activityService, EntityManager entityManager) {
+        this.entityManager = entityManager;
         this.workspaceService = workspaceService;
         this.memberRepository = memberRepository;
         this.teamSettingsRepository = teamSettingsRepository;
@@ -81,9 +86,28 @@ public class WorkspaceSnapshotService {
     /**
      * 한 트랜잭션에서 읽어 조각끼리 같은 시점을 본다. 읽기 전용이 아닌 이유: 동기화 상태 행이 없으면
      * {@link SyncService#status}가 만든다.
+     *
+     * <p>조립하는 동안만 flush를 커밋 때로 미룬다. 조립은 읽기만 하고(유일한 쓰기인 SyncState 생성은 네이티브 INSERT라
+     * 바로 실행된다), 쿼리마다 영속성 컨텍스트 전체를 dirty check하는 auto-flush가 큰 사무실 Snapshot 비용의 대부분이었다.
+     * 들어오기 전의 변경은 먼저 반영해 조회가 보던 값을 그대로 보게 하고, 끝나면(예외여도) 원래 모드로 되돌린다.
      */
     @Transactional
     public WorkspaceSnapshot load(WorkspaceAccess access) {
+        Session session = entityManager.unwrap(Session.class);
+        FlushMode previous = session.getHibernateFlushMode();
+        if (!FlushMode.COMMIT.lessThan(previous)) { // 이미 COMMIT · MANUAL이면 그대로
+            return assemble(access);
+        }
+        session.flush();
+        session.setHibernateFlushMode(FlushMode.COMMIT);
+        try {
+            return assemble(access);
+        } finally {
+            session.setHibernateFlushMode(previous);
+        }
+    }
+
+    private WorkspaceSnapshot assemble(WorkspaceAccess access) {
         Long workspaceId = access.workspaceId();
         Instant now = Instant.now();
         List<Member> members = memberRepository.findByWorkspaceId(workspaceId).stream().sorted(MEMBER_ORDER).toList();
