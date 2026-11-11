@@ -82,8 +82,13 @@ test('only cards with what I learned can be picked for a report; the picked card
   await expect(pick()).toBeEnabled()
   await pick().check()
   await create.getByRole('textbox', { name: /제목/ }).fill('레포 선택 회고')
+  await create.getByRole('button', { name: '다음' }).click()
+  await expect(create.getByLabel('고른 내용')).toHaveText('레포 선택 회고 · 넣을 기술 결정 카드 #7 feat(workspace): 레포 선택 목록')
   await create.getByRole('textbox', { name: /느낀 점/ }).fill('페이지 나누기를 먼저 정했어야 했다')
-  await create.getByRole('button', { name: '만들기' }).click()
+  const downloading = page.waitForEvent('download')
+  await create.getByRole('button', { name: '마크다운 내보내기' }).click()
+  await downloading
+  await panel.getByRole('list', { name: '회고 리포트 목록' }).getByRole('button', { name: /^레포 선택 회고 · / }).click()
 
   const report = panel.getByRole('article', { name: '회고 리포트: 레포 선택 회고' })
   await expect(report.getByLabel('담당 기능 영역')).toHaveText('workspace')

@@ -2,6 +2,7 @@
 // 개인 API라 Snapshot · SSE에 없다 — 탭을 열 때 읽고, 쓴 뒤에는 응답으로 바꾼다. 학생은 본인 것만 본다(다른 팀원을 고르는 UI 없음).
 // 강사는 팀원을 골라 읽기만 한다(만들기 · 느낀 점 쓰기 없음). 권한은 서버가 다시 검사한다(403). 평가자 · 사람별 합계 · 순위는 없다.
 // 보기 순서는 기록 → 카드 → 리포트(#336). 리포트는 만들 때 제목 · 느낀 점 · 넣을 기술 결정 카드(PR 단위)를 고른다(#335).
+// 저장 버튼은 없다 — 「마크다운 내보내기」가 리포트를 저장(새 리포트는 만들기, 저장된 리포트는 고친 느낀 점)한 뒤 내려받는다(#342).
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { CARD_CELLS } from '../data/rules/decisionCard'
 import { panelProblem, type PanelProblem } from '../data/rules/errors'
@@ -222,13 +223,20 @@ function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: bo
     }
   }, [memberId, key])
 
-  if (creating) return <CreateReportForm memberId={memberId} onCreated={onOpen} onCancel={() => setCreating(false)} />
+  if (creating) {
+    // 내보내기로 저장했으면 목록으로 돌아가 새 리포트를 보인다
+    const close = (saved: boolean) => {
+      setCreating(false)
+      if (saved) setReload((n) => n + 1)
+    }
+    return <CreateReportForm memberId={memberId} onDone={() => close(true)} onCancel={() => close(false)} />
+  }
   const current = loaded?.key === key ? loaded : null
   return (
     <>
       {canWrite && (
         <div className="retro-bar">
-          <span className="small">제목 · 느낀 점을 쓰고 넣을 기술 결정 카드를 골라요</span>
+          <span className="small">넣을 기술 결정 카드를 고르고 느낀 점을 써요</span>
           <span className="grow" />
           <button type="button" className="btn btn-sm btn-primary" onClick={() => setCreating(true)}>
             리포트 만들기
@@ -265,11 +273,13 @@ function ReportList({ memberId, canWrite, onOpen }: { memberId: Id; canWrite: bo
 const prLabel = (pr: Pick<SubmissionDto, 'githubPrNumber' | 'title'> | undefined) => (pr ? `#${pr.githubPrNumber} ${pr.title}` : 'PR')
 
 /**
- * 리포트 만들기(#335) — 제목(기본값 "회고 리포트 · M월 D일") · 느낀 점(필수) · 넣을 기술 결정 카드(PR 번호 순). 「내가 배운 점」이 빈
- * 카드는 고를 수 없다(P11). 화면은 늘 최종(final)을 만든다 — 중간 리포트는 보류(FR-REP-05).
+ * 리포트 만들기(#335 · #342) — 두 단계. 1단계: 제목(기본값 "회고 리포트 · M월 D일") · 넣을 기술 결정 카드(PR 번호 순). 「내가 배운 점」이
+ * 빈 카드는 고를 수 없다(P11). 2단계: 느낀 점(필수) — 「마크다운 내보내기」가 리포트를 만들고(목록에 저장) 마크다운을 내려받는다.
+ * 화면은 늘 최종(final)을 만든다 — 중간 리포트는 보류(FR-REP-05).
  */
-function CreateReportForm({ memberId, onCreated, onCancel }: { memberId: Id; onCreated: (id: Id) => void; onCancel: () => void }) {
+function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone: () => void; onCancel: () => void }) {
   const submissions = useOffice((s) => s.office?.snapshot?.submissions ?? null)
+  const [step, setStep] = useState<'pick' | 'write'>('pick')
   const [title, setTitle] = useState(() => defaultReportTitle(new Date()))
   const [learning, setLearning] = useState('')
   const [picked, setPicked] = useState<Id[]>([])
@@ -295,24 +305,65 @@ function CreateReportForm({ memberId, onCreated, onCancel }: { memberId: Id; onC
   const sorted = [...(cards ?? [])].sort((a, b) => prNumber(a) - prNumber(b))
   const request = { kind: 'final' as const, title, learning, decisionCardIds: picked }
   const error = reportCreateError(request)
+  // 1단계는 느낀 점을 아직 받지 않는다 — 느낀 점 오류만 남았으면 다음 단계로 간다
+  const pickError = error === REPORT_MSG.learning ? null : error
   const toggle = (id: Id, on: boolean) => setPicked((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)))
+  const pickedLabels = sorted.filter((card) => picked.includes(card.id)).map((card) => prLabel(prById.get(card.submissionId)))
 
-  const submit = async (e: FormEvent) => {
+  const next = (e: FormEvent) => {
+    e.preventDefault()
+    setTried(true)
+    if (pickError) return
+    setTried(false)
+    setStep('write')
+  }
+
+  // 만들기(목록에 저장) → 마크다운 받기 → 내려받기. 저장만 되고 받기가 실패하면 저장된 사실을 따로 알린다(받기 실패 알림은 store가 띄운다)
+  const exportReport = async (e: FormEvent) => {
     e.preventDefault()
     setTried(true)
     if (error || busy) return
     setBusy(true)
-    const created = await useOffice.getState().createReport(memberId, { ...request, title: title.trim() })
+    const { createReport, exportReportMarkdown, toast } = useOffice.getState()
+    const created = await createReport(memberId, { ...request, title: title.trim() })
+    if (!created) {
+      setBusy(false)
+      return
+    }
+    const markdown = await exportReportMarkdown(memberId, created.id)
     setBusy(false)
-    if (!created) return
-    useOffice.getState().toast('good', `"${created.title}" 리포트를 만들었어요`)
-    onCreated(created.id)
+    if (markdown === null) {
+      toast('warn', `"${created.title}" 리포트는 목록에 저장했어요 — 리포트를 열어 다시 내보내 주세요`)
+    } else {
+      saveTextFile(reportFileName(created), markdown)
+      toast('good', `"${created.title}" 리포트를 목록에 저장하고 마크다운 파일로 내보냈어요 — 팀원 이름은 "팀원 A"처럼 바뀌었어요`)
+    }
+    onDone()
+  }
+
+  if (step === 'write') {
+    return (
+      <form key="write" className="help-form" onSubmit={exportReport} noValidate aria-label="회고 리포트 만들기">
+        <p className="dim small" aria-label="고른 내용">
+          {title.trim()} · 넣을 기술 결정 카드 {pickedLabels.length === 0 ? '없음' : pickedLabels.join(', ')}
+        </p>
+        <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} autoFocus error={tried && error === REPORT_MSG.learning ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+        <p className="dim small">「마크다운 내보내기」를 누르면 리포트 목록에 저장되고 마크다운 파일도 받아요</p>
+        <div className="help-actions">
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setStep('pick')} disabled={busy}>
+            이전
+          </button>
+          <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+            마크다운 내보내기
+          </button>
+        </div>
+      </form>
+    )
   }
 
   return (
-    <form className="help-form" onSubmit={submit} noValidate aria-label="회고 리포트 만들기">
-      <TextField label="제목" value={title} max={REPORT_TITLE_MAX} error={tried && error === REPORT_MSG.title ? error : null} placeholder="예: 1차 스프린트 회고" onChange={setTitle} />
-      <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} error={tried && error === REPORT_MSG.learning ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+    <form key="pick" className="help-form" onSubmit={next} noValidate aria-label="회고 리포트 만들기">
+      <TextField label="제목" value={title} max={REPORT_TITLE_MAX} error={tried && pickError === REPORT_MSG.title ? pickError : null} placeholder="예: 1차 스프린트 회고" onChange={setTitle} />
       <fieldset className="retro-pick">
         <legend className="fld-label">넣을 기술 결정 카드</legend>
         {cards === undefined || submissions === null ? (
@@ -342,8 +393,8 @@ function CreateReportForm({ memberId, onCreated, onCancel }: { memberId: Id; onC
         <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel} disabled={busy}>
           취소
         </button>
-        <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
-          만들기
+        <button type="submit" className="btn btn-sm btn-primary">
+          다음
         </button>
       </div>
     </form>
@@ -351,11 +402,9 @@ function CreateReportForm({ memberId, onCreated, onCancel }: { memberId: Id; onC
 }
 
 function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; reportId: Id; canWrite: boolean; onBack: () => void }) {
-  const now = useNow(60_000)
   const [reload, setReload] = useState(0)
   const key = `${memberId}|${reportId}|${reload}`
   const [loaded, setLoaded] = useState<Loaded<RetroReportDto> | null>(null)
-  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -394,14 +443,42 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
       </>
     )
   }
+  return <ReportArticle key={report.id} memberId={memberId} report={report} canWrite={canWrite} back={back} onSaved={(saved) => setLoaded({ key, value: saved })} />
+}
+
+/**
+ * 리포트 상세 — 본인은 느낀 점을 고칠 수 있다. 저장 버튼은 없고, 「마크다운 내보내기」가 바뀐 느낀 점을 먼저 저장한 뒤 내려받는다
+ * (#342). 안 바뀌었으면 내려받기만 한다. 강사는 읽기 · 내보내기만.
+ */
+function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId: Id; report: RetroReportDto; canWrite: boolean; back: ReactNode; onSaved: (saved: RetroReportDto) => void }) {
+  const now = useNow(60_000)
+  const [learning, setLearning] = useState(report.learning ?? '')
+  const [exporting, setExporting] = useState(false)
+  const dirty = canWrite && learning !== (report.learning ?? '')
+  const learningError = dirty ? reportLearningError({ learning }) : null
 
   const exportMarkdown = async () => {
+    if (exporting || learningError) return
     setExporting(true)
-    const markdown = await useOffice.getState().exportReportMarkdown(memberId, report.id)
+    const { updateReportLearning, exportReportMarkdown, toast } = useOffice.getState()
+    let saved: RetroReportDto | null = null
+    if (dirty) {
+      saved = await updateReportLearning(memberId, report.id, { learning })
+      if (!saved) {
+        setExporting(false)
+        return
+      }
+      setLearning(saved.learning ?? '')
+      onSaved(saved)
+    }
+    const markdown = await exportReportMarkdown(memberId, report.id)
     setExporting(false)
-    if (markdown === null) return
-    saveTextFile(reportFileName(report), markdown)
-    useOffice.getState().toast('good', '마크다운 파일로 내보냈어요 — 팀원 이름은 "팀원 A"처럼 바뀌었어요')
+    if (markdown === null) {
+      if (saved) toast('warn', '느낀 점은 저장했어요 — 마크다운은 다시 내보내 주세요')
+      return
+    }
+    saveTextFile(reportFileName(saved ?? report), markdown)
+    toast('good', `${saved ? '느낀 점을 저장하고 ' : ''}마크다운 파일로 내보냈어요 — 팀원 이름은 "팀원 A"처럼 바뀌었어요`)
   }
 
   return (
@@ -417,7 +494,7 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
             {createdDay(report.createdAt)} 만듦
           </span>
           <span className="grow" />
-          <button type="button" className="btn btn-sm" disabled={exporting} onClick={() => void exportMarkdown()}>
+          <button type="button" className="btn btn-sm" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
             마크다운 내보내기
           </button>
         </span>
@@ -425,7 +502,10 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
 
       <Section title="느낀 점">
         {canWrite ? (
-          <LearningForm key={report.learning ?? ''} memberId={memberId} report={report} onSaved={(saved) => setLoaded({ key, value: saved })} />
+          <div className="help-form">
+            <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} error={learningError} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+            <p className="dim small">「마크다운 내보내기」를 누르면 고친 느낀 점이 저장돼요</p>
+          </div>
         ) : (
           <p className="help-content">{report.learning?.trim() ? report.learning : <span className="dim">아직 안 썼어요</span>}</p>
         )}
@@ -507,35 +587,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h4 className="help-sub">{title}</h4>
       {children}
     </section>
-  )
-}
-
-function LearningForm({ memberId, report, onSaved }: { memberId: Id; report: RetroReportDto; onSaved: (saved: RetroReportDto) => void }) {
-  const [text, setText] = useState(report.learning ?? '')
-  const [busy, setBusy] = useState(false)
-  const error = reportLearningError({ learning: text })
-  const dirty = text !== (report.learning ?? '')
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (error || busy || !dirty) return
-    setBusy(true)
-    const saved = await useOffice.getState().updateReportLearning(memberId, report.id, { learning: text })
-    setBusy(false)
-    if (!saved) return
-    useOffice.getState().toast('good', '느낀 점을 저장했어요')
-    onSaved(saved)
-  }
-
-  return (
-    <form className="help-form" onSubmit={submit} noValidate aria-label="느낀 점 쓰기">
-      <TextField label="느낀 점" value={text} max={REPORT_LEARNING_MAX} rows={5} error={dirty ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setText} />
-      <div className="help-actions">
-        <button type="submit" className="btn btn-sm btn-primary" disabled={busy || !!error || !dirty}>
-          저장
-        </button>
-      </div>
-    </form>
   )
 }
 
