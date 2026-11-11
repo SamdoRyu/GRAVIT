@@ -520,7 +520,7 @@ function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId
       <ReportSheet
         report={report}
         action={
-          <button type="button" className="btn btn-sm" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
+          <button type="button" className="btn btn-sm btn-primary" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
             마크다운 내보내기
           </button>
         }
