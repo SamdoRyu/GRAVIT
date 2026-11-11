@@ -50,8 +50,11 @@ test('create a report in two steps — cards, then what I felt — and markdown 
   await create.getByRole('textbox', { name: /제목/ }).fill('1차 스프린트 회고')
   await create.getByRole('button', { name: '다음' }).click()
 
-  // 2단계: 느낀 점(필수) · 저장 안내. 이전으로 돌아가도 1단계 값이 남는다
-  await expect(create.getByLabel('고른 내용')).toHaveText('1차 스프린트 회고 · 넣을 기술 결정 카드 없음')
+  // 2단계: 저장된 리포트와 같은 칸(저장 전 미리보기) + 느낀 점(필수) · 저장 안내. 이전으로 돌아가도 1단계 값이 남는다
+  await expect(create.getByRole('heading', { name: '1차 스프린트 회고' })).toBeVisible()
+  await expect(create.getByText('저장 전 미리보기')).toBeVisible()
+  await expect(create.getByLabel('담당 기능 영역')).toContainText('담당 기능 영역 없음')
+  for (const region of ['느낀 점', '안건 결과 0', '강사 피드백 0', '기술 결정 카드 0']) await expect(create.getByRole('region', { name: region })).toBeVisible()
   await expect(create.getByText('「마크다운 내보내기」를 누르면 리포트 목록에 저장되고 마크다운 파일도 받아요')).toBeVisible()
   await create.getByRole('button', { name: '이전' }).click()
   await expect(create.getByRole('textbox', { name: /제목/ })).toHaveValue('1차 스프린트 회고')

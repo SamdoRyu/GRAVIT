@@ -4,6 +4,7 @@
 // 보기 순서는 기록 → 카드 → 리포트(#336). 리포트는 만들 때 제목 · 느낀 점 · 넣을 기술 결정 카드(PR 단위)를 고른다(#335).
 // 저장 버튼은 없다 — 「마크다운 내보내기」가 리포트를 저장(새 리포트는 만들기, 저장된 리포트는 고친 느낀 점)한 뒤 내려받는다(#342).
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { activityMinutesByKind } from '../data/rules/activity'
 import { CARD_CELLS } from '../data/rules/decisionCard'
 import { panelProblem, type PanelProblem } from '../data/rules/errors'
 import { kstToday } from '../data/rules/period'
@@ -19,8 +20,9 @@ import {
   reportCreateError,
   reportFileName,
   reportLearningError,
+  retroReportView,
 } from '../data/rules/report'
-import type { DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, RetroReportSummary, SubmissionDto, TimelineEntry } from '../data/types'
+import type { ActivityRecordDto, DecisionCardDto, Id, MemberDto, PageResponse, RetroReportDto, RetroReportSummary, SubmissionDto, TimelineEntry } from '../data/types'
 import { useOffice } from '../store'
 import { Empty } from './common'
 import { DecisionCardsView } from './DecisionCards'
@@ -279,11 +281,15 @@ const prLabel = (pr: Pick<SubmissionDto, 'githubPrNumber' | 'title'> | undefined
  */
 function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone: () => void; onCancel: () => void }) {
   const submissions = useOffice((s) => s.office?.snapshot?.submissions ?? null)
+  const tasks = useOffice((s) => s.office?.snapshot?.tasks ?? null)
+  const agendaItems = useOffice((s) => s.office?.snapshot?.agendaItems ?? null)
   const [step, setStep] = useState<'pick' | 'write'>('pick')
+  const [openedAt] = useState(() => new Date().toISOString())
   const [title, setTitle] = useState(() => defaultReportTitle(new Date()))
   const [learning, setLearning] = useState('')
   const [picked, setPicked] = useState<Id[]>([])
   const [cards, setCards] = useState<DecisionCardDto[] | null | undefined>(undefined)
+  const [activity, setActivity] = useState<RetroReportDto['activityDistribution']>([])
   const [busy, setBusy] = useState(false)
   const [tried, setTried] = useState(false)
 
@@ -300,6 +306,25 @@ function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone
     }
   }, [memberId])
 
+  // 미리보기의 활동 분포 — 서버처럼 본인의 확인된 활동만 유형별로 더한다(FR-ACT-03). 페이지를 끝까지 읽는다
+  useEffect(() => {
+    let alive = true
+    const loadMine = async () => {
+      const mine: ActivityRecordDto[] = []
+      for (let page = 0; ; page++) {
+        const result = await useOffice.getState().loadActivities('confirmed', page)
+        if (!result || !alive) return
+        mine.push(...result.items.filter((a) => a.authorMemberId === memberId))
+        if (page + 1 >= result.totalPages) break
+      }
+      if (alive) setActivity(activityMinutesByKind(mine))
+    }
+    void loadMine()
+    return () => {
+      alive = false
+    }
+  }, [memberId])
+
   const prById = new Map((submissions ?? []).map((pr) => [pr.id, pr]))
   const prNumber = (card: DecisionCardDto) => prById.get(card.submissionId)?.githubPrNumber ?? Number.MAX_SAFE_INTEGER
   const sorted = [...(cards ?? [])].sort((a, b) => prNumber(a) - prNumber(b))
@@ -308,7 +333,6 @@ function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone
   // 1단계는 느낀 점을 아직 받지 않는다 — 느낀 점 오류만 남았으면 다음 단계로 간다
   const pickError = error === REPORT_MSG.learning ? null : error
   const toggle = (id: Id, on: boolean) => setPicked((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)))
-  const pickedLabels = sorted.filter((card) => picked.includes(card.id)).map((card) => prLabel(prById.get(card.submissionId)))
 
   const next = (e: FormEvent) => {
     e.preventDefault()
@@ -342,21 +366,32 @@ function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone
   }
 
   if (step === 'write') {
+    // 저장 전 미리보기 — 저장된 리포트 상세와 같은 칸을 서버와 같은 계산(retroReportView)으로 보인다
+    const preview = retroReportView(
+      { id: 'preview', memberId, kind: 'final', title: title.trim(), createdAt: openedAt, learning, decisionCardIds: picked },
+      { tasks: tasks ?? [], submissions: submissions ?? [], agendaItems: agendaItems ?? [], activityDistribution: activity, decisionCards: cards ?? [] },
+    )
     return (
-      <form key="write" className="help-form" onSubmit={exportReport} noValidate aria-label="회고 리포트 만들기">
-        <p className="dim small" aria-label="고른 내용">
-          {title.trim()} · 넣을 기술 결정 카드 {pickedLabels.length === 0 ? '없음' : pickedLabels.join(', ')}
-        </p>
-        <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} autoFocus error={tried && error === REPORT_MSG.learning ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
-        <p className="dim small">「마크다운 내보내기」를 누르면 리포트 목록에 저장되고 마크다운 파일도 받아요</p>
-        <div className="help-actions">
-          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setStep('pick')} disabled={busy}>
-            이전
-          </button>
-          <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
-            마크다운 내보내기
-          </button>
-        </div>
+      <form key="write" className="retro-report" onSubmit={exportReport} noValidate aria-label="회고 리포트 만들기">
+        <button type="button" className="btn btn-sm btn-ghost help-back" onClick={() => setStep('pick')} disabled={busy}>
+          <Icon name="chevronLeft" size={14} />
+          이전
+        </button>
+        <ReportSheet
+          report={preview}
+          date={<span className="dim">저장 전 미리보기</span>}
+          action={
+            <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+              마크다운 내보내기
+            </button>
+          }
+          learning={
+            <div className="help-form">
+              <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} autoFocus error={tried && error === REPORT_MSG.learning ? error : null} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+              <p className="dim small">「마크다운 내보내기」를 누르면 리포트 목록에 저장되고 마크다운 파일도 받아요</p>
+            </div>
+          }
+        />
       </form>
     )
   }
@@ -451,7 +486,6 @@ function ReportDetail({ memberId, reportId, canWrite, onBack }: { memberId: Id; 
  * (#342). 안 바뀌었으면 내려받기만 한다. 강사는 읽기 · 내보내기만.
  */
 function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId: Id; report: RetroReportDto; canWrite: boolean; back: ReactNode; onSaved: (saved: RetroReportDto) => void }) {
-  const now = useNow(60_000)
   const [learning, setLearning] = useState(report.learning ?? '')
   const [exporting, setExporting] = useState(false)
   const dirty = canWrite && learning !== (report.learning ?? '')
@@ -484,32 +518,51 @@ function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId
   return (
     <article className="retro-report" aria-label={`회고 리포트: ${report.title}`}>
       {back}
+      <ReportSheet
+        report={report}
+        date={
+          <span className="dim" title={report.createdAt}>
+            {createdDay(report.createdAt)} 만듦
+          </span>
+        }
+        action={
+          <button type="button" className="btn btn-sm" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
+            마크다운 내보내기
+          </button>
+        }
+        learning={
+          canWrite ? (
+            <div className="help-form">
+              <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} error={learningError} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
+              <p className="dim small">「마크다운 내보내기」를 누르면 고친 느낀 점이 저장돼요</p>
+            </div>
+          ) : (
+            <p className="help-content">{report.learning?.trim() ? report.learning : <span className="dim">아직 안 썼어요</span>}</p>
+          )
+        }
+      />
+    </article>
+  )
+}
+
+/** 리포트 머리 · 칸 — 저장된 리포트 상세와 만들기 2단계(저장 전 미리보기)가 같이 쓴다(#342). 느낀 점 칸 내용 · 날짜 · 버튼은 쓰는 쪽이 넣는다 */
+function ReportSheet({ report, date, action, learning }: { report: RetroReportDto; date: ReactNode; action: ReactNode; learning: ReactNode }) {
+  const now = useNow(60_000)
+  return (
+    <>
       <header className="help-head">
         <h3 className="retro-heading">{report.title}</h3>
         <p className="dim small retro-areas" aria-label="담당 기능 영역">
           {report.areaLabels.length === 0 ? '담당 기능 영역 없음 — 고른 카드에 area 라벨이 없어요' : report.areaLabels.map((label) => label.slice('area:'.length)).join(' · ')}
         </p>
         <span className="help-item-foot">
-          <span className="dim" title={report.createdAt}>
-            {createdDay(report.createdAt)} 만듦
-          </span>
+          {date}
           <span className="grow" />
-          <button type="button" className="btn btn-sm" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
-            마크다운 내보내기
-          </button>
+          {action}
         </span>
       </header>
 
-      <Section title="느낀 점">
-        {canWrite ? (
-          <div className="help-form">
-            <TextField label="느낀 점" value={learning} max={REPORT_LEARNING_MAX} rows={5} error={learningError} placeholder="이번 기간을 돌아보며 느낀 점을 적어 주세요" onChange={setLearning} />
-            <p className="dim small">「마크다운 내보내기」를 누르면 고친 느낀 점이 저장돼요</p>
-          </div>
-        ) : (
-          <p className="help-content">{report.learning?.trim() ? report.learning : <span className="dim">아직 안 썼어요</span>}</p>
-        )}
-      </Section>
+      <Section title="느낀 점">{learning}</Section>
 
       <Section title={`안건 결과 ${report.agendaResults.length}`}>
         {report.agendaResults.length === 0 ? (
@@ -577,7 +630,7 @@ function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId
           </ul>
         )}
       </Section>
-    </article>
+    </>
   )
 }
 
