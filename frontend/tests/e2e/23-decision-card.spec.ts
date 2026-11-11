@@ -2,6 +2,7 @@
 // 칸을 고쳐 저장하고, 강사 꼬리질문을 요청한다. 「확인함」 단계는 없다 — 「내가 배운 점」을 쓴 카드는 회고 리포트를 만들 때 고를 수 있다.
 // mock seed: 나(김옥토)의 머지된 PR #7(레포 선택 목록 — 이슈 #6 · 요구사항 "레포 선택 · 사무실 열기", area:workspace)과 열린 PR #15.
 // 9칸 채우기 규칙은 계약 테스트(decisionCard.test.ts)가 맡는다. 강사 꼬리질문 쓰기는 mock에 강사가 없어 ?source=api로 본다.
+import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
 import { expect, openApp, test } from './fixtures'
 
@@ -82,11 +83,22 @@ test('only cards with what I learned can be picked for a report; the picked card
   await expect(pick()).toBeEnabled()
   await pick().check()
   await create.getByRole('textbox', { name: /제목/ }).fill('레포 선택 회고')
+  await create.getByRole('button', { name: '다음' }).click()
+  // 2단계 미리보기에 고른 카드의 내용이 저장 전부터 보인다
+  const previewCards = create.getByRole('list', { name: '기술 결정 카드' })
+  await expect(previewCards.getByRole('listitem')).toHaveCount(1)
+  await expect(previewCards).toContainText('#7 feat(workspace): 레포 선택 목록')
+  await expect(previewCards).toContainText('목록은 페이지로 나눠 읽는다')
   await create.getByRole('textbox', { name: /느낀 점/ }).fill('페이지 나누기를 먼저 정했어야 했다')
-  await create.getByRole('button', { name: '만들기' }).click()
+  const downloading = page.waitForEvent('download')
+  await create.getByRole('button', { name: '마크다운 내보내기' }).click()
+  // 담당 기능 영역은 화면에 없고 마크다운에 남는다 — 고른 카드의 PR · 연결 이슈 기준(FR-REP-01)
+  const markdown = await readFile(await (await downloading).path(), 'utf8')
+  expect(markdown).toContain('## 담당 기능 영역\n\n- area:workspace')
+  await panel.getByRole('list', { name: '회고 리포트 목록' }).getByRole('button', { name: /^레포 선택 회고 · / }).click()
 
   const report = panel.getByRole('article', { name: '회고 리포트: 레포 선택 회고' })
-  await expect(report.getByLabel('담당 기능 영역')).toHaveText('workspace')
+  await expect(report.getByLabel('담당 기능 영역')).toHaveCount(0)
   const cards = report.getByRole('list', { name: '기술 결정 카드' })
   await expect(cards.getByRole('listitem')).toHaveCount(1)
   await expect(cards).toContainText('#7 feat(workspace): 레포 선택 목록')
