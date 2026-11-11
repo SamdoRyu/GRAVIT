@@ -379,7 +379,6 @@ function CreateReportForm({ memberId, onDone, onCancel }: { memberId: Id; onDone
         </button>
         <ReportSheet
           report={preview}
-          date={<span className="dim">저장 전 미리보기</span>}
           action={
             <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
               마크다운 내보내기
@@ -520,11 +519,6 @@ function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId
       {back}
       <ReportSheet
         report={report}
-        date={
-          <span className="dim" title={report.createdAt}>
-            {createdDay(report.createdAt)} 만듦
-          </span>
-        }
         action={
           <button type="button" className="btn btn-sm" disabled={exporting || !!learningError} onClick={() => void exportMarkdown()}>
             마크다운 내보내기
@@ -545,18 +539,14 @@ function ReportArticle({ memberId, report, canWrite, back, onSaved }: { memberId
   )
 }
 
-/** 리포트 머리 · 칸 — 저장된 리포트 상세와 만들기 2단계(저장 전 미리보기)가 같이 쓴다(#342). 느낀 점 칸 내용 · 날짜 · 버튼은 쓰는 쪽이 넣는다 */
-function ReportSheet({ report, date, action, learning }: { report: RetroReportDto; date: ReactNode; action: ReactNode; learning: ReactNode }) {
+/** 리포트 머리 · 칸 — 저장된 리포트 상세와 만들기 2단계(저장 전 미리보기)가 같이 쓴다(#342). 느낀 점 칸 내용 · 버튼은 쓰는 쪽이 넣는다 */
+function ReportSheet({ report, action, learning }: { report: RetroReportDto; action: ReactNode; learning: ReactNode }) {
   const now = useNow(60_000)
   return (
     <>
       <header className="help-head">
         <h3 className="retro-heading">{report.title}</h3>
-        <p className="dim small retro-areas" aria-label="담당 기능 영역">
-          {report.areaLabels.length === 0 ? '담당 기능 영역 없음 — 고른 카드에 area 라벨이 없어요' : report.areaLabels.map((label) => label.slice('area:'.length)).join(' · ')}
-        </p>
         <span className="help-item-foot">
-          {date}
           <span className="grow" />
           {action}
         </span>

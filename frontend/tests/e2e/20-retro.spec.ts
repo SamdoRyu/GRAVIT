@@ -52,8 +52,7 @@ test('create a report in two steps — cards, then what I felt — and markdown 
 
   // 2단계: 저장된 리포트와 같은 칸(저장 전 미리보기) + 느낀 점(필수) · 저장 안내. 이전으로 돌아가도 1단계 값이 남는다
   await expect(create.getByRole('heading', { name: '1차 스프린트 회고' })).toBeVisible()
-  await expect(create.getByText('저장 전 미리보기')).toBeVisible()
-  await expect(create.getByLabel('담당 기능 영역')).toContainText('담당 기능 영역 없음')
+  await expect(create.getByLabel('담당 기능 영역')).toHaveCount(0)
   for (const region of ['느낀 점', '안건 결과 0', '강사 피드백 0', '기술 결정 카드 0']) await expect(create.getByRole('region', { name: region })).toBeVisible()
   await expect(create.getByText('「마크다운 내보내기」를 누르면 리포트 목록에 저장되고 마크다운 파일도 받아요')).toBeVisible()
   await create.getByRole('button', { name: '이전' }).click()
@@ -81,9 +80,10 @@ test('create a report in two steps — cards, then what I felt — and markdown 
 
   const report = panel.getByRole('article', { name: '회고 리포트: 1차 스프린트 회고' })
   await expect(report.getByRole('heading', { name: '1차 스프린트 회고' })).toBeVisible()
-  // 요약은 없고, 담당 기능 영역은 고른 카드 기준 — 카드가 없으면 비어 있다
+  // 요약 · 담당 기능 영역 줄 · 만든 날 줄은 화면에 없다(담당 기능 영역은 마크다운에만 — #342)
   await expect(report.getByRole('region', { name: '요약' })).toHaveCount(0)
-  await expect(report.getByLabel('담당 기능 영역')).toContainText('담당 기능 영역 없음')
+  await expect(report.getByLabel('담당 기능 영역')).toHaveCount(0)
+  await expect(report.getByText(/만듦$/)).toHaveCount(0)
   await expect(report.getByRole('region', { name: '기술 결정 카드 0' })).toBeVisible()
 
   // 상세: 저장 버튼 없이 느낀 점을 고치고, 내보내기가 고친 느낀 점을 저장한 뒤 내려받는다
