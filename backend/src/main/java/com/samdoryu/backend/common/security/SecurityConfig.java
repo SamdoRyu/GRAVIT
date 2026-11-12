@@ -109,9 +109,10 @@ public class SecurityConfig {
                                 GithubUserToken.clear(request.getSession(false));
                                 response.setStatus(HttpStatus.NO_CONTENT.value());
                             })
-                            // 어느 값이 틀렸는지 말하지 않는다
+                            // 어느 값이 틀렸는지 말하지 않는다. 문구는 「로그인이 필요해요」(로그인 안 한 API 호출)와 다르다(#344)
                             .failureHandler((request, response, exception) ->
-                                    errorResponseWriter.write(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED)));
+                                    errorResponseWriter.write(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED,
+                                            AccountService.REVIEW_LOGIN_FAILED_MESSAGE)));
         } else {
             http.formLogin(formLogin -> formLogin.disable());
         }

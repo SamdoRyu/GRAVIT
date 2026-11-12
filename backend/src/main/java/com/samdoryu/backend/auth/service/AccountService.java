@@ -22,6 +22,12 @@ public class AccountService {
     /** 보안 심사용 ID/PW 로그인(CONTRACTS_API 「2」) — 켜진 환경에서만 처리기가 있다. */
     public static final String REVIEW_LOGIN_URL = "/api/review-login";
 
+    /**
+     * 심사용 로그인 실패 문구(401 {@code unauthorized}) — 틀린 비밀번호 · 없는 아이디 · 막힌 계정 · 잠금 모두 같다(어느 값이
+     * 틀렸는지 말하지 않음). 화면 mock({@code reviewLoginFailed})과 같은 문구다(#344).
+     */
+    public static final String REVIEW_LOGIN_FAILED_MESSAGE = "아이디나 비밀번호가 맞지 않아요";
+
     private final AppUserRepository appUserRepository;
     private final InstructorAssignmentService instructorAssignmentService;
     private final ReviewAccountService reviewAccountService;
