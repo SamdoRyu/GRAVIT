@@ -32,6 +32,8 @@ class ReviewLoginEndpointTest {
 
     static final String ORIGIN = "http://localhost:5173";
     private static final String PASSWORD = "student-" + System.nanoTime();
+    /** 심사용 로그인 실패 문구 — 화면 mock {@code reviewLoginFailed}와 글자 그대로 같아야 한다(#344). */
+    static final String REVIEW_LOGIN_FAILED = "아이디나 비밀번호가 맞지 않아요";
 
     @DynamicPropertySource
     static void reviewAccounts(DynamicPropertyRegistry registry) {
@@ -66,6 +68,7 @@ class ReviewLoginEndpointTest {
             String body = login(session, attempt[0], attempt[1])
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.error.code").value("unauthorized"))
+                    .andExpect(jsonPath("$.error.message").value(REVIEW_LOGIN_FAILED))
                     .andReturn().getResponse().getContentAsString();
             assertThat(body).doesNotContain(attempt[0]);
             mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
@@ -97,7 +100,9 @@ class ReviewLoginEndpointTest {
     @Test
     void noLoginPageIsServed() throws Exception {
         mvc.perform(get("/api/review-login")).andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("unauthorized"));
+                .andExpect(jsonPath("$.error.code").value("unauthorized"))
+                // 로그인 실패가 아니라 로그인 안 한 요청이라 기본 문구 그대로(#344)
+                .andExpect(jsonPath("$.error.message").value("로그인이 필요해요"));
         mvc.perform(get("/login")).andExpect(status().isUnauthorized());
     }
 }

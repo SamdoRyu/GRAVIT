@@ -71,7 +71,9 @@ class ReviewLoginThrottleIntegrationTest {
 
         login("rev-guessed", GUESSED_PASSWORD)
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("unauthorized"));
+                .andExpect(jsonPath("$.error.code").value("unauthorized"))
+                // 잠긴 동안에도 틀렸을 때와 같은 문구 — 잠겼다는 사실을 알리지 않는다
+                .andExpect(jsonPath("$.error.message").value(ReviewLoginEndpointTest.REVIEW_LOGIN_FAILED));
         login("rev-other", OTHER_PASSWORD).andExpect(status().isNoContent());
     }
 }

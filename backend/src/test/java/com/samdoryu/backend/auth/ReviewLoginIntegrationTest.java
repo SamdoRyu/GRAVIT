@@ -196,7 +196,8 @@ class ReviewLoginIntegrationTest {
         MockHttpSession session = new MockHttpSession();
         login(session, "rev-blocked", BLOCKED_PASSWORD)
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error.code").value("unauthorized"));
+                .andExpect(jsonPath("$.error.code").value("unauthorized"))
+                .andExpect(jsonPath("$.error.message").value(ReviewLoginEndpointTest.REVIEW_LOGIN_FAILED));
         mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
         assertThat(workspaces.findByKind(WorkspaceKind.DEMO)).as("실패한 로그인은 시연 사무실을 만들지 않는다").isEmpty();
     }
